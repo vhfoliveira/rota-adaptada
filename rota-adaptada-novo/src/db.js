@@ -1,0 +1,3 @@
+const open=new Promise((resolve,reject)=>{const r=indexedDB.open('rota-adaptada-laboratorio-v1',1);r.onupgradeneeded=()=>r.result.createObjectStore('workspace');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
+export async function read(){const db=await open;return new Promise((res,rej)=>{const r=db.transaction('workspace').objectStore('workspace').get('state');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+export async function write(state){const db=await open;return new Promise((res,rej)=>{const t=db.transaction('workspace','readwrite');t.objectStore('workspace').put(structuredClone(state),'state');t.oncomplete=res;t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)})}

@@ -1,0 +1,17 @@
+{
+  "name": "rota-adaptada-novo",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "maplibre-gl": "6.17.0",
+    "polygon-clipping": "0.15.7"
+  },
+  "devDependencies": {
+    "vite": "6.4.5"
+  }
+}
