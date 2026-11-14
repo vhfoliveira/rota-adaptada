@@ -1,8 +1,8 @@
 FROM node:22-alpine AS build
 WORKDIR /app
-COPY rota-adaptada-novo/package*.json ./
+COPY rota-adaptada/package*.json ./
 RUN npm ci
-COPY rota-adaptada-novo/ ./
+COPY rota-adaptada/ ./
 RUN npm test && npm run build
 
 FROM nginx:stable-alpine

@@ -10,7 +10,7 @@ Aplicação web de apoio à decisão agrícola para adaptação de planos de doi
 ## Executar localmente e gerar build estático
 
 ```bash
-cd rota-adaptada-novo
+cd rota-adaptada
 npm install
 npm run dev      # Inicia o servidor local do Vite
 ```
@@ -22,11 +22,11 @@ npm test
 npm run build
 ```
 
-O pacote final fica em `rota-adaptada-novo/dist/`, 100% compatível com a oferta global **GoDaddy Registry (Free Domain and Website Hosting + SSL)** do NASA Space Apps.
+O pacote final fica em `rota-adaptada/dist/`, 100% compatível com a oferta global **GoDaddy Registry (Free Domain and Website Hosting + SSL)** do NASA Space Apps.
 
 ---
 
-## Fluxo Enxuto de 4 Telas (`rota-adaptada-novo/src/main.js`)
+## Fluxo Enxuto de 4 Telas (`rota-adaptada/src/main.js`)
 
 A interface prioriza uma experiência limpa, visual e convidativa, exibindo apenas os **campos essenciais de decisão** na tela principal e mantendo os **detalhes técnicos opcionais** recolhidos sob demanda:
 
@@ -40,5 +40,5 @@ A interface prioriza uma experiência limpa, visual e convidativa, exibindo apen
 ## Documentação no Repositório
 
 - [Proposta de Software (`rota_adaptada_proposta_de_software.md`)](rota_adaptada_proposta_de_software.md)
-- [Instruções da Aplicação e Deploy GoDaddy (`rota-adaptada-novo/README.md`)](rota-adaptada-novo/README.md)
+- [Instruções da Aplicação e Deploy GoDaddy (`rota-adaptada/README.md`)](rota-adaptada/README.md)
 - [Roteiro de Validação com Engenheiro Agrônomo (`docs/ROTEIRO_AGRONOMO.md`)](docs/ROTEIRO_AGRONOMO.md)
