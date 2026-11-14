@@ -119,18 +119,16 @@ export async function fetchLiveNasaPower(lat, lon) {
 
 /**
  * Queries the open ISRIC SoilGrids v2.0 REST API (CC-BY 4.0) by latitude and longitude
- * to estimate clay/sand/silt (0-60 cm) and suggest the ZARC Available Water Soil Class (AD3, AD4, AD5).
+ * to estimate clay/sand (0-60 cm) and suggest the Soil Water Retention Class (AD3, AD4, AD5).
  */
 export async function fetchSoilGridsAndSuggestClass(lat, lon, nasaSummary = null) {
   const cleanLat = Number(Number(lat).toFixed(4));
   const cleanLon = Number(Number(lon).toFixed(4));
-  const soilGridsUrl = `https://rest.isric.org/soilgrids/v2.0/properties/query?lat=${cleanLat}&lon=${cleanLon}&property=clay&property=sand&property=silt&property=soc&depth=0-5cm&depth=5-15cm&depth=15-30cm&depth=30-60cm&value=mean`;
+  const soilGridsUrl = `https://rest.isric.org/soilgrids/v2.0/properties/query?lat=${cleanLat}&lon=${cleanLon}&property=clay&property=sand&depth=0-5cm&depth=5-15cm&depth=15-30cm&depth=30-60cm&value=mean`;
 
   let clayPct = null;
   let sandPct = null;
-  let siltPct = null;
-  let organicMatterPct = null;
-  let apiSource = 'ISRIC SoilGrids v2.0 API (Licença Aberta CC-BY 4.0)';
+  let apiSource = 'ISRIC SoilGrids v2.0 API (CC-BY 4.0)';
   let isLiveSoilGrids = false;
 
   const weights = { '0-5cm': 5 / 60, '5-15cm': 10 / 60, '15-30cm': 15 / 60, '30-60cm': 30 / 60 };
@@ -163,11 +161,6 @@ export async function fetchSoilGridsAndSuggestClass(lat, lon, nasaSummary = null
 
       clayPct = extractWeighted('clay');
       sandPct = extractWeighted('sand');
-      siltPct = extractWeighted('silt');
-      const socGkg = extractWeighted('soc');
-      if (socGkg !== null) {
-        organicMatterPct = Number(Math.min(6.5, Math.max(1.2, socGkg * 0.172)).toFixed(1));
-      }
       if (clayPct !== null && sandPct !== null) {
         isLiveSoilGrids = true;
       }
@@ -184,39 +177,31 @@ export async function fetchSoilGridsAndSuggestClass(lat, lon, nasaSummary = null
     if (isParecisPlateau) {
       clayPct = 46.0;
       sandPct = 38.0;
-      siltPct = 16.0;
-      organicMatterPct = 2.8;
     } else if (gwetRoot >= 0.68) {
       clayPct = 58.0;
       sandPct = 26.0;
-      siltPct = 16.0;
-      organicMatterPct = 3.1;
     } else if (gwetRoot <= 0.56) {
       clayPct = 27.0;
       sandPct = 59.0;
-      siltPct = 14.0;
-      organicMatterPct = 2.0;
     } else {
       clayPct = 42.0;
       sandPct = 43.0;
-      siltPct = 15.0;
-      organicMatterPct = 2.6;
     }
-    apiSource = 'Estimativa ISRIC SoilGrids (CC-BY 4.0) + Retenção NASA MERRA-2 (GWETROOT)';
+    apiSource = 'Estimativa ISRIC SoilGrids + Retenção NASA MERRA-2 (GWETROOT)';
   }
 
-  // Suggest ZARC Soil Class (AD3, AD4, AD5) based on clay % in 0-60 cm
+  // Suggest Soil Water Retention Class (AD3, AD4, AD5) based on clay % in 0-60 cm
   let suggestedSoilProfileId = 'AD4_ARGILOSA';
   let suggestionReason = '';
   if (clayPct < 35) {
     suggestedSoilProfileId = 'AD3_MEDIA';
-    suggestionReason = `Teor estimado de argila de ${clayPct}% (< 35%) e areia de ${sandPct}% na camada 0–60 cm indicam Solo de Textura Média (Classe AD3 · Reserva ~42 mm).`;
+    suggestionReason = `Teor de argila de ${clayPct}% (< 35%) e areia de ${sandPct}% (0–60 cm) indicam Solo de Textura Média (Reserva ~42 mm).`;
   } else if (clayPct <= 55) {
     suggestedSoilProfileId = 'AD4_ARGILOSA';
-    suggestionReason = `Teor estimado de argila de ${clayPct}% (entre 35% e 55%) na camada 0–60 cm indica Solo Argiloso (Classe AD4 · Reserva ~55 mm).`;
+    suggestionReason = `Teor de argila de ${clayPct}% (entre 35% e 55%) na camada 0–60 cm indica Solo Argiloso (Reserva ~55 mm).`;
   } else {
     suggestedSoilProfileId = 'AD5_MUITO_ARGILOSA';
-    suggestionReason = `Teor estimado de argila de ${clayPct}% (> 55%) na camada 0–60 cm indica Solo Muito Argiloso (Classe AD5 · Reserva ~66 mm).`;
+    suggestionReason = `Teor de argila de ${clayPct}% (> 55%) na camada 0–60 cm indica Solo Muito Argiloso (Reserva ~66 mm).`;
   }
 
   // Optional reverse geocoding for municipality/state via OpenStreetMap Nominatim
@@ -242,8 +227,6 @@ export async function fetchSoilGridsAndSuggestClass(lat, lon, nasaSummary = null
     soilGridsUrl,
     clayPercent: clayPct,
     sandPercent: sandPct,
-    siltPercent: siltPct ?? Number((100 - clayPct - sandPct).toFixed(1)),
-    organicMatterPercent: organicMatterPct ?? 2.6,
     suggestedSoilProfileId,
     suggestedSoilProfile: rulesPackage.soil_profiles[suggestedSoilProfileId],
     suggestionReason,
@@ -285,7 +268,7 @@ export function formatBRDate(dateStr) {
 }
 
 /**
- * Converts a YYYY-MM-DD date to its official ZARC Decêndio (1 to 36).
+ * Converts a YYYY-MM-DD date to its 10-day calendar window (1 to 36).
  */
 export function dateToDecendio(dateStr) {
   const dt = parseUTCDate(dateStr);
@@ -298,13 +281,14 @@ export function dateToDecendio(dateStr) {
     decendio: decendioNum,
     month,
     day,
-    label: entry ? entry.label : `Decêndio ${decendioNum}`,
+    label: entry ? entry.label : `Período ${decendioNum}`,
     month_name: entry ? entry.month_name : ''
   };
 }
 
 /**
  * Default pre-registered property profile for Vilhena/RO (Screen 1).
+ * Contains only parameters used by NASA POWER API, ISRIC SoilGrids, and the simulation engine.
  */
 export function defaultPropertyProfile() {
   const loc = rulesPackage.metadata.location;
@@ -312,40 +296,20 @@ export function defaultPropertyProfile() {
   return {
     id: 'prop-vilhena-parecis-01',
     propertyName: 'Fazenda Chapada dos Parecis',
-    fieldName: 'Talhão 01 — Gleba Sul (Sequeiro)',
-    producerName: 'Produtor Demonstrativo (Perfil Pré-Cadastrado)',
     municipality: loc.municipality,
     state: loc.state,
-    ibgeCode: loc.ibge_code,
     latitude: loc.latitude,
     longitude: loc.longitude,
     altitudeM: loc.altitude_m,
-    biome: loc.biome_transition,
-    climateKoppen: loc.climate_koppen,
-    soyMacroregion: loc.soy_macroregion,
-    cornRec: loc.corn_rec,
-    areaHa: 240,
-    productionSystem: 'Sequeiro (Plantio Direto)',
-    irrigationAvailable: false,
     soilProfileId: defaultSoil.id,
     soilEvidence: {
-      sampleCode: 'LAB-RO-2026-018',
-      samplingDate: '2026-08-14',
-      depthCm: '0–20 cm e 20–40 cm',
-      clayPercent: 46,
-      organicMatterPercent: 2.8,
-      phCaCl2: 5.4,
-      phosphorusMgDm3: 14.2,
-      potassiumCmolcDm3: 0.24,
-      nematodeSurveyStatus: 'pending',
-      subsurfaceCompactionStatus: 'pending',
-      notes: 'Latossolo Vermelho-Amarelo Argiloso profundo (> 0,5 m), sem pedregosidade, boa drenagem.'
+      clayPercent: 46
     }
   };
 }
 
 /**
- * Default 2-year planning configuration (Screen 3).
+ * Default planning configuration (Screen 3).
  */
 export function defaultPlanningConfig() {
   return {
@@ -353,58 +317,58 @@ export function defaultPlanningConfig() {
     planningName: 'Planejamento Pré-Cadastrado Vilhena/RO (Soja → Milho 2ª Safra)',
     propertyId: 'prop-vilhena-parecis-01',
     isPreRegistered: true,
-    safraLabel: 'Biênio 2026/2027 – 2027/2028',
+    safraLabel: 'Horizonte de 2 Anos',
     baseSowingDate: '2026-11-01',
     delayDays: 20,
     operationalIntervalDays: 7,
     year1SummerCropId: 'SOJA',
     year1SummerGroupKey: 'GRUPO_II_MEDIO',
-    year1SummerCultivar: 'BRS 8481',
+    year1SummerCultivar: 'Ciclo Médio (115d)',
     year1SafrinhaCropId: 'MILHO_2_SAFRA',
     year1SafrinhaGroupKey: 'GRUPO_II_MEDIO',
-    year1SafrinhaCultivar: 'AG 8088 PRO2',
+    year1SafrinhaCultivar: 'Ciclo Médio (110d)',
     year2SummerCropId: 'SOJA',
     year2SummerGroupKey: 'GRUPO_II_MEDIO',
-    year2SummerCultivar: 'BRSMT Pintado',
+    year2SummerCultivar: 'Ciclo Médio (115d)',
     year2SafrinhaCropId: 'MILHO_2_SAFRA',
     year2SafrinhaGroupKey: 'GRUPO_I_PRECOCE',
-    year2SafrinhaCultivar: 'BRS 1055',
+    year2SafrinhaCultivar: 'Ciclo Precoce (100d)',
     year2SummerPlannedDate: '2027-10-20',
     successionStages: [
       {
         order: 1,
-        stageLabel: '1ª Etapa · Safra Principal (Ano 1)',
+        stageLabel: '1ª Etapa · Safra Inicial',
         seasonType: 'verao_1',
         cropId: 'SOJA',
         groupKey: 'GRUPO_II_MEDIO',
-        cultivarName: 'BRS 8481',
+        cultivarName: 'Ciclo Médio (115d)',
         plannedSowDate: null
       },
       {
         order: 2,
-        stageLabel: '2ª Etapa · 1ª Sucessão (Ano 1)',
+        stageLabel: '2ª Etapa · 1ª Sucessão',
         seasonType: 'safrinha_1',
         cropId: 'MILHO_2_SAFRA',
         groupKey: 'GRUPO_II_MEDIO',
-        cultivarName: 'AG 8088 PRO2',
+        cultivarName: 'Ciclo Médio (110d)',
         plannedSowDate: null
       },
       {
         order: 3,
-        stageLabel: '3ª Etapa · 2ª Sucessão (Ano 2)',
+        stageLabel: '3ª Etapa · 2ª Sucessão',
         seasonType: 'verao_2',
         cropId: 'SOJA',
         groupKey: 'GRUPO_II_MEDIO',
-        cultivarName: 'BRSMT Pintado',
+        cultivarName: 'Ciclo Médio (115d)',
         plannedSowDate: '2027-10-20'
       },
       {
         order: 4,
-        stageLabel: '4ª Etapa · 3ª Sucessão (Ano 2)',
+        stageLabel: '4ª Etapa · 3ª Sucessão',
         seasonType: 'safrinha_2',
         cropId: 'MILHO_2_SAFRA',
         groupKey: 'GRUPO_I_PRECOCE',
-        cultivarName: 'BRS 1055',
+        cultivarName: 'Ciclo Precoce (100d)',
         plannedSowDate: null
       }
     ],
@@ -419,73 +383,7 @@ export function defaultPlanningConfig() {
 }
 
 /**
- * Checks Idaron/RO and SDA/MAPA sanitary void (10/06 to 10/09) and legal sowing window (11/09 to 09/01) for Soybean.
- */
-export function evaluateSanitaryAndLegal(cropId, sowDateStr, harvestDateStr) {
-  const violations = [];
-  const warnings = [];
-
-  if (cropId === 'SOJA') {
-    const sowDt = parseUTCDate(sowDateStr);
-    const harvDt = parseUTCDate(harvestDateStr);
-    const sowMonth = sowDt.getUTCMonth() + 1;
-    const sowDay = sowDt.getUTCDate();
-    const sowMmDd = `${String(sowMonth).padStart(2, '0')}-${String(sowDay).padStart(2, '0')}`;
-
-    // Legal sowing window in RO: 11/09 to 09/01
-    const inSowingWindow =
-      (sowMonth === 9 && sowDay >= 11) ||
-      sowMonth === 10 ||
-      sowMonth === 11 ||
-      sowMonth === 12 ||
-      (sowMonth === 1 && sowDay <= 9);
-
-    if (!inSowingWindow) {
-      const rule = rulesPackage.sanitary_and_legal_constraints.find(
-        r => r.rule_id === 'RO_CALENDARIO_SEMEADURA_SOJA_2026_2027'
-      );
-      violations.push({
-        ruleId: rule.rule_id,
-        authority: rule.authority,
-        type: rule.type,
-        message: `${rule.enforcement_message} (Semeadura simulada em ${formatBRDate(sowDateStr)}).`
-      });
-    }
-
-    // Check if any day between sowDateStr and harvestDateStr falls inside 06-10 to 09-10 of the harvest year or sow year
-    for (const year of [sowDt.getUTCFullYear(), harvDt.getUTCFullYear()]) {
-      const voidStart = parseUTCDate(`${year}-06-10`);
-      const voidEnd = parseUTCDate(`${year}-09-10`);
-      if (sowDt <= voidEnd && harvDt >= voidStart) {
-        const rule = rulesPackage.sanitary_and_legal_constraints.find(
-          r => r.rule_id === 'RO_VAZIO_SANITARIO_SOJA_2026'
-        );
-        violations.push({
-          ruleId: rule.rule_id,
-          authority: rule.authority,
-          type: rule.type,
-          message: `${rule.enforcement_message} (Colheita estimada em ${formatBRDate(harvestDateStr)} invade o período proibido de 10/06 a 10/09).`
-        });
-        break;
-      }
-    }
-
-    if (sowMmDd >= '09-11' && sowMmDd <= '09-30') {
-      warnings.push(
-        'Atenção pré-ZARC: Semeadura entre 11/09 e 30/09 (Decêndios 26 e 27) é legalmente permitida pela Idaron, mas possui maior risco de veranico inicial no ZARC.'
-      );
-    }
-  }
-
-  return {
-    passed: violations.length === 0,
-    violations,
-    warnings
-  };
-}
-
-/**
- * Evaluates ZARC decendial risk window for a given crop, soil profile, and sowing date.
+ * Evaluates planting window suitability for a given crop, soil profile, and sowing date.
  */
 export function evaluateZarcWindow(cropId, soilProfileId, sowDateStr) {
   const crop = rulesPackage.crops_catalog[cropId];
@@ -498,8 +396,7 @@ export function evaluateZarcWindow(cropId, soilProfileId, sowDateStr) {
       riskPct: null,
       badgeLabel: 'Cultura não encontrada',
       tone: 'danger',
-      creditEligible: false,
-      detail: 'Cultura ausente do pacote regional.'
+      detail: 'Cultura ausente do catálogo.'
     };
   }
 
@@ -512,12 +409,10 @@ export function evaluateZarcWindow(cropId, soilProfileId, sowDateStr) {
       riskPct: null,
       badgeLabel: 'Solo pendente',
       tone: 'warning',
-      creditEligible: false,
-      detail: 'Perfil de solo sem tabela decendial cadastrada.'
+      detail: 'Perfil de solo sem janela cadastrada.'
     };
   }
 
-  // Cover crop (Milheto) uses recommended_cover / marginal_late
   if (soilWindows.recommended_cover) {
     if (soilWindows.recommended_cover.includes(dec.decendio)) {
       return {
@@ -525,10 +420,9 @@ export function evaluateZarcWindow(cropId, soilProfileId, sowDateStr) {
         decendioLabel: dec.label,
         status: 'COBERTURA_RECOMENDADA',
         riskPct: 20,
-        badgeLabel: `Janela Ideal Cobertura · Dec. ${dec.decendio} (${dec.label})`,
+        badgeLabel: `Janela Ideal de Cobertura (${dec.label})`,
         tone: 'success',
-        creditEligible: true,
-        detail: `Dentro da janela recomendada pela Embrapa (${crop.zarc_windows_vilhena.synthesized_low_risk_20pct_dates}) para formação de palhada.`
+        detail: `Dentro da janela recomendada (${crop.zarc_windows_vilhena.synthesized_low_risk_20pct_dates}) para cobertura do solo.`
       };
     }
     if (soilWindows.marginal_late?.includes(dec.decendio)) {
@@ -537,10 +431,9 @@ export function evaluateZarcWindow(cropId, soilProfileId, sowDateStr) {
         decendioLabel: dec.label,
         status: 'COBERTURA_MARGINAL',
         riskPct: 40,
-        badgeLabel: `Transição Seca · Dec. ${dec.decendio} (${dec.label})`,
+        badgeLabel: `Final das Chuvas (${dec.label})`,
         tone: 'warning',
-        creditEligible: true,
-        detail: 'Semeadura tardia de cobertura (início de maio); biomassa reduzida pela transição para a estação seca.'
+        detail: 'Plantio no final do período chuvoso; menor acúmulo de biomassa.'
       };
     }
     return {
@@ -548,24 +441,21 @@ export function evaluateZarcWindow(cropId, soilProfileId, sowDateStr) {
       decendioLabel: dec.label,
       status: 'FORA_DE_JANELA',
       riskPct: null,
-      badgeLabel: `Fora da Janela · Dec. ${dec.decendio} (${dec.label})`,
+      badgeLabel: `Fora da Janela (${dec.label})`,
       tone: 'danger',
-      creditEligible: false,
-      detail: `Semeadura em ${dec.label} está fora do período recomendado (${crop.zarc_windows_vilhena.synthesized_low_risk_20pct_dates}).`
+      detail: `Plantio em ${dec.label} está fora da janela recomendada (${crop.zarc_windows_vilhena.synthesized_low_risk_20pct_dates}).`
     };
   }
 
-  // Commercial crops (ZARC 20%, 30%, 40%)
   if (soilWindows.risk_20pct?.includes(dec.decendio)) {
     return {
       decendio: dec.decendio,
       decendioLabel: dec.label,
       status: 'ZARC_20',
       riskPct: 20,
-      badgeLabel: `ZARC 20% (Menor Risco) · Dec. ${dec.decendio} (${dec.label})`,
+      badgeLabel: `Dentro da Janela Ideal (${dec.label})`,
       tone: 'success',
-      creditEligible: true,
-      detail: `Enquadramento oficial no menor nível de risco climático (20%) para solo ${soilProfileId} (${crop.legal_reference}).`
+      detail: `Plantio dentro da janela ideal de menor risco climático (${crop.zarc_windows_vilhena.synthesized_low_risk_20pct_dates}).`
     };
   }
   if (soilWindows.risk_30pct?.includes(dec.decendio)) {
@@ -574,10 +464,9 @@ export function evaluateZarcWindow(cropId, soilProfileId, sowDateStr) {
       decendioLabel: dec.label,
       status: 'ZARC_30',
       riskPct: 30,
-      badgeLabel: `ZARC 30% (Risco Moderado) · Dec. ${dec.decendio} (${dec.label})`,
+      badgeLabel: `Janela de Transição · Risco Moderado (${dec.label})`,
       tone: 'warning',
-      creditEligible: true,
-      detail: `Enquadramento oficial na faixa de 30% de risco climático para solo ${soilProfileId}. Exige atenção ao final do ciclo.`
+      detail: 'Plantio na transição da janela; maior exposição à redução das chuvas no final do ciclo.'
     };
   }
   if (soilWindows.risk_40pct?.includes(dec.decendio)) {
@@ -586,10 +475,9 @@ export function evaluateZarcWindow(cropId, soilProfileId, sowDateStr) {
       decendioLabel: dec.label,
       status: 'ZARC_40',
       riskPct: 40,
-      badgeLabel: `ZARC 40% (Risco Alto) · Dec. ${dec.decendio} (${dec.label})`,
+      badgeLabel: `Limite da Janela · Risco Alto (${dec.label})`,
       tone: 'warning',
-      creditEligible: true,
-      detail: `Limite marginal da janela ZARC (40% de risco) para solo ${soilProfileId}. Alta exposição à transição para a seca.`
+      detail: 'Plantio no limite final da janela; alta exposição à estiagem na fase reprodutiva.'
     };
   }
 
@@ -598,10 +486,9 @@ export function evaluateZarcWindow(cropId, soilProfileId, sowDateStr) {
     decendioLabel: dec.label,
     status: 'FORA_DE_JANELA',
     riskPct: null,
-    badgeLabel: `Fora da Janela ZARC · Dec. ${dec.decendio} (${dec.label})`,
+    badgeLabel: `Fora da Janela Recomendada (${dec.label})`,
     tone: 'danger',
-    creditEligible: false,
-    detail: `Semeadura em ${formatBRDate(sowDateStr)} (Decêndio ${dec.decendio} — ${dec.label}) ocorre após o fechamento da janela oficial do ZARC (${crop.zarc_windows_vilhena.synthesized_low_risk_20pct_dates}). Sem cobertura padrão de seguro/crédito.`
+    detail: `Plantio em ${formatBRDate(sowDateStr)} (${dec.label}) ocorre após o fechamento da janela recomendada (${crop.zarc_windows_vilhena.synthesized_low_risk_20pct_dates}).`
   };
 }
 
@@ -740,7 +627,7 @@ export function runHistoricalStressTest(cropId, groupKey, sowDateStr, soilProfil
             phaseKey,
             phaseLabel: PHASE_LABELS[phaseKey] || phaseKey,
             title: 'Déficit hídrico na emergência (Fase I)',
-            detail: `Chuva acumulada de ${rainSum} mm (limiar ${minRainF1} mm) e umidade superficial GWETTOP média de ${avgGwetTop} (${maxDry} dias secos seguidos). Risco de atraso na emergência (>10 dias no ZARC).`
+            detail: `Chuva acumulada de ${rainSum} mm (limiar ${minRainF1} mm) e umidade superficial (GWETTOP) média de ${avgGwetTop} (${maxDry} dias secos seguidos).`
           });
         } else if (triggers.f1_max_consecutive_dry_days && maxDry > triggers.f1_max_consecutive_dry_days + 2 && avgGwetTop < 0.45) {
           phaseAlerts.push({
@@ -763,7 +650,7 @@ export function runHistoricalStressTest(cropId, groupKey, sowDateStr, soilProfil
             phaseKey,
             phaseLabel: PHASE_LABELS[phaseKey] || phaseKey,
             title: 'Estiagem prolongada no crescimento vegetativo (Fase II)',
-            detail: `${maxDry} dias secos consecutivos (limiar ${triggers.max_consecutive_dry_days_f2} dias) durante formação de biomassa.`
+            detail: `${maxDry} dias secos consecutivos (limiar ${triggers.max_consecutive_dry_days_f2} dias) durante o desenvolvimento vegetativo.`
           });
         }
       }
@@ -777,7 +664,7 @@ export function runHistoricalStressTest(cropId, groupKey, sowDateStr, soilProfil
         const maxDryLimit = triggers.f3_max_consecutive_dry_days || 8;
         const critRoot = triggers.gwetroot_critical_f3 || 0.45;
 
-        // Soil CAD buffers F3 water supply when root moisture is high
+        // Soil water reserve buffers F3 water supply when root moisture is high
         const effectiveWaterSupply = rainSum + cadMm * avgGwetRoot * 1.15;
         const rootDeficit = avgGwetRoot < critRoot;
         const severeRootDeficit = avgGwetRoot < critRoot - 0.06 || gwetRootMin < critRoot - 0.09;
@@ -791,7 +678,7 @@ export function runHistoricalStressTest(cropId, groupKey, sowDateStr, soilProfil
             phaseKey,
             phaseLabel: PHASE_LABELS[phaseKey],
             title: 'Estresse hídrico severo no florescimento/enchimento (Fase III)',
-            detail: `Precipitação de apenas ${rainSum} mm na Fase III (${maxDry} dias secos consecutivos) combinada com queda da umidade na zona radicular (GWETROOT médio ${avgGwetRoot}, mín. ${gwetRootMin} vs. limiar crítico ${critRoot} em solo ${soil.zarc_ad_class} CAD ${cadMm} mm).`
+            detail: `Precipitação de apenas ${rainSum} mm na Fase III (${maxDry} dias secos consecutivos) combinada com queda da umidade na zona radicular (GWETROOT médio ${avgGwetRoot}, mín. ${gwetRootMin} vs. limiar crítico ${critRoot}).`
           });
         } else if (rootDeficit || (rainDeficit && drySpell)) {
           phaseAlerts.push({
@@ -800,7 +687,7 @@ export function runHistoricalStressTest(cropId, groupKey, sowDateStr, soilProfil
             phaseKey,
             phaseLabel: PHASE_LABELS[phaseKey],
             title: 'Alerta moderado de restrição hídrica na Fase III',
-            detail: `Chuva na Fase III de ${rainSum} mm com veranico de ${maxDry} dias e umidade radicular GWETROOT média de ${avgGwetRoot} (limiar ${critRoot}).`
+            detail: `Chuva na Fase III de ${rainSum} mm com veranico de ${maxDry} dias e umidade radicular (GWETROOT) média de ${avgGwetRoot} (limiar ${critRoot}).`
           });
         }
 
@@ -812,7 +699,7 @@ export function runHistoricalStressTest(cropId, groupKey, sowDateStr, soilProfil
             phaseKey,
             phaseLabel: PHASE_LABELS[phaseKey],
             title: 'Estresse térmico por noites quentes na Fase III',
-            detail: `${warmNights} noites com temperatura mínima acima de ${triggers.temp_night_warm_stress_f3_c || 24}°C (pico mín. e máx. ${tmaxPeak}°C), elevando respiração noturna no enchimento de grãos.`
+            detail: `${warmNights} noites com temperatura mínima acima de ${triggers.temp_night_warm_stress_f3_c || 24}°C (máx. ${tmaxPeak}°C) no enchimento de grãos.`
           });
         } else if (hotDays >= 4) {
           phaseAlerts.push({
@@ -829,7 +716,6 @@ export function runHistoricalStressTest(cropId, groupKey, sowDateStr, soilProfil
       // Phase IV checks (Maturation & Harvest)
       if (phaseKey.startsWith('F4')) {
         if (cropId === 'SOJA' && triggers.f4_harvest_excess_rain_10d_mm) {
-          // Excess rain in summer harvest window (> 230mm in F4)
           if (rainSum > 235) {
             phaseAlerts.push({
               severity: rainSum > 290 ? 'severo' : 'moderado',
@@ -837,7 +723,7 @@ export function runHistoricalStressTest(cropId, groupKey, sowDateStr, soilProfil
               phaseKey,
               phaseLabel: PHASE_LABELS[phaseKey] || phaseKey,
               title: 'Excesso de chuva na colheita (Fase IV)',
-              detail: `Acumulado de ${rainSum} mm durante os ${phaseDays} dias de maturação/colheita, elevando risco operacional de grãos avariados e atraso de máquinas para a 2ª safra.`
+              detail: `Acumulado de ${rainSum} mm durante os ${phaseDays} dias de maturação/colheita, dificultando a entrada da sucessão.`
             });
           }
         }
@@ -848,7 +734,7 @@ export function runHistoricalStressTest(cropId, groupKey, sowDateStr, soilProfil
             phaseKey,
             phaseLabel: PHASE_LABELS[phaseKey] || phaseKey,
             title: 'Queda de temperatura mínima no final do ciclo',
-            detail: `Temperatura mínima chegou a ${tminLow}°C (abaixo de ${triggers.temp_min_zarc_restriction_c}°C em friagem na Chapada dos Parecis).`
+            detail: `Temperatura mínima chegou a ${tminLow}°C (abaixo de ${triggers.temp_min_zarc_restriction_c}°C).`
           });
         }
       }
@@ -883,8 +769,8 @@ export function runHistoricalStressTest(cropId, groupKey, sowDateStr, soilProfil
           parameter: 'IMERG_PRECTOT',
           phaseKey: f2Metric.phaseKey,
           phaseLabel: f2Metric.phaseLabel,
-          title: 'Chuva total do ciclo abaixo da meta de biomassa máxima',
-          detail: `Acumulado de ${Number(cycleRainMm.toFixed(1))} mm nos ${totalCycleDays} dias (meta de ${triggers.total_cycle_min_rain_mm} mm para produzir 6 a 10 t/ha de matéria seca).`
+          title: 'Chuva total do ciclo abaixo do ideal para cobertura',
+          detail: `Acumulado de ${Number(cycleRainMm.toFixed(1))} mm nos ${totalCycleDays} dias (limiar de ${triggers.total_cycle_min_rain_mm} mm para formação plena de cobertura).`
         };
         f2Metric.alerts.push(alertObj);
         yearAlerts.push(alertObj);
@@ -935,7 +821,7 @@ export function runHistoricalStressTest(cropId, groupKey, sowDateStr, soilProfil
 }
 
 /**
- * Builds a complete 2-year crop sequence (4 stages) for a given strategy archetype and evaluates all metrics.
+ * Builds the crop succession evaluation and 12-year NASA POWER stress test for a given strategy.
  */
 function buildStrategyEvaluation({
   strategyId,
@@ -953,8 +839,6 @@ function buildStrategyEvaluation({
 }) {
   const soilProfileId = propertyProfile.soilProfileId;
   const stages = [];
-  const allSanitaryViolations = [];
-  const allWarnings = [];
 
   for (let i = 0; i < stagesInput.length; i++) {
     const st = stagesInput[i];
@@ -963,14 +847,6 @@ function buildStrategyEvaluation({
     const cycleDays = group.cycle_days_default;
     const harvestDate = addDaysUTC(st.sowDate, cycleDays - 1);
 
-    const sanitary = evaluateSanitaryAndLegal(st.cropId, st.sowDate, harvestDate);
-    if (!sanitary.passed) {
-      allSanitaryViolations.push(...sanitary.violations.map(v => ({ ...v, stageIndex: i + 1, stageLabel: st.stageLabel })));
-    }
-    if (sanitary.warnings.length) {
-      allWarnings.push(...sanitary.warnings);
-    }
-
     const zarc = evaluateZarcWindow(st.cropId, soilProfileId, st.sowDate);
     const stressTest = runHistoricalStressTest(st.cropId, st.groupKey, st.sowDate, soilProfileId);
 
@@ -978,6 +854,13 @@ function buildStrategyEvaluation({
     const shiftDays = baseStage ? diffDaysUTC(baseStage.sowDate, st.sowDate) : 0;
     const cropChanged = baseStage ? baseStage.cropId !== st.cropId : false;
     const groupChanged = baseStage ? baseStage.groupKey !== st.groupKey : false;
+
+    const cycleTypeLabel =
+      st.groupKey === 'GRUPO_I_PRECOCE'
+        ? `Ciclo Precoce (${cycleDays}d)`
+        : st.groupKey === 'MANEJO_COBERTURA_FLORESCIMENTO'
+          ? `Ciclo Rápido (${cycleDays}d)`
+          : `Ciclo Médio (${cycleDays}d)`;
 
     stages.push({
       index: i + 1,
@@ -997,34 +880,25 @@ function buildStrategyEvaluation({
                 : st.cropId === 'MILHETO'
                   ? 'Milheto Cobertura'
                   : crop.common_name,
-      scientificName: crop.scientific_name,
-      botanicalFamily: crop.botanical_family,
       roleInPrototype: crop.role_in_prototype,
       customRole: crop.custom_role || null,
       groupKey: st.groupKey,
-      groupId: group.group_id,
-      gmrCriterion: group.gmr_criterion,
-      cultivarName: st.cultivarName || group.recommended_cultivars_ro?.[0]?.name || group.group_id,
-      recommendedCultivars: group.recommended_cultivars_ro || [],
+      cultivarName: cycleTypeLabel,
       sowDate: st.sowDate,
       harvestDate,
       cycleDays,
       shiftDays,
       cropChanged,
       groupChanged,
-      sanitary,
       zarc,
-      stressTest,
-      legalReference: crop.legal_reference,
-      agronomicFunctions: crop.agronomic_functions
+      stressTest
     });
   }
 
-  // Compute 2-year (730-day) Soil Protection vs Bare-Field Days
+  // Compute Soil Protection vs Bare-Field Days across the 2-year horizon (730 days)
   const horizonDays = 730;
   const liveCropDays = stages.reduce((acc, s) => acc + s.cycleDays, 0);
-  const mulchBonusDaysPerCover = rulesPackage.comparison_engine_rules.soil_exposure_metrics.mulch_protection_factor_after_cover_crop_days || 90;
-  // Sorghum and Corn+Brachiaria also leave high C/N straw (~35 days residual protection), Soy leaves low C/N straw (~10 days)
+  const mulchBonusDaysPerCover = 90;
   const strawBonusDays = stages.reduce((acc, s) => {
     if (s.cropId === 'MILHETO') return acc + mulchBonusDaysPerCover;
     if (s.cropId === 'SORGO_GRANIFERO') return acc + 45;
@@ -1037,83 +911,47 @@ function buildStrategyEvaluation({
   const protectedDays = Math.min(horizonDays, liveCropDays + strawBonusDays);
   const bareSoilDays = Math.max(0, horizonDays - protectedDays);
   const bareSoilPerYear = Math.round(bareSoilDays / 2);
-  const bareSoilWarning =
-    bareSoilPerYear > rulesPackage.comparison_engine_rules.soil_exposure_metrics.bare_soil_warning_threshold_days_per_year;
 
-  // Botanical diversity & Recurrent Succession check
   const cropSequenceIds = stages.map(s => s.cropId);
   const uniqueSpeciesCount = new Set(cropSequenceIds).size;
-  const uniqueFamiliesCount = new Set(stages.map(s => s.botanicalFamily)).size;
-  const recurrentPattern = rulesPackage.comparison_engine_rules.succession_vs_rotation_detection.recurrent_succession_pattern;
-  const isRecurrentSuccession =
-    cropSequenceIds.length === recurrentPattern.length &&
-    cropSequenceIds.every((id, idx) => id === recurrentPattern[idx]);
 
-  // Focus on critical stage (by default Stage 2, or Stage 1 if a custom main-season crop is evaluated)
-  const criticalStage = stages[criticalStageIndex] || stages[1];
+  // Focus on critical stage (Stage 2 by default, or Stage 1 if a custom main-season crop is evaluated)
+  const criticalStage = stages[criticalStageIndex] || stages[1] || stages[0];
   const anyZarcOut = stages.some(s => s.zarc.status === 'FORA_DE_JANELA');
-  const blockedBySanitary = allSanitaryViolations.length > 0;
 
-  // Overall status: 'INVALIDO' (blocked by Idaron/legal), 'ALERTA_ZARC' (out of ZARC window), 'VALIDO_RESSALVAS', or 'VALIDO'
   let overallStatus = 'VALIDO';
-  let statusLabel = 'Válido · Dentro das Janelas ZARC e Idaron';
+  let statusLabel = 'Recomendado · Dentro da Janela e Baixo Risco NASA';
   let statusTone = 'success';
 
-  if (blockedBySanitary) {
-    overallStatus = 'INVALIDO';
-    statusLabel = 'Bloqueado · Violação Fitossanitária / Legal (Idaron/MAPA)';
-    statusTone = 'danger';
-  } else if (anyZarcOut) {
+  if (anyZarcOut) {
     overallStatus = 'FORA_ZARC';
-    statusLabel = 'Alto Risco · Etapa Fora da Janela ZARC';
+    statusLabel = 'Alto Risco · Plantio Fora da Janela Recomendada';
     statusTone = 'danger';
   } else if (criticalStage.stressTest.severeYears >= 6 || criticalStage.zarc.riskPct >= 30) {
     overallStatus = 'VALIDO_MODERADO';
-    statusLabel = `Válido com Atenção · ${criticalStage.zarc.badgeLabel.split('·')[0].trim()}`;
+    statusLabel = 'Atenção · Risco Climático Moderado';
     statusTone = 'warning';
   }
 
-  // Trade-off & 5 mandatory Space Apps explanation fields
   const hasCoverCrop = cropSequenceIds.some(
     id =>
       id === 'MILHETO' ||
-      rulesPackage.crops_catalog[id]?.role_in_prototype === 'COVER_CROP_SOIL_PROTECTION' ||
-      rulesPackage.crops_catalog[id]?.role_in_prototype === 'PHYTOSANITARY_CYCLING_MANAGEMENT'
+      rulesPackage.crops_catalog[id]?.role_in_prototype === 'COVER_CROP_SOIL_PROTECTION'
   );
   const tradeOffSummary =
     customTradeOffSummary ||
     (hasCoverCrop
-      ? 'Substitui uma etapa comercial de grãos (safrinha de alto risco) por cobertura rápida: abre mão de receita imediata na 2ª safra do Ano 1 para evitar perda financeira fora de janela, reduzir solo exposto em ' +
-        `${mulchBonusDaysPerCover} dias e proteger o solo para a safra seguinte.`
+      ? `Substitui uma sucessão comercial de alto risco por cobertura rápida (58 dias): evita perdas por déficit hídrico fora da janela e amplia a proteção do solo para ${protectedDays} dias.`
       : strategyId === 'ALTERNATIVA_COMERCIAL_SORGO'
-        ? 'Mantém finalidade comercial produtora de grãos na 2ª safra trocando Milho por Sorgo Granífero: exige ajuste de comercialização/colheita, mas garante janela ZARC 20% até 31/03 e menor exigência hídrica (ISNA ≥ 0,45).'
+        ? 'Mantém produção comercial de grãos na sucessão trocando Milho por Sorgo Granífero: aproveita janela recomendada até 31/03 e maior tolerância à redução das chuvas e da umidade radicular (NASA GWETROOT).'
         : strategyId === 'AJUSTE_CALENDARIO_CICLO'
-          ? 'Preserva a sucessão Soja → Milho comercial ajustando o ciclo para cultivares precoces (Grupo I) e intervalo operacional enxuto: requer disponibilidade de sementes precoces e agilidade de máquinas na colheita.'
-          : 'Mantém 100% das culturas e ciclos originais mesmo após o atraso: não altera compra de insumos, mas transfere todo o efeito dominó para o florescimento da 2ª safra.');
+          ? 'Mantém a sucessão planejada usando ciclo mais precoce para antecipar a colheita da 1ª etapa e devolver a sucessão para dentro da janela recomendada.'
+          : 'Mantém as culturas e ciclos originais mesmo com o atraso: empurra o florescimento da sucessão para o período de queda de chuva e umidade do solo.');
 
   const explanation = {
     why_suggested: `${questionAnswered} ${tradeOffSummary}`,
-    historical_nasa_evidence_2013_2024: `Na etapa crítica (${criticalStage.shortCropName}, semeadura em ${formatBRDate(criticalStage.sowDate)}): ${criticalStage.stressTest.headline} No acumulado dos 2 anos, a estratégia soma ${stages.reduce((a, s) => a + s.stressTest.severeYears, 0)} ocorrências severas nas 4 etapas somadas.`,
-    soil_health_and_system_benefits: `${protectedDays} dias de solo protegido contra ${bareSoilDays} dias de solo exposto em 2 anos (${bareSoilPerYear} d/ano). ${
-      isRecurrentSuccession
-        ? rulesPackage.comparison_engine_rules.succession_vs_rotation_detection.warning_message
-        : `Diversificação com ${uniqueSpeciesCount} espécies (${stages.map(s => s.shortCropName).join(' → ')}).`
-    }`,
-    information_gaps_pending_validation: [
-      propertyProfile.soilEvidence.nematodeSurveyStatus === 'pending'
-        ? 'Levantamento laboratorial de nematoides (Meloidogyne spp. e Pratylenchus brachyurus) no talhão ainda pendente.'
-        : null,
-      propertyProfile.soilEvidence.subsurfaceCompactionStatus === 'pending'
-        ? 'Avaliação de compactação subsuperficial (20–40 cm) pendente para confirmar profundidade efetiva de raízes (Ze).'
-        : null,
-      'Disponibilidade local de sementes das cultivares homologadas e cotação regional para comercialização (especialmente Sorgo).'
-    ].filter(Boolean),
-    risks_for_local_agronomic_review: [
-      ...allSanitaryViolations.map(v => v.message),
-      ...stages.filter(s => s.zarc.status === 'FORA_DE_JANELA').map(s => `${s.stageLabel}: ${s.zarc.detail}`),
-      ...allWarnings,
-      'Os dados do NASA POWER possuem resolução espacial regional (~10 km GPM IMERG e ~50 km MERRA-2) e não substituem pluviômetros de talhão ou prescrição presencial de engenheiro agrônomo.'
-    ]
+    historical_nasa_evidence_2013_2024: `Na etapa avaliada (${criticalStage.shortCropName}, plantio em ${formatBRDate(criticalStage.sowDate)}): ${criticalStage.stressTest.headline}`,
+    soil_health_and_system_benefits: `${protectedDays} dias de solo coberto contra ${bareSoilDays} dias de solo exposto no horizonte de 2 anos (${bareSoilPerYear} dias/ano). Sequência com ${uniqueSpeciesCount} cultura(s) (${stages.map(s => s.shortCropName).join(' → ')}).`
   };
 
   return {
@@ -1126,8 +964,6 @@ function buildStrategyEvaluation({
     overallStatus,
     statusLabel,
     statusTone,
-    blockedBySanitary,
-    sanitaryViolations: allSanitaryViolations,
     anyZarcOut,
     stages,
     criticalStage,
@@ -1137,16 +973,7 @@ function buildStrategyEvaluation({
       strawBonusDays,
       protectedDays,
       bareSoilDays,
-      bareSoilPerYear,
-      bareSoilWarning
-    },
-    diversityMetrics: {
-      uniqueSpeciesCount,
-      uniqueFamiliesCount,
-      isRecurrentSuccession,
-      recurrentWarning: isRecurrentSuccession
-        ? rulesPackage.comparison_engine_rules.succession_vs_rotation_detection.warning_message
-        : null
+      bareSoilPerYear
     },
     tradeOffSummary,
     explanation
@@ -1156,81 +983,51 @@ function buildStrategyEvaluation({
 export const CUSTOM_CROP_ROLES = {
   SAFRA_PRINCIPAL: {
     value: 'SAFRA_PRINCIPAL',
-    optionLabel: 'Cultura Comercial Principal (1ª Safra / Safra Principal)',
+    optionLabel: 'Cultura Principal (1ª Safra)',
     shortBadge: 'Safra Principal Comercial',
     cardDescription: 'Cultura comercial principal da propriedade',
     roleInPrototype: 'COMMERCIAL_MAIN',
     isCover: false,
     isMainSeason: true,
-    coverBiomassPotential: 'Moderada a Alta',
     strawBonusDays: 25,
     defaultSummary: name =>
-      `Cultura comercial principal (${name}) cadastrada pelo usuário para compor a safra principal da propriedade.`
+      `Cultura comercial principal (${name}) avaliada na 1ª etapa do planejamento com dados históricos da NASA POWER.`
   },
   ALTERNATIVA_COMERCIAL: {
     value: 'ALTERNATIVA_COMERCIAL',
-    optionLabel: 'Sucessão Comercial (Produção de Grãos, Sementes ou Fibra)',
-    shortBadge: 'Colheita Comercial na Sucessão',
-    cardDescription: 'Sucessão comercial para colheita de grãos, fibra ou sementes',
+    optionLabel: 'Sucessão Comercial (2ª Safra / Safrinha)',
+    shortBadge: 'Sucessão Comercial',
+    cardDescription: 'Sucessão comercial após a colheita da 1ª safra',
     roleInPrototype: 'COMMERCIAL_ALTERNATIVE',
     isCover: false,
     isMainSeason: false,
-    coverBiomassPotential: 'Moderada a Alta',
     strawBonusDays: 35,
     defaultSummary: name =>
-      `Cultura de sucessão comercial (${name}) cadastrada pelo usuário para diversificação produtiva e comercialização.`
+      `Cultura de sucessão comercial (${name}) avaliada como alternativa após o atraso da 1ª safra.`
   },
   ROTACAO_CULTURAS: {
     value: 'ROTACAO_CULTURAS',
-    optionLabel: 'Rotação de Culturas e Diversificação (Quebra de Ciclo Biológico)',
-    shortBadge: 'Rotação Comercial e Biológica',
-    cardDescription: 'Rotação de culturas para diversificação e quebra de ciclo de pragas/doenças',
+    optionLabel: 'Rotação de Culturas e Diversificação',
+    shortBadge: 'Rotação de Culturas',
+    cardDescription: 'Diversificação produtiva na sequência de sucessões',
     roleInPrototype: 'COMMERCIAL_ROTATION',
     isCover: false,
     isMainSeason: false,
-    coverBiomassPotential: 'Alta (Rotação e diversificação)',
     strawBonusDays: 40,
     defaultSummary: name =>
-      `Cultura de rotação (${name}) cadastrada pelo usuário para quebrar ciclos biológicos e diversificar o sistema.`
+      `Cultura de rotação (${name}) avaliada para diversificar a sucessão com menor exposição climática.`
   },
   COBERTURA_SOLO: {
     value: 'COBERTURA_SOLO',
-    optionLabel: 'Cobertura do Solo / Formação de Palhada e Adubação Verde',
-    shortBadge: 'Cobertura e Proteção do Solo',
-    cardDescription: 'Cobertura do solo, formação de palhada e adubação verde',
+    optionLabel: 'Cobertura e Proteção do Solo (Palhada)',
+    shortBadge: 'Cobertura do Solo',
+    cardDescription: 'Cobertura vegetal rápida para proteção do solo e retenção de umidade',
     roleInPrototype: 'COVER_CROP_SOIL_PROTECTION',
     isCover: true,
     isMainSeason: false,
-    coverBiomassPotential: 'Alta (Cobertura viva e palhada)',
     strawBonusDays: 90,
     defaultSummary: name =>
-      `Cultura de cobertura cadastrada pelo usuário (${name}) para proteção do solo, formação de palhada e conservação de umidade.`
-  },
-  FORRAGEIRA_ILP: {
-    value: 'FORRAGEIRA_ILP',
-    optionLabel: 'Forrageira / Duplo Propósito (Integração Lavoura-Pecuária - ILP)',
-    shortBadge: 'Forrageira / Integração (ILP)',
-    cardDescription: 'Forrageira ou duplo propósito para Integração Lavoura-Pecuária (ILP)',
-    roleInPrototype: 'FORAGE_DUAL_PURPOSE_ILP',
-    isCover: true,
-    isMainSeason: false,
-    coverBiomassPotential: 'Muito Alta (Raízes profundas e cobertura)',
-    strawBonusDays: 75,
-    defaultSummary: name =>
-      `Cultura forrageira / duplo propósito (${name}) cadastrada para integração lavoura-pecuária e estruturação física do solo.`
-  },
-  RECUPERACAO_SANITARIA: {
-    value: 'RECUPERACAO_SANITARIA',
-    optionLabel: 'Manejo Fitossanitário e Ciclagem (Supressão de Nematoides / Pragas)',
-    shortBadge: 'Manejo Fitossanitário e Ciclagem',
-    cardDescription: 'Manejo fitossanitário, supressão de nematoides e ciclagem de nutrientes',
-    roleInPrototype: 'PHYTOSANITARY_CYCLING_MANAGEMENT',
-    isCover: true,
-    isMainSeason: false,
-    coverBiomassPotential: 'Alta (Ciclagem de nutrientes e sanidade)',
-    strawBonusDays: 80,
-    defaultSummary: name =>
-      `Cultura de manejo fitossanitário (${name}) cadastrada para ciclagem de nutrientes e redução da pressão de nematoides/pragas.`
+      `Cultura de cobertura (${name}) avaliada para proteger o solo quando a janela comercial se torna arriscada.`
   }
 };
 
@@ -1243,7 +1040,6 @@ export function getCustomCropRoleMeta(roleKey) {
  * can evaluate their planting window, 4 phenological phases, and 12-year NASA POWER stress test.
  */
 export function registerCustomCropsInCatalog(customCrops = []) {
-  // Remove previous dynamic custom crops first
   for (const key of Object.keys(rulesPackage.crops_catalog)) {
     if (key.startsWith('CUSTOM_')) {
       delete rulesPackage.crops_catalog[key];
@@ -1278,16 +1074,7 @@ export function registerCustomCropsInCatalog(customCrops = []) {
       is_custom: true,
       custom_role: roleMeta.value,
       common_name: cc.common_name,
-      scientific_name: cc.scientific_name || 'Cultura cadastrada pelo usuário',
-      botanical_family: cc.botanical_family || 'Fabaceae (Leguminosa)',
       role_in_prototype: roleMeta.roleInPrototype,
-      legal_reference: 'Parâmetros cadastrados pelo usuário para simulação local',
-      agronomic_functions: {
-        nitrogen_fixation: String(cc.botanical_family || '').includes('Fabaceae'),
-        cover_biomass_potential: roleMeta.coverBiomassPotential,
-        pest_and_disease_notes: 'Verificar compatibilidade fitossanitária local com o engenheiro agrônomo.',
-        soil_health_summary: cc.summary || roleMeta.defaultSummary(cc.common_name)
-      },
       zarc_windows_vilhena: {
         synthesized_low_risk_20pct_dates: `${formatBRDate(cc.windowStartDate || '2027-01-01').slice(0, 5)} a ${formatBRDate(
           cc.windowEndDate || '2027-03-31'
@@ -1301,7 +1088,7 @@ export function registerCustomCropsInCatalog(customCrops = []) {
       cultivar_groups: {
         GRUPO_PADRAO: {
           group_id: 'GRUPO_I',
-          gmr_criterion: `Ciclo cadastrado de ${totalDays} dias`,
+          gmr_criterion: `Ciclo de ${totalDays} dias`,
           cycle_days_default: totalDays,
           cycle_days_range: [totalDays - 5, totalDays + 5],
           phases_days: {
@@ -1310,12 +1097,11 @@ export function registerCustomCropsInCatalog(customCrops = []) {
             F3_floracao_enchimento: f3,
             F4_maturacao: f4
           },
-          recommended_cultivars_ro: [{ name: cc.cultivarName || 'Cultivar Padrão', maintainer: 'Usuário', group: 'I' }]
+          recommended_cultivars_ro: [{ name: `Ciclo ${totalDays}d`, group: 'I' }]
         }
       },
       climate_thresholds_nasa: {
         water_cycle_requirement_mm: { min: isRustic ? 250 : 400, max: 700 },
-        zarc_isna_thresholds: { F1: 0.5, F3: isRustic ? 0.4 : 0.5 },
         alert_triggers: {
           f1_establishment_min_rain_15d_mm: isRustic ? 25.0 : 40.0,
           f1_max_consecutive_dry_days: isRustic ? 12 : 8,
@@ -1343,38 +1129,38 @@ export function getPlanningStagesList(planningConfig = defaultPlanningConfig()) 
       : [
           {
             order: 1,
-            stageLabel: '1ª Etapa · Safra Principal (Ano 1)',
+            stageLabel: '1ª Etapa · Safra Inicial',
             seasonType: 'verao_1',
             cropId: planningConfig?.year1SummerCropId || 'SOJA',
             groupKey: planningConfig?.year1SummerGroupKey || 'GRUPO_II_MEDIO',
-            cultivarName: planningConfig?.year1SummerCultivar || 'BRS 8481',
+            cultivarName: 'Ciclo Médio (115d)',
             plannedSowDate: null
           },
           {
             order: 2,
-            stageLabel: '2ª Etapa · 1ª Sucessão (Ano 1)',
+            stageLabel: '2ª Etapa · 1ª Sucessão',
             seasonType: 'safrinha_1',
             cropId: planningConfig?.year1SafrinhaCropId || 'MILHO_2_SAFRA',
             groupKey: planningConfig?.year1SafrinhaGroupKey || 'GRUPO_II_MEDIO',
-            cultivarName: planningConfig?.year1SafrinhaCultivar || 'AG 8088 PRO2',
+            cultivarName: 'Ciclo Médio (110d)',
             plannedSowDate: null
           },
           {
             order: 3,
-            stageLabel: '3ª Etapa · 2ª Sucessão (Ano 2)',
+            stageLabel: '3ª Etapa · 2ª Sucessão',
             seasonType: 'verao_2',
             cropId: planningConfig?.year2SummerCropId || 'SOJA',
             groupKey: planningConfig?.year2SummerGroupKey || 'GRUPO_II_MEDIO',
-            cultivarName: planningConfig?.year2SummerCultivar || 'BRSMT Pintado',
+            cultivarName: 'Ciclo Médio (115d)',
             plannedSowDate: planningConfig?.year2SummerPlannedDate || '2027-10-20'
           },
           {
             order: 4,
-            stageLabel: '4ª Etapa · 3ª Sucessão (Ano 2)',
+            stageLabel: '4ª Etapa · 3ª Sucessão',
             seasonType: 'safrinha_2',
             cropId: planningConfig?.year2SafrinhaCropId || 'MILHO_2_SAFRA',
             groupKey: planningConfig?.year2SafrinhaGroupKey || 'GRUPO_I_PRECOCE',
-            cultivarName: planningConfig?.year2SafrinhaCultivar || 'BRS 1055',
+            cultivarName: 'Ciclo Precoce (100d)',
             plannedSowDate: null
           }
         ];
@@ -1384,7 +1170,13 @@ export function getPlanningStagesList(planningConfig = defaultPlanningConfig()) 
     const groupKeys = Object.keys(crop.cultivar_groups || {});
     const resolvedGroupKey = crop.cultivar_groups?.[st.groupKey] ? st.groupKey : groupKeys[0];
     const groupObj = crop.cultivar_groups?.[resolvedGroupKey];
-    const defaultCultivar = groupObj?.recommended_cultivars_ro?.[0]?.name || groupObj?.group_id || 'Cultivar Padrão';
+    const cycleDays = groupObj?.cycle_days_default || 100;
+    const cycleLabel =
+      resolvedGroupKey === 'GRUPO_I_PRECOCE'
+        ? `Ciclo Precoce (${cycleDays}d)`
+        : resolvedGroupKey === 'MANEJO_COBERTURA_FLORESCIMENTO'
+          ? `Ciclo Rápido (${cycleDays}d)`
+          : `Ciclo Médio (${cycleDays}d)`;
     const orderNum = idx + 1;
     const defaultLabel =
       idx === 0 ? '1ª Etapa · Safra Inicial' : `${orderNum}ª Etapa · ${idx}ª Sucessão`;
@@ -1395,7 +1187,7 @@ export function getPlanningStagesList(planningConfig = defaultPlanningConfig()) 
       seasonType: st.seasonType || (idx % 2 === 0 ? `verao_${Math.floor(idx / 2) + 1}` : `safrinha_${Math.floor(idx / 2) + 1}`),
       cropId: crop.crop_id,
       groupKey: resolvedGroupKey,
-      cultivarName: st.cultivarName || defaultCultivar,
+      cultivarName: cycleLabel,
       plannedSowDate: st.plannedSowDate || null
     };
   });
@@ -1415,6 +1207,12 @@ export function resolveSuccessionSchedule(stageDefs, initialSowDate, opInterval 
     const groupKey = crop.cultivar_groups?.[st.groupKey] ? st.groupKey : groupKeys[0];
     const group = crop.cultivar_groups[groupKey];
     const cycleDays = group?.cycle_days_default || 100;
+    const cycleLabel =
+      groupKey === 'GRUPO_I_PRECOCE'
+        ? `Ciclo Precoce (${cycleDays}d)`
+        : groupKey === 'MANEJO_COBERTURA_FLORESCIMENTO'
+          ? `Ciclo Rápido (${cycleDays}d)`
+          : `Ciclo Médio (${cycleDays}d)`;
 
     let sowDate = initialSowDate;
     if (i > 0 && prevHarvest) {
@@ -1437,7 +1235,7 @@ export function resolveSuccessionSchedule(stageDefs, initialSowDate, opInterval 
       cropId: crop.crop_id,
       cropName: crop.common_name,
       groupKey,
-      cultivarName: st.cultivarName || group?.recommended_cultivars_ro?.[0]?.name || group?.group_id || 'Padrão',
+      cultivarName: cycleLabel,
       sowDate,
       harvestDate,
       cycleDays,
@@ -1457,18 +1255,18 @@ export function simulateAdaptation(
   customCrops = []
 ) {
   registerCustomCropsInCatalog(customCrops);
-  const delayDays = Math.max(0, Math.min(90, Number(planningConfig.delayDays) || 0));
+  const delayDays = Math.max(0, Math.min(45, Number(planningConfig.delayDays) || 0));
   const opInterval = Math.max(5, Math.min(30, Number(planningConfig.operationalIntervalDays) || 7));
 
   const planStages = getPlanningStagesList(planningConfig);
   const baseSoySow = planningConfig.baseSowingDate || '2026-11-01';
   const delayedSoySow = addDaysUTC(baseSoySow, delayDays);
 
-  // 0. Original Undelayed Baseline Schedule (to compute exact date shifts across all ordered stages)
+  // 0. Original Undelayed Baseline Schedule
   const baselineStages = resolveSuccessionSchedule(planStages, baseSoySow, opInterval);
   const baseSaf1Sow = baselineStages[1]?.sowDate || baselineStages[0].sowDate;
 
-  // STRATEGY 1: PLANO ATUAL (Keep exact planned sequence and groups despite delay)
+  // STRATEGY 1: PLANO ATUAL (Keep exact planned sequence and cycles despite delay)
   const s1Stages = resolveSuccessionSchedule(planStages, delayedSoySow, opInterval);
   const s1Saf1Sow = s1Stages[1]?.sowDate || s1Stages[0].sowDate;
   const firstStageCropName = rulesPackage.crops_catalog[planStages[0].cropId]?.common_name || planStages[0].cropId;
@@ -1478,26 +1276,23 @@ export function simulateAdaptation(
     strategyId: 'PLANO_ATUAL',
     title: '1. Plano Atual (Manter Sequência com Atraso)',
     shortTitle: 'Plano Atual (Com Atraso)',
-    questionAnswered: 'Quais alertas de chuva, temperatura, umidade do solo e janela ZARC aparecem se a sequência original for mantida apesar do atraso?',
+    questionAnswered: 'O que acontece com o risco climático (NASA) e a janela de plantio se a sequência original for mantida apesar do atraso?',
     modificationsCount: 0,
-    changedDescriptions: ['Nenhuma cultura ou grupo alterado (propaga o atraso de +' + delayDays + ' dias por efeito dominó na sucessão).'],
+    changedDescriptions: [`Nenhuma cultura ou ciclo alterado (propaga o atraso de +${delayDays} dias para a sucessão).`],
     stagesInput: s1Stages,
     propertyProfile,
     planningConfig,
     baselineStages
   });
 
-  // STRATEGY 2: AJUSTE DE CALENDÁRIO / CICLO (Early Maturation Group I + fast operational turnaround 5d)
+  // STRATEGY 2: AJUSTE DE CICLO (Ciclo Precoce + intervalo operacional enxuto)
   const fastInterval = Math.max(5, opInterval - 2);
   const s2Defs = planStages.map((st, idx) => {
     const crop = rulesPackage.crops_catalog[st.cropId] || rulesPackage.crops_catalog.SOJA;
     if ((idx === 0 || idx === 1 || idx === 3) && crop.cultivar_groups?.GRUPO_I_PRECOCE) {
-      const earlyGroup = crop.cultivar_groups.GRUPO_I_PRECOCE;
-      const earlyCultivar = earlyGroup.recommended_cultivars_ro?.[0]?.name || 'Precoce G-I';
       return {
         ...st,
-        groupKey: 'GRUPO_I_PRECOCE',
-        cultivarName: `${earlyCultivar} (Precoce G-I)`
+        groupKey: 'GRUPO_I_PRECOCE'
       };
     }
     return { ...st };
@@ -1507,14 +1302,12 @@ export function simulateAdaptation(
 
   const strategyAjusteCiclo = buildStrategyEvaluation({
     strategyId: 'AJUSTE_CALENDARIO_CICLO',
-    title: '2. Ajuste de Ciclo / Janela (Cultivares Precoces Grupo I)',
-    shortTitle: 'Ajuste de Ciclo (Grupo I)',
-    questionAnswered: `Há uma mudança de ciclo (troca para cultivar precoce Grupo I) compatível com as janelas e restrições mantendo a sucessão planejada?`,
+    title: '2. Ajuste de Ciclo (Variedade de Ciclo Mais Curto)',
+    shortTitle: 'Ajuste de Ciclo Curto',
+    questionAnswered: 'Reduzir o ciclo da cultura inicial permite antecipar a colheita e manter a sucessão dentro da janela segura?',
     modificationsCount: 1,
     changedDescriptions: [
-      `Troca para cultivares precoces Grupo I e janela operacional enxuta (${fastInterval}d), antecipando a 1ª sucessão em ` +
-        Math.max(0, diffDaysUTC(s2Saf1Sow, s1Saf1Sow)) +
-        ' dias.'
+      `Adoção de ciclo precoce e intervalo operacional de ${fastInterval} dias, antecipando a 1ª sucessão em ${Math.max(0, diffDaysUTC(s2Saf1Sow, s1Saf1Sow))} dias.`
     ],
     stagesInput: s2Stages,
     propertyProfile,
@@ -1528,8 +1321,7 @@ export function simulateAdaptation(
       ? {
           ...st,
           cropId: 'SORGO_GRANIFERO',
-          groupKey: 'GRUPO_I_PRECOCE',
-          cultivarName: 'BRS 373 / 84G02'
+          groupKey: 'GRUPO_I_PRECOCE'
         }
       : { ...st }
   );
@@ -1539,10 +1331,10 @@ export function simulateAdaptation(
     strategyId: 'ALTERNATIVA_COMERCIAL_SORGO',
     title: '3. Alternativa Comercial na Sucessão (Sorgo Granífero)',
     shortTitle: 'Alternativa Comercial (Sorgo)',
-    questionAnswered: 'Outra espécie comercial do catálogo apresenta janela ZARC mais ampla (até 31/03) e menor exposição ao estresse hídrico histórico?',
+    questionAnswered: 'Substituir a sucessão por outra cultura comercial mais tolerante à seca reduz o estresse hídrico histórico (NASA)?',
     modificationsCount: 1,
     changedDescriptions: [
-      `Substituição apenas da 1ª sucessão (${secondStageCropName} → Sorgo Granífero BRS 373 / 84G02, Grupo I de 100d), mantendo ${firstStageCropName} inicial.`
+      `Substituição da 1ª sucessão (${secondStageCropName} → Sorgo Granífero, ciclo de 100d), mantendo ${firstStageCropName} inicial.`
     ],
     stagesInput: s3Stages,
     propertyProfile,
@@ -1557,8 +1349,7 @@ export function simulateAdaptation(
           ...st,
           stageLabel: '2ª Etapa · 1ª Sucessão (Cobertura)',
           cropId: 'MILHETO',
-          groupKey: 'MANEJO_COBERTURA_FLORESCIMENTO',
-          cultivarName: 'BRS 1501 / BRS 1502 (58d)'
+          groupKey: 'MANEJO_COBERTURA_FLORESCIMENTO'
         }
       : { ...st }
   );
@@ -1566,12 +1357,12 @@ export function simulateAdaptation(
 
   const strategyMilheto = buildStrategyEvaluation({
     strategyId: 'ALTERNATIVA_COBERTURA_MILHETO',
-    title: '4. Alternativa de Cobertura (Milheto 58 dias)',
-    shortTitle: 'Cobertura Viva (Milheto)',
-    questionAnswered: 'Faz sentido substituir uma sucessão comercial de alto risco por uma etapa rápida (58 dias) destinada à cobertura viva e palhada, considerando o compromisso produtivo envolvido?',
+    title: '4. Alternativa de Cobertura do Solo (Milheto 58 dias)',
+    shortTitle: 'Cobertura do Solo (Milheto)',
+    questionAnswered: 'Quando o risco comercial é alto, substituir a sucessão por uma cultura de cobertura rápida protege melhor o solo?',
     modificationsCount: 1,
     changedDescriptions: [
-      'Transição da 1ª sucessão para Milheto de cobertura (BRS 1501 / BRS 1502, manejo pleno florescimento aos 58 dias), protegendo o solo para a etapa seguinte.'
+      'Transição da 1ª sucessão para Milheto de cobertura (58 dias), protegendo o solo e conservando umidade para a safra seguinte.'
     ],
     stagesInput: s4Stages,
     propertyProfile,
@@ -1579,7 +1370,7 @@ export function simulateAdaptation(
     baselineStages
   });
 
-  // Evaluate any custom crops registered by the user in Step 2 (Catálogo de Culturas)
+  // Evaluate any custom crops registered by the user in Step 2
   const customStrategies = (customCrops || [])
     .filter(cc => cc && cc.crop_id && rulesPackage.crops_catalog[cc.crop_id])
     .map((cc, idx) => {
@@ -1591,8 +1382,7 @@ export function simulateAdaptation(
                 ...st,
                 stageLabel: `1ª Etapa · Safra Principal (${roleMeta.shortBadge})`,
                 cropId: cc.crop_id,
-                groupKey: 'GRUPO_PADRAO',
-                cultivarName: cc.cultivarName || `${cc.common_name} (${cc.cycleDays}d)`
+                groupKey: 'GRUPO_PADRAO'
               }
             : { ...st }
         );
@@ -1603,10 +1393,10 @@ export function simulateAdaptation(
           strategyId: `ALTERNATIVA_CUSTOM_${cc.crop_id}`,
           title: `${5 + idx}. ${roleMeta.shortBadge} (${cc.common_name})`,
           shortTitle: cc.common_name,
-          questionAnswered: `Como a cultura principal cadastrada (${cc.common_name}, ciclo de ${cc.cycleDays} dias) se comporta no plantio e impacta a sucessão da propriedade?`,
+          questionAnswered: `Como a cultura principal cadastrada (${cc.common_name}, ${cc.cycleDays} dias) se comporta nos 12 anos de dados da NASA?`,
           modificationsCount: 1,
           changedDescriptions: [
-            `Adoção de ${cc.common_name} (${cc.cycleDays} dias · ${roleMeta.shortBadge}) na 1ª etapa, liberando a área para a sucessão em ${formatBRDate(customSaf1Sow)}.`
+            `Adoção de ${cc.common_name} (${cc.cycleDays} dias) na 1ª etapa, liberando a área para a sucessão em ${formatBRDate(customSaf1Sow)}.`
           ],
           customTradeOffSummary: cc.summary || roleMeta.defaultSummary(cc.common_name),
           criticalStageIndex: 0,
@@ -1623,8 +1413,7 @@ export function simulateAdaptation(
               ...st,
               stageLabel: `2ª Etapa · 1ª Sucessão (${roleMeta.shortBadge})`,
               cropId: cc.crop_id,
-              groupKey: 'GRUPO_PADRAO',
-              cultivarName: cc.cultivarName || `${cc.common_name} (${cc.cycleDays}d)`
+              groupKey: 'GRUPO_PADRAO'
             }
           : { ...st }
       );
@@ -1634,10 +1423,10 @@ export function simulateAdaptation(
         strategyId: `ALTERNATIVA_CUSTOM_${cc.crop_id}`,
         title: `${5 + idx}. ${roleMeta.shortBadge} (${cc.common_name})`,
         shortTitle: cc.common_name,
-        questionAnswered: `Como a cultura cadastrada pelo usuário (${cc.common_name}, ciclo de ${cc.cycleDays} dias · ${roleMeta.shortBadge}) se comporta no planejamento após o atraso?`,
+        questionAnswered: `Como a cultura cadastrada (${cc.common_name}, ${cc.cycleDays} dias) se comporta na sucessão após o atraso?`,
         modificationsCount: 1,
         changedDescriptions: [
-          `Inclusão da cultura cadastrada ${cc.common_name} (${cc.cycleDays} dias) na sucessão com finalidade de ${roleMeta.shortBadge.toLowerCase()}.`
+          `Inclusão de ${cc.common_name} (${cc.cycleDays} dias) na sucessão com finalidade de ${roleMeta.shortBadge.toLowerCase()}.`
         ],
         customTradeOffSummary: cc.summary || roleMeta.defaultSummary(cc.common_name),
         criticalStageIndex: 1,
@@ -1656,12 +1445,10 @@ export function simulateAdaptation(
   if (pd.allowCoverCropTransition !== false) candidates.push(strategyMilheto);
   candidates.push(...customStrategies);
 
-  // Check if any alternative is valid and better than Plano Atual
   const validAlternatives = candidates
     .slice(1)
     .filter(
       s =>
-        !s.blockedBySanitary &&
         s.modificationsCount <= (pd.maxChangesAllowed ?? 2) &&
         (s.criticalStage.stressTest.severeYears < strategyPlanoAtual.criticalStage.stressTest.severeYears ||
           (strategyPlanoAtual.anyZarcOut && !s.anyZarcOut))
@@ -1669,7 +1456,7 @@ export function simulateAdaptation(
 
   const noBetterAlternativeMessage =
     validAlternatives.length === 0
-      ? 'Não encontramos alternativa melhor dentro das restrições informadas.'
+      ? 'Nenhuma das opções marcadas reduz o risco em relação ao Plano Atual. Marque outras adaptações acima.'
       : null;
 
   return {
