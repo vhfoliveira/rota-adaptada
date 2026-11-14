@@ -1,96 +1,42 @@
-# Rota Adaptada - escopo Rondônia
+# Rota Adaptada — Escopo do Projeto e Regras do Motor Determinístico
 
-## Tese do produto
+## 1. Tese do Produto
 
-A Rota Adaptada responde a uma decisão específica:
+A **Rota Adaptada** responde a uma decisão prática de planejamento agrícola:
 
-> Quando a primeira cultura atrasa, qual é a menor mudança justificável no restante do planejamento, considerando o município, o solo, o calendário, o histórico climático e as prioridades do produtor?
+> *Quando a primeira cultura atrasa, qual é a menor mudança justificável no restante do planejamento — ou qual o melhor plano sugerido pelo sistema — considerando os 12 anos de dados agroclimáticos da NASA POWER, a classe de retenção hídrica do solo (ISRIC SoilGrids), o catálogo de culturas/ciclos disponíveis e as preferências do produtor?*
 
-O produto atende Rondônia, mas não trata o estado como uma única zona agronômica. Cada análise é vinculada a um município, uma localização aproximada, um perfil de solo, uma safra e regras com fonte identificada.
+---
 
-## Pilotos
+## 2. Fontes Ativas de Decisão (Escopo Estrito)
 
-### Vilhena
+Todas as informações fora do escopo das APIs integradas foram removidas para manter a solução 100% focada e comprovável:
 
-- Primeiro piloto operacional.
-- As propriedades serão cadastradas pelo usuário e vinculadas a talhões.
-- Evidências do solo serão registradas com origem, data, profundidade, resultados, documento e situação de validação.
-- A ausência de evidência obrigatória mantém a análise como pendente.
-
-### Ariquemes
-
-- Perfil futuro de validação com o engenheiro agrônomo disponível.
-- Será incorporado depois que o fluxo de Vilhena estiver validado.
-
-## Fontes de decisão
-
-| Camada | Origem | Uso |
+| Camada | Origem | Uso no Motor (`vilhena-engine.js`) |
 | --- | --- | --- |
-| Chuva | NASA POWER / GPM IMERG | Reaplicar os calendários a sequências históricas de precipitação. |
-| Temperatura | NASA POWER / MERRA-2 | Identificar exposição histórica fora das faixas cadastradas. |
-| Umidade do solo | NASA POWER / SMAP, se a qualidade for suficiente | Contexto hídrico regional, sem precisão de talhão. |
-| Solo | Produtor, agrônomo e fonte pública apropriada | Selecionar o perfil usado pelas regras e pelo ZARC. |
-| Calendário e risco | ZARC / MAPA | Validar município, safra, cultura, grupo e classe de solo. |
-| Sanidade vegetal | Idaron / MAPA | Bloquear datas incompatíveis com vazio sanitário e calendário de semeadura. |
-| Culturas e manejo | Agrônomo e Embrapa | Cadastrar ciclos, intervalos, compatibilidades e compromissos. |
+| **Precipitação Diária** | **NASA POWER API** (`PRECTOTCORR` / `IMERG_PRECTOT`) | Soma de chuva acumulada por fase fenológica (`F1` a `F4`) e contagem de veranicos (dias secos consecutivos) nos 12 anos (`2013–2024`). |
+| **Umidade do Solo** | **NASA POWER API / MERRA-2** (`GWETTOP` e `GWETROOT`) | Avaliação de umidade superficial na emergência (`F1`) e umidade na zona radicular no florescimento/enchimento (`F3`). |
+| **Temperatura Diária** | **NASA POWER API / MERRA-2** (`T2M_MAX` e `T2M_MIN`) | Identificação de picos de calor diurno e noites quentes durante fases reprodutivas. |
+| **Solo e Retenção Hídrica** | **ISRIC SoilGrids v2.0 API** (`clay`, `sand` `0–60 cm`) | Estimativa de textura e sugestão automática da classe de retenção de água (`AD3_MEDIA` 48 mm, `AD4_ARGILOSA` 62 mm, `AD5_MUITO_ARGILOSA` 78 mm). |
+| **Localização Municipal** | **OpenStreetMap Nominatim API** + **Web Geolocation GPS** | Identificação automática de Município e UF a partir de Latitude/Longitude. |
+| **Culturas e Ciclos** | **Catálogo Pré-Cadastrado + Cadastros do Usuário** | 4 finalidades de sucessão (`SAFRA_PRINCIPAL`, `ALTERNATIVA_COMERCIAL`, `ROTACAO_CULTURAS`, `COBERTURA_SOLO`) e ciclos em dias fatiados nas 4 fases da planta. |
 
-## Regra de segurança
+---
 
-O motor trabalha em três estados:
+## 3. Funcionalidades Consolidados no Fluxo de 5 Passos
 
-1. **Válido:** todas as regras obrigatórias possuem fonte e o cenário passa nas restrições.
-2. **Pendente:** falta uma informação necessária; o cenário pode ser explorado, mas não recomendado.
-3. **Inválido:** uma regra oficial ou agronômica impede o cenário.
-
-O sistema nunca converte ausência de informação em aprovação.
-
-## Entradas mínimas
-
-- Município e coordenada aproximada.
-- Safra analisada.
-- Classe de solo usada no enquadramento.
-- Irrigação disponível ou sistema de sequeiro.
-- Sequência planejada, datas e ciclos.
-- Atraso ou outro evento a simular.
-- Decisões que o produtor deseja preservar.
-- Alternativas aceitas pelo produtor e pelo técnico.
-
-## Saídas do motor
-
-Cada rota apresenta separadamente:
-
-- etapas e datas alteradas;
-- regras que passaram, falharam ou estão pendentes;
-- chuva acumulada nas fases cadastradas;
-- número de períodos históricos com alertas;
-- dias planejados de cobertura do solo;
-- diversidade de espécies e famílias ao longo de dois anos;
-- mudança de finalidade comercial para cobertura;
-- fonte, data e resolução de cada conjunto de dados;
-- limitações e incerteza da análise.
-
-Os indicadores não serão apresentados como previsão de produtividade, probabilidade de perda ou recomendação agronômica automática.
-
-## Demonstração principal
-
-1. Selecionar Ariquemes e o perfil demonstrativo da propriedade.
-2. Informar soja seguida de milho.
-3. Aplicar um atraso hipotético à soja.
-4. Bloquear uma alternativa incompatível com as regras cadastradas.
-5. Comparar manter o milho, usar outra cultura comercial ou introduzir cobertura.
-6. Explicar por que uma alternativa exige menos mudanças e quais compromissos ela cria.
-7. Trocar o município para Vilhena e mostrar que o resultado é recalculado.
-
-## Critério de sucesso do MVP
-
-O MVP está pronto quando o agrônomo consegue verificar três casos e responder:
-
-- o calendário calculado está coerente;
-- as alternativas apresentadas fazem sentido para o município;
-- as informações faltantes estão visíveis;
-- o aplicativo não aprova uma opção sem respaldo;
-- a explicação ajuda a conversar com o produtor.
-
-## O que diferencia a solução
-
-A Rota Adaptada não tenta encontrar uma cultura universalmente melhor. Ela procura a menor alteração que continue defensável depois de um imprevisto, mostra alternativas maiores quando necessário e mantém evidência, restrição e preferência do produtor separadas.
+1. **Passo 1 — Propriedade:**
+   - Propriedade pré-cadastrada de Vilhena/RO e inclusão de novas propriedades por coordenadas (`Lat`/`Lon` ou GPS) com consulta automática à **NASA POWER**, **ISRIC SoilGrids** e **Nominatim**.
+2. **Passo 2 — Culturas:**
+   - Cadastro de novas culturas sem restrição à 2ª safra (4 finalidades no planejamento) com registro duplo de **Ciclo Médio** e **Ciclo Precoce** (em dias).
+   - Cadastro de novos ciclos (`+ Cadastrar Novo Ciclo`) para qualquer cultura disponível.
+3. **Passo 3 — Planejamento:**
+   - Planejamento pré-cadastrado e inclusão de novos planejamentos (`+ Incluir Novo Planejamento`) vinculando propriedade, data inicial, intervalo operacional e ordem cronológica das sucessões.
+   - Campos de **Cultura** e **Ciclo na Etapa** iniciam **em branco** ao abrir um novo planejamento ou adicionar etapa.
+   - Botão **`✨ Sugerir Planejamento (NASA + APIs)`** (exclusivo dentro de *Incluir Novo Planejamento*), com **elemento de loading** durante a consulta e exibição de **3 opções em cartas de baralho (`♠ CARTA 01`, `♦ CARTA 02`, `♣ CARTA 03`)** + botão **Cancelar / Sair**.
+   - Cadastro rápido de novos ciclos (`+ Cadastrar Novo Ciclo` / `+ Cadastrar Ciclo`) e simulador de atraso (`0` a `+45 dias`) com cálculo do **Efeito Dominó**.
+4. **Passo 4 — Comparação:**
+   - **Preferências do Produtor** posicionadas na tela de Comparação para filtrar em tempo real as alternativas aceitas.
+   - Comparação lado a lado entre o Plano Atual (com atraso) e as Alternativas nos 12 anos da NASA POWER (`2013–2024`).
+5. **Passo 5 — Explicação e Resumo:**
+   - Diagnóstico por ano histórico (`2013–2024`) nas 4 fases da planta (`F1` a `F4`) e **Relatório Imprimível (PDF / A4)**.

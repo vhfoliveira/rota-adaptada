@@ -9,6 +9,8 @@ import {
   getPlanningStagesList,
   resolveSuccessionSchedule,
   registerCustomCropsInCatalog,
+  getCycleGroupLabel,
+  generateSystemSuggestedPlannings,
   simulateAdaptation,
   CUSTOM_CROP_ROLES,
   getCustomCropRoleMeta,
@@ -36,6 +38,7 @@ let appState = {
   propertyProfile: structuredClone(DEFAULT_PROP),
   customProperties: [],
   customCrops: [],
+  customCycles: [],
   planningConfig: structuredClone(DEFAULT_PLAN),
   customPlannings: [],
   selectedStrategyId: 'ALTERNATIVA_COMERCIAL_SORGO',
@@ -72,33 +75,54 @@ let newCropFormState = {
   open: false,
   commonName: '',
   role: 'ALTERNATIVA_COMERCIAL',
-  cycleDays: 85,
+  cycleDays: 95,
+  earlyCycleDays: 80,
   windowStartDate: '2027-01-15',
   windowEndDate: '2027-04-10',
   droughtTolerance: 'MODERADA',
   summary: ''
 };
 
+let newCycleFormState = {
+  open: false,
+  targetStageIdx: null,
+  cropId: 'SOJA',
+  cycleName: 'Ciclo Superprecoce',
+  cycleDays: 95
+};
+
+function createBlankPlanningStages() {
+  return [
+    { cropId: '', groupKey: '', cultivarName: '', plannedSowDate: null },
+    { cropId: '', groupKey: '', cultivarName: '', plannedSowDate: null },
+    { cropId: '', groupKey: '', cultivarName: '', plannedSowDate: '2027-10-20' },
+    { cropId: '', groupKey: '', cultivarName: '', plannedSowDate: null }
+  ];
+}
+
 let newPlanningFormState = {
   open: false,
+  showSuggestions: false,
+  loadingSuggestions: false,
+  suggestionsResult: null,
   planningName: '',
   propertyId: DEFAULT_PROP.id,
   baseSowingDate: '2026-11-01',
   operationalIntervalDays: 7,
-  stages: [
-    { cropId: 'SOJA', groupKey: 'GRUPO_II_MEDIO', cultivarName: 'Ciclo Médio (115d)', plannedSowDate: null },
-    { cropId: 'MILHO_2_SAFRA', groupKey: 'GRUPO_II_MEDIO', cultivarName: 'Ciclo Médio (110d)', plannedSowDate: null },
-    { cropId: 'SOJA', groupKey: 'GRUPO_II_MEDIO', cultivarName: 'Ciclo Médio (115d)', plannedSowDate: '2027-10-20' },
-    { cropId: 'MILHO_2_SAFRA', groupKey: 'GRUPO_I_PRECOCE', cultivarName: 'Ciclo Precoce (100d)', plannedSowDate: null }
-  ]
+  stages: createBlankPlanningStages()
 };
 
-let simResult = simulateAdaptation(appState.propertyProfile, appState.planningConfig, appState.customCrops);
+let simResult = simulateAdaptation(
+  appState.propertyProfile,
+  appState.planningConfig,
+  appState.customCrops,
+  appState.customCycles
+);
 let dbReady = false;
 
 function syncLegacyPlanningFields(planCfg) {
   if (!planCfg) return planCfg;
-  registerCustomCropsInCatalog(appState.customCrops || []);
+  registerCustomCropsInCatalog(appState.customCrops || [], appState.customCycles || []);
   const stages = getPlanningStagesList(planCfg);
   planCfg.successionStages = stages;
   if (stages[0]) {
@@ -133,7 +157,12 @@ function recomputeSimulation() {
       appState.customPlannings[idx] = structuredClone(appState.planningConfig);
     }
   }
-  simResult = simulateAdaptation(appState.propertyProfile, appState.planningConfig, appState.customCrops || []);
+  simResult = simulateAdaptation(
+    appState.propertyProfile,
+    appState.planningConfig,
+    appState.customCrops || [],
+    appState.customCycles || []
+  );
   const exists = simResult.strategies.some(s => s.strategyId === appState.selectedStrategyId);
   if (!exists) {
     appState.selectedStrategyId = simResult.strategies[0]?.strategyId || 'PLANO_ATUAL';
@@ -312,7 +341,7 @@ const CROP_FRIENDLY = {
 };
 
 function getAvailableCropsList() {
-  registerCustomCropsInCatalog(appState.customCrops || []);
+  registerCustomCropsInCatalog(appState.customCrops || [], appState.customCycles || []);
   const preIds = ['SOJA', 'MILHO_2_SAFRA', 'MILHO_1_SAFRA', 'SORGO_GRANIFERO', 'MILHETO'];
   const list = [];
   for (const id of preIds) {
@@ -335,15 +364,11 @@ function getAvailableCropsList() {
       purposeBadge: f?.shortPurpose || 'Cultura Pré-Cadastrada',
       isCustom: false,
       groups: Object.entries(c.cultivar_groups || {}).map(([gKey, gObj]) => {
-        const cLabel =
-          gKey === 'GRUPO_I_PRECOCE'
-            ? `Ciclo Precoce (${gObj.cycle_days_default} dias)`
-            : gKey === 'MANEJO_COBERTURA_FLORESCIMENTO'
-              ? `Ciclo Rápido (${gObj.cycle_days_default} dias)`
-              : `Ciclo Médio (${gObj.cycle_days_default} dias)`;
+        const cLabel = getCycleGroupLabel(gKey, gObj);
         return {
           groupKey: gKey,
           cycleDays: gObj.cycle_days_default,
+          isCustomCycle: Boolean(gObj.is_custom_cycle),
           cultivarName: cLabel,
           label: cLabel
         };
@@ -352,6 +377,8 @@ function getAvailableCropsList() {
   }
 
   for (const cc of appState.customCrops || []) {
+    const c = rulesPackage.crops_catalog[cc.crop_id];
+    if (!c) continue;
     const roleMeta = getCustomCropRoleMeta(cc.role);
     list.push({
       cropId: cc.crop_id,
@@ -359,14 +386,16 @@ function getAvailableCropsList() {
       shortName: `${cc.common_name} (Cadastrada)`,
       purposeBadge: roleMeta.shortBadge,
       isCustom: true,
-      groups: [
-        {
-          groupKey: 'GRUPO_PADRAO',
-          cycleDays: cc.cycleDays,
-          cultivarName: `Ciclo (${cc.cycleDays}d)`,
-          label: `Ciclo Cadastrado (${cc.cycleDays} dias)`
-        }
-      ]
+      groups: Object.entries(c.cultivar_groups || {}).map(([gKey, gObj]) => {
+        const cLabel = getCycleGroupLabel(gKey, gObj);
+        return {
+          groupKey: gKey,
+          cycleDays: gObj.cycle_days_default,
+          isCustomCycle: Boolean(gObj.is_custom_cycle),
+          cultivarName: cLabel,
+          label: cLabel
+        };
+      })
     });
   }
 
@@ -374,7 +403,7 @@ function getAvailableCropsList() {
 }
 
 function getCropShortDisplay(cropId) {
-  registerCustomCropsInCatalog(appState.customCrops || []);
+  registerCustomCropsInCatalog(appState.customCrops || [], appState.customCycles || []);
   if (cropId === 'SOJA') return 'Soja';
   if (cropId === 'MILHO_2_SAFRA') return 'Milho 2ª Safra';
   if (cropId === 'MILHO_1_SAFRA') return 'Milho 1ª Safra';
@@ -384,7 +413,7 @@ function getCropShortDisplay(cropId) {
 }
 
 function getCropPurposeDisplay(cropId) {
-  registerCustomCropsInCatalog(appState.customCrops || []);
+  registerCustomCropsInCatalog(appState.customCrops || [], appState.customCycles || []);
   const c = rulesPackage.crops_catalog[cropId];
   if (c?.custom_role) {
     return getCustomCropRoleMeta(c.custom_role).shortBadge;
@@ -741,10 +770,323 @@ function renderAutoLookupResult(res) {
   `;
 }
 
+function renderNewCycleFormPanel(availableCrops) {
+  if (!newCycleFormState.open) return '';
+  return `
+    <section class="panel-card new-property-panel section-block">
+      <div class="card-head">
+        <div>
+          <span class="eyebrow">CADASTRAR CICLO DE CULTURA · DISPONÍVEL NO PLANEJAMENTO E SIMULAÇÃO NASA</span>
+          <h2>Cadastrar Novo Ciclo para Cultura (em Dias)</h2>
+          <p class="muted">
+            Cadastre um novo ciclo (ex.: <strong>Ciclo Superprecoce</strong>, <strong>Ciclo Precoce</strong>, <strong>Ciclo Médio</strong> ou <strong>Ciclo Tardio</strong>) vinculado a qualquer cultura disponível. O ciclo cadastrado fica imediatamente disponível no seletor <strong>Ciclo na Etapa</strong> do Planejamento e tem seus dias divididos nas 4 fases da planta para o teste histórico da NASA POWER.
+          </p>
+        </div>
+        <button type="button" class="quiet-btn" id="btn-close-new-cycle-panel">✕ Fechar</button>
+      </div>
+
+      <div class="new-prop-form-grid">
+        <label>
+          Cultura Vinculada ao Ciclo *
+          <select id="ncycle-crop">
+            ${availableCrops
+              .map(
+                c => `
+              <option value="${esc(c.cropId)}" ${c.cropId === newCycleFormState.cropId ? 'selected' : ''}>
+                ${c.isCustom ? '★ ' : ''}${esc(c.shortName)} — [${esc(c.purposeBadge)}]
+              </option>`
+              )
+              .join('')}
+          </select>
+        </label>
+        <label>
+          Nome / Tipo do Ciclo *
+          <input type="text" id="ncycle-name" placeholder="Ex.: Ciclo Superprecoce, Ciclo Precoce, Ciclo Médio..." value="${esc(
+            newCycleFormState.cycleName
+          )}">
+        </label>
+        <label>
+          Duração Total do Ciclo (dias) *
+          <input type="number" id="ncycle-days" min="40" max="180" step="1" value="${esc(newCycleFormState.cycleDays)}">
+        </label>
+      </div>
+
+      <div class="button-row" style="justify-content:flex-end;margin-top:14px">
+        <button type="button" class="primary lg-btn" id="btn-save-new-cycle">
+          ✓ Salvar Ciclo (${esc(newCycleFormState.cycleDays)} dias) e Disponibilizar no Planejamento
+        </button>
+      </div>
+    </section>
+  `;
+}
+
+function renderSystemSuggestedPlansPanel(allProps) {
+  if (!newPlanningFormState.showSuggestions) return '';
+
+  const targetProp =
+    allProps.find(pr => pr.id === newPlanningFormState.propertyId) ||
+    appState.propertyProfile ||
+    DEFAULT_PROP;
+  const targetSoil = SOIL_FRIENDLY[targetProp.soilProfileId] || SOIL_FRIENDLY.AD4_ARGILOSA;
+
+  if (newPlanningFormState.loadingSuggestions) {
+    return `
+      <section class="panel-card new-property-panel section-block" style="border:2px solid var(--green, #1f7a4c)">
+        <div class="card-head">
+          <div>
+            <span class="eyebrow">✨ CONSULTANDO NASA POWER + SOILGRIDS + CATÁLOGO DE CULTURAS</span>
+            <h2>Gerando 3 Cartas de Planejamento Sugeridas pelo Sistema...</h2>
+          </div>
+          <button type="button" class="secondary-cta-btn" data-close-system-suggest="1">✕ Cancelar / Sair</button>
+        </div>
+
+        <div class="suggestion-loading-box" role="status" aria-live="polite">
+          <div class="suggestion-spinner"></div>
+          <h3 style="margin:0;color:var(--forest)">Analisando dados climáticos e de solo para ${esc(
+            targetProp.propertyName
+          )} (${esc(targetProp.municipality)}/${esc(targetProp.state)})...</h3>
+          <p class="muted" style="max-width:640px;margin:0">
+            Cruzando a série histórica diária da <strong>NASA POWER (2013–2024)</strong>, a retenção hídrica do solo <strong>${esc(
+              targetSoil.shortTitle
+            )} (${esc(targetSoil.waterMm)} mm)</strong> e todas as culturas e ciclos disponíveis no catálogo.
+          </p>
+          <div class="suggestion-loading-steps">
+            <span class="suggestion-loading-pill">🛰️ 1. Série NASA POWER (PRECTOTCORR, GWETROOT, GWETTOP)</span>
+            <span class="suggestion-loading-pill">🌱 2. API ISRIC SoilGrids (${esc(targetSoil.shortTitle)})</span>
+            <span class="suggestion-loading-pill">🃏 3. Montando 3 Cartas de Sucessão Ranqueadas</span>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  let suggestedData = newPlanningFormState.suggestionsResult;
+  if (!suggestedData) {
+    try {
+      suggestedData = generateSystemSuggestedPlannings({
+        propertyProfile: targetProp,
+        baseSowingDate: newPlanningFormState.baseSowingDate || '2026-11-01',
+        operationalIntervalDays: Number(newPlanningFormState.operationalIntervalDays) || 7,
+        delayDays: appState.planningConfig.delayDays ?? 0,
+        customCrops: appState.customCrops || [],
+        customCycles: appState.customCycles || []
+      });
+      newPlanningFormState.suggestionsResult = suggestedData;
+    } catch (err) {
+      console.error('Erro ao gerar sugestões:', err);
+      return `
+        <section class="panel-card new-property-panel section-block">
+          <div class="card-head">
+            <h2>Não foi possível gerar as sugestões no momento</h2>
+            <button type="button" class="secondary-cta-btn" data-close-system-suggest="1">✕ Cancelar / Sair</button>
+          </div>
+        </section>
+      `;
+    }
+  }
+
+  const summary = suggestedData.analysisSummary || {};
+  const suggestions = suggestedData.suggestions || [];
+
+  return `
+    <section class="panel-card new-property-panel section-block" style="border:2px solid var(--green, #1f7a4c)">
+      <div class="card-head">
+        <div>
+          <span class="eyebrow">🃏 BARALHO DE SUGESTÕES DO SISTEMA · NASA POWER (2013–2024) + ISRIC SOILGRIDS + CULTURAS DISPONÍVEIS</span>
+          <h2>Escolha 1 das 3 Cartas de Planejamento Sugeridas pelo Sistema</h2>
+          <p class="muted">
+            O sistema avaliou <strong>${esc(
+              summary.evaluatedCombinationsCount || summary.totalCombinationsTested || 0
+            )} combinações</strong> entre as <strong>${esc(
+    summary.availableCropsCount || summary.totalCropsAnalyzed || 4
+  )} culturas</strong> e <strong>${esc(
+    summary.availableCyclesCount || summary.totalCyclesAnalyzed || 8
+  )} ciclos disponíveis</strong> usando os 12 anos da <strong>NASA POWER</strong> e o solo <strong>${esc(
+    targetSoil.shortTitle
+  )}</strong>. Escolha uma das 3 cartas abaixo ou clique em <strong>Cancelar / Sair</strong>.
+          </p>
+        </div>
+        <button type="button" class="secondary-cta-btn" data-close-system-suggest="1">
+          ✕ Cancelar / Sair
+        </button>
+      </div>
+
+      <!-- Filtros Rápidos para Recalcular o Baralho de Sugestões -->
+      <div class="new-prop-form-grid" style="margin-bottom:14px">
+        <label>
+          Propriedade Analisada pelo Sistema
+          <select id="sys-sug-prop">
+            ${allProps
+              .map(
+                pr => `
+              <option value="${esc(pr.id)}" ${pr.id === targetProp.id ? 'selected' : ''}>
+                ${pr.id === DEFAULT_PROP.id ? '[Pré-Cadastrada] ' : '[Cadastrada] '}${esc(pr.propertyName)} (${esc(
+                  pr.municipality
+                )}/${esc(pr.state)}) — ${esc(SOIL_FRIENDLY[pr.soilProfileId]?.shortTitle || pr.soilProfileId)}
+              </option>`
+              )
+              .join('')}
+          </select>
+        </label>
+        <label>
+          Data Base do 1º Plantio Avaliada
+          <input type="date" id="sys-sug-date" value="${esc(newPlanningFormState.baseSowingDate || '2026-11-01')}">
+        </label>
+        <label>
+          Intervalo Operacional entre Sucessões (dias)
+          <input type="number" id="sys-sug-interval" min="5" max="30" step="1" value="${esc(
+            newPlanningFormState.operationalIntervalDays || 7
+          )}">
+        </label>
+      </div>
+
+      <!-- Raio-X das Fontes de Dados Usadas na Sugestão -->
+      <div class="lookup-result-box" style="margin-bottom:14px">
+        <div class="lookup-grid" style="margin-top:0">
+          <div class="lookup-item">
+            <small>1. Clima NASA POWER (2013–2024)</small>
+            <strong>Chuva Média: ${num(summary.meanAnnualRainMm, 0)} mm/ano</strong>
+            <span>Umidade Radicular (GWETROOT): <b>${esc(
+              summary.meanGwetRootPct ?? 64
+            )}%</b> · Superficial (GWETTOP): <b>${esc(summary.meanGwetTopPct ?? 61)}%</b></span>
+          </div>
+          <div class="lookup-item">
+            <small>2. Solo ISRIC SoilGrids + Nominatim</small>
+            <strong>${esc(targetSoil.shortTitle)} (${esc(targetSoil.waterMm)} mm)</strong>
+            <span>Município: <b>${esc(summary.municipality)}/${esc(
+    summary.state
+  )}</b> · Argila estimada: <b>${esc(summary.clayPct ?? summary.clayPercent ?? 46)}%</b></span>
+          </div>
+          <div class="lookup-item">
+            <small>3. Catálogo Cruzado pelo Motor</small>
+            <strong>${esc(summary.availableCropsCount || summary.totalCropsAnalyzed)} Culturas · ${esc(
+    summary.availableCyclesCount || summary.totalCyclesAnalyzed
+  )} Ciclos</strong>
+            <span><b>${esc(
+              summary.evaluatedCombinationsCount || summary.totalCombinationsTested
+            )} sequências</b> testadas em 12 safras históricas</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Baralho com as 3 Cartas de Sugestão -->
+      <div class="playing-deck-stage" role="list" aria-label="Três cartas de sugestão de planejamento">
+        ${suggestions
+          .map((sug, idx) => {
+            const ev = sug.evaluation || sug.delayedEval;
+            const metrics = sug.metrics || {
+              noCriticalYears: ev?.criticalStage?.stressTest?.noCriticalYears ?? 10,
+              okYears: ev?.criticalStage?.stressTest?.okYears ?? 8,
+              avgCycleRainMm: sug.avgCycleRainMm ?? 520,
+              avgF3GwetRootPct: sug.avgF3GwetRootPct ?? 62,
+              protectedDays: ev?.soilMetrics?.protectedDays ?? 410
+            };
+            const toneClass =
+              ev?.overallStatus === 'RECOMENDADA'
+                ? 'success'
+                : ev?.overallStatus === 'VIÁVEL COM ALERTA'
+                ? 'warning'
+                : 'danger';
+            const suitSymbol = sug.suitSymbol || ['♠', '♦', '♣'][idx] || '♠';
+            const cardNumber = sug.cardNumber || `CARTA 0${idx + 1}`;
+
+            return `
+            <article class="playing-card card-pos-${idx}" role="listitem">
+              <div>
+                <div class="playing-card-top-bar">
+                  <span class="playing-card-rank">
+                    <span class="playing-card-suit">${esc(suitSymbol)}</span>
+                    ${esc(cardNumber)}
+                  </span>
+                  <span class="status-badge ${toneClass}">${esc(ev?.statusLabel || 'Avaliada')}</span>
+                </div>
+
+                <span class="tag custom-tag" style="margin-bottom:6px;display:inline-block">${esc(sug.badge)}</span>
+                <h3 style="margin:4px 0 8px;font-size:1.05rem;color:var(--forest)">${esc(sug.title)}</h3>
+                <p class="muted" style="margin:0 0 12px;font-size:0.84rem;line-height:1.45">${esc(sug.rationale)}</p>
+
+                <div class="planning-prop-meta" style="margin-bottom:10px">
+                  <span>🌧 <strong>Segurança NASA:</strong> ${esc(
+                    metrics.noCriticalYears
+                  )}/12 anos sem falha severa (${esc(metrics.okYears)}/12 ideais)</span>
+                  <span>💧 <strong>Chuva / GWETROOT F3:</strong> ${num(
+                    metrics.avgCycleRainMm,
+                    0
+                  )} mm · ${num(metrics.avgF3GwetRootPct, 0)}%</span>
+                  <span>🛡️ <strong>Solo protegido:</strong> ${esc(metrics.protectedDays)} dias no biênio</span>
+                </div>
+
+                <div class="planning-succession-chain">
+                  <small class="eyebrow" style="margin-bottom:6px">ORDEM DAS SUCESSÕES DESTA CARTA:</small>
+                  <div class="succession-pills-flow">
+                    ${(ev?.stages || [])
+                      .map((st, sIdx) => {
+                        const zStatus = st.zarc?.status;
+                        const zBadge =
+                          zStatus === 'FAVORAVEL'
+                            ? '✓ Janela Ideal'
+                            : zStatus === 'TRANSICAO'
+                            ? '⚠ Transição'
+                            : '✕ Fora da Janela';
+                        return `
+                        <div class="succession-pill">
+                          <span class="sp-order">${sIdx + 1}º</span>
+                          <div class="sp-body">
+                            <strong>${esc(st.cropName)}</strong>
+                            <small>${esc(st.cultivarName || `${st.cycleDays}d`)}</small>
+                            <small class="sp-dates">${formatBRDate(st.sowDate)} ➔ ${formatBRDate(
+                          st.harvestDate
+                        )} · <b>${zBadge}</b></small>
+                          </div>
+                        </div>
+                        ${sIdx < (ev?.stages?.length || 0) - 1 ? '<span class="sp-arrow">➔</span>' : ''}
+                      `;
+                      })
+                      .join('')}
+                  </div>
+                </div>
+              </div>
+
+              <div class="playing-card-actions">
+                <button
+                  type="button"
+                  class="primary"
+                  data-save-suggested-plan="${idx}"
+                  style="width:100%;justify-content:center"
+                >
+                  🃏 Escolher ${esc(cardNumber)} (Incluir e Ativar) →
+                </button>
+                <button
+                  type="button"
+                  class="secondary-cta-btn"
+                  data-load-suggested-plan="${idx}"
+                  style="width:100%;justify-content:center;font-size:0.82rem"
+                >
+                  ↳ Carregar no Formulário (Editar Antes)
+                </button>
+              </div>
+            </article>`;
+          })
+          .join('')}
+      </div>
+
+      <div class="deck-footer-bar">
+        <span class="muted" style="font-size:0.85rem">
+          💡 Você pode escolher diretamente uma das 3 cartas acima, carregá-la no formulário para ajustar etapas, ou sair sem alterar seu planejamento atual.
+        </span>
+        <button type="button" class="secondary-cta-btn" data-close-system-suggest="1">
+          ✕ Cancelar / Sair das Sugestões
+        </button>
+      </div>
+    </section>
+  `;
+}
+
 /**
- * PASSO 2: Catálogo de Culturas (Somente parâmetros utilizados pelo motor de simulação e NASA POWER)
+ * PASSO 2: Catálogo de Culturas e Ciclos (Somente parâmetros utilizados pelo motor de simulação e NASA POWER)
  */
 function renderScreen2Crops() {
+  const availableCrops = getAvailableCropsList();
   const defaultCrops = ['SOJA', 'MILHO_2_SAFRA', 'SORGO_GRANIFERO', 'MILHETO']
     .map(id => rulesPackage.crops_catalog[id])
     .filter(Boolean);
@@ -753,19 +1095,24 @@ function renderScreen2Crops() {
   return `
     <div class="screen-header">
       <div>
-        <span class="eyebrow">PASSO 2 · CATÁLOGO DE CULTURAS E PARÂMETROS DE SIMULAÇÃO</span>
-        <h1>Culturas Disponíveis para o Planejamento e Adaptação</h1>
+        <span class="eyebrow">PASSO 2 · CATÁLOGO DE CULTURAS, CICLOS E JANELAS DE SIMULAÇÃO</span>
+        <h1>Culturas e Ciclos Disponíveis para o Planejamento e Adaptação</h1>
         <p>
-          Cada cultura utiliza apenas os parâmetros necessários para o teste histórico da <strong>NASA POWER (2013–2024)</strong>: <strong>duração do ciclo (dias)</strong>, <strong>janela recomendada de plantio</strong>, <strong>finalidade na sucessão</strong> e <strong>exigência de água / tolerância à seca</strong>.
+          Cada cultura e seus <strong>ciclos cadastrados (em dias)</strong> alimentam o <strong>Planejamento (Passo 3)</strong> e o teste histórico de 12 anos da <strong>NASA POWER (2013–2024)</strong>. Você pode cadastrar <strong>novas culturas</strong> (já informando o ciclo médio e o ciclo precoce) ou <strong>cadastrar novos ciclos</strong> para qualquer cultura.
         </p>
       </div>
       <div class="screen-header-cta">
+        <button type="button" class="secondary-cta-btn" id="btn-toggle-new-cycle">
+          ${newCycleFormState.open ? '✕ Fechar Cadastro de Ciclo' : '+ Cadastrar Novo Ciclo'}
+        </button>
         <button type="button" class="secondary-cta-btn" id="btn-toggle-new-crop">
-          ${newCropFormState.open ? '✕ Fechar Cadastro de Nova Cultura' : '+ Cadastrar Nova Cultura'}
+          ${newCropFormState.open ? '✕ Fechar Cadastro de Cultura' : '+ Cadastrar Nova Cultura'}
         </button>
         <button type="button" class="primary lg-btn" data-go-tab="2">Avançar para 3. Planejamento →</button>
       </div>
     </div>
+
+    ${renderNewCycleFormPanel(availableCrops)}
 
     ${
       newCropFormState.open
@@ -773,10 +1120,10 @@ function renderScreen2Crops() {
       <section class="panel-card new-property-panel section-block">
         <div class="card-head">
           <div>
-            <span class="eyebrow">INCLUIR NOVA CULTURA NA SIMULAÇÃO</span>
-            <h2>Cadastrar Nova Cultura</h2>
+            <span class="eyebrow">INCLUIR NOVA CULTURA E SEUS CICLOS NA SIMULAÇÃO</span>
+            <h2>Cadastrar Nova Cultura (com Ciclo Médio e Ciclo Precoce)</h2>
             <p class="muted">
-              O ciclo informado será dividido nas 4 fases da planta e avaliado nos 12 anos de chuva, temperatura e umidade do solo da NASA POWER.
+              Informe o <strong>Ciclo Médio / Padrão (dias)</strong> e o <strong>Ciclo Precoce / Mais Curto (dias)</strong> da cultura. Ambos ficarão disponíveis para seleção no <strong>Planejamento (Passo 3)</strong> e para o teste de redução de ciclo na <strong>Comparação (Passo 4)</strong>.
             </p>
           </div>
         </div>
@@ -802,9 +1149,18 @@ function renderScreen2Crops() {
             </select>
           </label>
           <label>
-            Duração Média do Ciclo (dias) *
+            Ciclo Médio / Padrão (dias) *
             <input type="number" id="nc-cycle" min="40" max="160" step="1" value="${esc(newCropFormState.cycleDays)}">
           </label>
+          <label>
+            Ciclo Precoce / Mais Curto (dias) *
+            <input type="number" id="nc-early-cycle" min="40" max="160" step="1" value="${esc(
+              newCropFormState.earlyCycleDays
+            )}">
+          </label>
+        </div>
+
+        <div class="new-prop-form-grid" style="margin-top:12px">
           <label>
             Exigência de Água / Tolerância à Seca (NASA) *
             <select id="nc-tolerance">
@@ -819,9 +1175,6 @@ function renderScreen2Crops() {
               </option>
             </select>
           </label>
-        </div>
-
-        <div class="two" style="margin-top:12px">
           <label>
             Início da Janela Recomendada de Plantio *
             <input type="date" id="nc-start" value="${esc(newCropFormState.windowStartDate)}">
@@ -834,7 +1187,7 @@ function renderScreen2Crops() {
 
         <div class="button-row" style="justify-content:flex-end;margin-top:14px">
           <button type="button" class="primary lg-btn" id="btn-save-new-crop">
-            ✓ Salvar e Incluir Cultura no Catálogo
+            ✓ Salvar Cultura e Seus Ciclos no Catálogo
           </button>
         </div>
       </section>`
@@ -844,7 +1197,7 @@ function renderScreen2Crops() {
     <section class="panel-card section-block">
       <div class="card-head">
         <div>
-          <span class="eyebrow">CULTURAS DISPONÍVEIS</span>
+          <span class="eyebrow">CULTURAS E CICLOS CADASTRADOS</span>
           <h2>Culturas Pré-Cadastradas (Vilhena/RO) ${customCrops.length ? `+ ${customCrops.length} Cultura(s) Cadastrada(s)` : ''}</h2>
         </div>
       </div>
@@ -852,21 +1205,44 @@ function renderScreen2Crops() {
       <div class="catalog-grid-4">
         ${defaultCrops
           .map(c => {
-            const f = CROP_FRIENDLY[c.crop_id || c.id] || CROP_FRIENDLY.SOJA;
+            const cropId = c.crop_id || c.id;
+            const f = CROP_FRIENDLY[cropId] || CROP_FRIENDLY.SOJA;
+            const cropMeta = availableCrops.find(ac => ac.cropId === cropId);
+            const groups = cropMeta?.groups || [];
             return `
             <article class="catalog-crop-card">
-              <span class="tag">${esc(f.badge)}</span>
+              <div class="row">
+                <span class="tag">${esc(f.badge)}</span>
+                <button type="button" class="tiny-refresh-btn" data-add-cycle-for-crop="${esc(cropId)}" title="Cadastrar novo ciclo para ${esc(c.common_name)}">+ Ciclo</button>
+              </div>
               <h3>${esc(c.common_name)}</h3>
               <div class="crop-essential-meta">
                 <div>
-                  <small>Duração do ciclo</small>
-                  <strong>${esc(f.cycleText)}</strong>
+                  <small>Ciclos cadastrados</small>
+                  <strong>${groups.map(g => `${esc(g.label)}`).join(' · ')}</strong>
                 </div>
                 <div>
                   <small>Janela recomendada</small>
                   <strong>${esc(f.windowText)}</strong>
                 </div>
               </div>
+              ${
+                groups.some(g => g.isCustomCycle)
+                  ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+                      ${groups
+                        .filter(g => g.isCustomCycle)
+                        .map(
+                          g =>
+                            `<span class="tag custom-tag" style="display:inline-flex;align-items:center;gap:6px">★ ${esc(
+                              g.label
+                            )} <button type="button" class="tiny-refresh-btn" style="padding:1px 5px" data-remove-custom-cycle="${esc(
+                              cropId
+                            )}::${esc(g.groupKey)}" title="Remover ciclo cadastrado">✕</button></span>`
+                        )
+                        .join('')}
+                    </div>`
+                  : ''
+              }
               <p class="muted">${esc(f.summary)}</p>
             </article>`;
           })
@@ -875,17 +1251,22 @@ function renderScreen2Crops() {
         ${customCrops
           .map(cc => {
             const roleMeta = getCustomCropRoleMeta(cc.role);
+            const cropMeta = availableCrops.find(ac => ac.cropId === cc.crop_id);
+            const groups = cropMeta?.groups || [];
             return `
           <article class="catalog-crop-card custom-crop-card">
             <div class="row">
               <span class="tag custom-tag">★ ${esc(roleMeta.shortBadge)}</span>
-              <button type="button" class="tiny-refresh-btn" data-remove-crop="${esc(cc.crop_id)}" title="Remover cultura">✕</button>
+              <div class="row" style="gap:6px">
+                <button type="button" class="tiny-refresh-btn" data-add-cycle-for-crop="${esc(cc.crop_id)}" title="Cadastrar novo ciclo para ${esc(cc.common_name)}">+ Ciclo</button>
+                <button type="button" class="tiny-refresh-btn" data-remove-crop="${esc(cc.crop_id)}" title="Remover cultura">✕</button>
+              </div>
             </div>
             <h3>${esc(cc.common_name)}</h3>
             <div class="crop-essential-meta">
               <div>
-                <small>Duração do ciclo</small>
-                <strong>${esc(cc.cycleDays)} dias</strong>
+                <small>Ciclos cadastrados</small>
+                <strong>${groups.map(g => `${esc(g.label)}`).join(' · ')}</strong>
               </div>
               <div>
                 <small>Janela recomendada</small>
@@ -904,7 +1285,7 @@ function renderScreen2Crops() {
 }
 
 /**
- * PASSO 3: Planejamento (Planejamento Pré-Cadastrado, Inclusão de Novo Planejamento com Ordem de Sucessões e Simulação de Atraso)
+ * PASSO 3: Planejamento (Planejamento Pré-Cadastrado, Inclusão de Novo Planejamento com Ordem de Sucessões, Cadastro de Ciclo e Simulação de Atraso)
  */
 function renderScreen3Planning() {
   const cfg = appState.planningConfig;
@@ -915,12 +1296,28 @@ function renderScreen3Planning() {
   const usrCrops = availableCrops.filter(c => c.isCustom);
   const allPlannings = [DEFAULT_PLAN, ...(appState.customPlannings || [])];
 
-  // Preview resolved dates for the New Planning form
-  const previewDraftStages = resolveSuccessionSchedule(
-    newPlanningFormState.stages,
+  // Preview resolved dates for the New Planning form (supports blank stages)
+  const resolvedFallbackStages = resolveSuccessionSchedule(
+    newPlanningFormState.stages.map(st => ({
+      ...st,
+      cropId: st.cropId || 'SOJA',
+      groupKey: st.groupKey || 'GRUPO_II_MEDIO'
+    })),
     newPlanningFormState.baseSowingDate || '2026-11-01',
     Number(newPlanningFormState.operationalIntervalDays) || 7
   );
+  const previewDraftStages = newPlanningFormState.stages.map((st, idx) => {
+    const resolved = resolvedFallbackStages[idx];
+    const hasCrop = Boolean(st.cropId);
+    const hasGroup = Boolean(st.groupKey);
+    return {
+      ...resolved,
+      cropId: st.cropId || '',
+      groupKey: st.groupKey || '',
+      cultivarName: hasCrop && hasGroup ? st.cultivarName || resolved.cultivarName : '',
+      isComplete: hasCrop && hasGroup
+    };
+  });
 
   const firstStage = planoAtual.stages[0];
   const secondStage = planoAtual.stages[1] || planoAtual.stages[0];
@@ -928,13 +1325,16 @@ function renderScreen3Planning() {
   return `
     <div class="screen-header">
       <div>
-        <span class="eyebrow">PASSO 3 · PLANEJAMENTO DE CULTURAS, ORDEM DAS SUCESSÕES E ATRASO</span>
+        <span class="eyebrow">PASSO 3 · PLANEJAMENTO DE CULTURAS, CICLOS, ORDEM DAS SUCESSÕES E ATRASO</span>
         <h1>Planejamento de Safra e Cadeia de Sucessões — ${esc(cfg.planningName || 'Planejamento Ativo')}</h1>
         <p>
-          Utilize o <strong>planejamento pré-cadastrado</strong> (com a propriedade e as culturas de referência de Vilhena/RO) ou clique em <strong>+ Incluir Novo Planejamento</strong> para montar uma nova sequência de sucessões usando qualquer propriedade e cultura disponível.
+          Utilize o <strong>planejamento pré-cadastrado</strong>, clique em <strong>+ Cadastrar Novo Ciclo</strong> para incluir novos ciclos de duração (em dias) para qualquer cultura, ou clique em <strong>+ Incluir Novo Planejamento</strong> para montar uma nova sequência de sucessões ou pedir a <strong>✨ Sugestão do Sistema (NASA + APIs)</strong>.
         </p>
       </div>
       <div class="screen-header-cta">
+        <button type="button" class="secondary-cta-btn" id="btn-toggle-new-cycle">
+          ${newCycleFormState.open ? '✕ Fechar Cadastro de Ciclo' : '+ Cadastrar Novo Ciclo'}
+        </button>
         <button type="button" class="secondary-cta-btn" id="btn-toggle-new-planning">
           ${newPlanningFormState.open ? '✕ Fechar Novo Planejamento' : '+ Incluir Novo Planejamento'}
         </button>
@@ -942,19 +1342,30 @@ function renderScreen3Planning() {
       </div>
     </div>
 
+    ${renderNewCycleFormPanel(availableCrops)}
+
     ${
       newPlanningFormState.open
         ? `
       <section class="panel-card new-property-panel section-block">
         <div class="card-head">
           <div>
-            <span class="eyebrow">CADASTRAR NOVO PLANEJAMENTO · PROPRIEDADE + ORDEM DAS SUCESSÕES</span>
+            <span class="eyebrow">CADASTRAR NOVO PLANEJAMENTO · PROPRIEDADE + CULTURAS + CICLOS + ORDEM DAS SUCESSÕES</span>
             <h2>Incluir Novo Planejamento de Culturas e Sucessões</h2>
             <p class="muted">
-              Selecione uma propriedade disponível, defina a data do 1º plantio e monte a <strong>ordem cronológica das sucessões</strong> usando as culturas pré-cadastradas ou as novas culturas que você cadastrou no Passo 2.
+              Selecione uma propriedade disponível, defina a data do 1º plantio e escolha a <strong>cultura e o ciclo de cada etapa</strong> — ou clique em <strong>✨ Sugerir Planejamento (NASA + APIs)</strong> para que o sistema analise os cultivos disponíveis e sugira 3 opções em cartas de baralho.
             </p>
           </div>
+          <button type="button" class="secondary-cta-btn" id="btn-inline-system-suggest">
+            ${
+              newPlanningFormState.showSuggestions
+                ? '✕ Fechar Sugestão do Sistema'
+                : '✨ Sugerir Planejamento (NASA + APIs)'
+            }
+          </button>
         </div>
+
+        ${renderSystemSuggestedPlansPanel(allProps)}
 
         <div class="new-prop-form-grid">
           <label>
@@ -994,8 +1405,8 @@ function renderScreen3Planning() {
           <div class="row" style="margin-bottom:10px">
             <div>
               <span class="eyebrow">ORDEM DAS SUCESSÕES (${previewDraftStages.length} ETAPAS DEFINIDAS)</span>
-              <h3 style="margin:2px 0 0">Sequência Ordenada de Culturas no Planejamento</h3>
-              <p class="muted">A colheita de cada etapa determina automaticamente a janela de entrada da próxima sucessão na ordem abaixo.</p>
+              <h3 style="margin:2px 0 0">Sequência Ordenada de Culturas e Ciclos no Planejamento</h3>
+              <p class="muted">A colheita de cada etapa (calculada pelos dias do ciclo selecionado) determina automaticamente a entrada da próxima sucessão.</p>
             </div>
             <div class="button-row" style="margin-top:0">
               <button type="button" class="quiet-btn" data-nplan-preset="padrao">Modelo: Soja ➔ Milho (4 etapas)</button>
@@ -1010,9 +1421,12 @@ function renderScreen3Planning() {
           <div class="succession-builder-list">
             ${previewDraftStages
               .map((st, idx) => {
-                const selectedCropMeta =
-                  availableCrops.find(c => c.cropId === st.cropId) || availableCrops[0];
-                const prevCropName = idx > 0 ? getCropShortDisplay(previewDraftStages[idx - 1].cropId) : null;
+                const selectedCropMeta = st.cropId
+                  ? availableCrops.find(c => c.cropId === st.cropId) || null
+                  : null;
+                const prevStage = idx > 0 ? previewDraftStages[idx - 1] : null;
+                const prevCropName =
+                  prevStage && prevStage.cropId ? getCropShortDisplay(prevStage.cropId) : 'etapa anterior';
                 const orderTitle =
                   idx === 0
                     ? '1º na Ordem · Cultura Inicial (1ª Safra)'
@@ -1025,9 +1439,13 @@ function renderScreen3Planning() {
                     <div>
                       <strong>${esc(orderTitle)}</strong>
                       <small class="sb-schedule-preview">
-                        📅 Plantio: <b>${formatBRDate(st.sowDate)}</b> ➔ Colheita: <b>${formatBRDate(
-                  st.harvestDate
-                )}</b> (${esc(st.cycleDays)} dias)
+                        ${
+                          st.isComplete
+                            ? `📅 Plantio: <b>${formatBRDate(st.sowDate)}</b> ➔ Colheita: <b>${formatBRDate(
+                                st.harvestDate
+                              )}</b> (${esc(st.cycleDays)} dias)`
+                            : '⏳ Selecione a cultura e o ciclo desta etapa para calcular plantio e colheita'
+                        }
                       </small>
                     </div>
                   </div>
@@ -1036,6 +1454,7 @@ function renderScreen3Planning() {
                     <label>
                       Cultura (${idx === 0 ? 'Safra Inicial' : `${idx}ª Sucessão`})
                       <select data-nplan-stage-crop="${idx}">
+                        <option value="" ${!st.cropId ? 'selected' : ''}></option>
                         <optgroup label="Culturas Pré-Cadastradas (Ref. Vilhena/RO)">
                           ${preCrops
                             .map(
@@ -1064,16 +1483,30 @@ function renderScreen3Planning() {
                     </label>
 
                     <label>
-                      Ciclo na Etapa
+                      <span class="row" style="justify-content:space-between;gap:8px">
+                        <span>Ciclo na Etapa</span>
+                        <button
+                          type="button"
+                          class="tiny-refresh-btn"
+                          style="padding:1px 7px;font-size:0.74rem"
+                          data-open-cycle-for-stage="${idx}"
+                          title="Cadastrar um novo ciclo (em dias) para esta cultura"
+                        >+ Cadastrar Ciclo</button>
+                      </span>
                       <select data-nplan-stage-group="${idx}">
-                        ${selectedCropMeta.groups
-                          .map(
-                            g => `
-                          <option value="${esc(g.groupKey)}" ${g.groupKey === st.groupKey ? 'selected' : ''}>
-                            ${esc(g.label)}
-                          </option>`
-                          )
-                          .join('')}
+                        <option value="" ${!st.groupKey ? 'selected' : ''}></option>
+                        ${
+                          selectedCropMeta
+                            ? selectedCropMeta.groups
+                                .map(
+                                  g => `
+                              <option value="${esc(g.groupKey)}" ${g.groupKey === st.groupKey ? 'selected' : ''}>
+                                ${g.isCustomCycle ? '★ ' : ''}${esc(g.label)}
+                              </option>`
+                                )
+                                .join('')
+                            : ''
+                        }
                       </select>
                     </label>
                   </div>
@@ -1984,6 +2417,7 @@ function bindShellEvents() {
     appState.propertyProfile = structuredClone(DEFAULT_PROP);
     appState.customProperties = [];
     appState.customCrops = [];
+    appState.customCycles = [];
     appState.customPlannings = [];
     appState.planningConfig = defaultPlanningConfig();
     appState.selectedStrategyId = 'ALTERNATIVA_COMERCIAL_SORGO';
@@ -1992,6 +2426,7 @@ function bindShellEvents() {
     newPropertyFormState.open = false;
     newPropertyFormState.lookupResult = null;
     newCropFormState.open = false;
+    newCycleFormState.open = false;
     newPlanningFormState.open = false;
     persistState();
     refreshLiveNasaForActiveProperty(true);
@@ -2176,7 +2611,104 @@ function bindScreenEvents() {
     };
   }
 
-  // Step 2: Crops Catalog & Register New Crop bindings
+  // Step 2 & Step 3: Crops Catalog, Cycle Registration & Register New Crop bindings
+  const btnToggleNewCycle = $('#btn-toggle-new-cycle');
+  if (btnToggleNewCycle) {
+    btnToggleNewCycle.onclick = () => {
+      newCycleFormState.open = !newCycleFormState.open;
+      newCycleFormState.targetStageIdx = null;
+      renderActiveScreen();
+    };
+  }
+  const btnCloseNewCycle = $('#btn-close-new-cycle-panel');
+  if (btnCloseNewCycle) {
+    btnCloseNewCycle.onclick = () => {
+      newCycleFormState.open = false;
+      newCycleFormState.targetStageIdx = null;
+      renderActiveScreen();
+    };
+  }
+  const ncycleCrop = $('#ncycle-crop');
+  if (ncycleCrop) ncycleCrop.onchange = e => (newCycleFormState.cropId = e.target.value);
+  const ncycleName = $('#ncycle-name');
+  if (ncycleName) ncycleName.oninput = e => (newCycleFormState.cycleName = e.target.value);
+  const ncycleDays = $('#ncycle-days');
+  if (ncycleDays) {
+    ncycleDays.oninput = e => {
+      newCycleFormState.cycleDays = Number(e.target.value) || 95;
+    };
+  }
+
+  $$('[data-add-cycle-for-crop]').forEach(btn => {
+    btn.onclick = () => {
+      newCycleFormState.open = true;
+      newCycleFormState.targetStageIdx = null;
+      newCycleFormState.cropId = btn.dataset.addCycleForCrop;
+      renderActiveScreen();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+  });
+
+  $$('[data-open-cycle-for-stage]').forEach(btn => {
+    btn.onclick = () => {
+      const stIdx = Number(btn.dataset.openCycleForStage);
+      const st = newPlanningFormState.stages[stIdx];
+      newCycleFormState.open = true;
+      newCycleFormState.targetStageIdx = stIdx;
+      if (st?.cropId) newCycleFormState.cropId = st.cropId;
+      renderActiveScreen();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+  });
+
+  const btnSaveNewCycle = $('#btn-save-new-cycle');
+  if (btnSaveNewCycle) {
+    btnSaveNewCycle.onclick = () => {
+      const cycleName = (newCycleFormState.cycleName || '').trim() || 'Ciclo Cadastrado';
+      const cycleDays = Math.max(40, Math.min(180, Number(newCycleFormState.cycleDays) || 95));
+      const cropId = newCycleFormState.cropId || 'SOJA';
+      const groupKey = `CUSTOM_CYCLE_${Date.now().toString().slice(-5)}`;
+      const createdCycle = {
+        id: groupKey,
+        cropId,
+        groupKey,
+        cycleName,
+        cycleDays
+      };
+
+      appState.customCycles = [...(appState.customCycles || []), createdCycle];
+
+      // If opened from a specific stage in New Planning, automatically assign this cycle to that stage
+      if (
+        newCycleFormState.targetStageIdx !== null &&
+        newPlanningFormState.stages[newCycleFormState.targetStageIdx]
+      ) {
+        newPlanningFormState.stages[newCycleFormState.targetStageIdx] = {
+          ...newPlanningFormState.stages[newCycleFormState.targetStageIdx],
+          cropId,
+          groupKey,
+          cultivarName: `${cycleName} (${cycleDays}d)`
+        };
+      }
+
+      newCycleFormState.open = false;
+      newCycleFormState.targetStageIdx = null;
+      updateAndRender();
+      toast(`Ciclo "${cycleName} (${cycleDays}d)" cadastrado para ${getCropShortDisplay(cropId)}!`);
+    };
+  }
+
+  $$('[data-remove-custom-cycle]').forEach(btn => {
+    btn.onclick = () => {
+      const [cropId, groupKey] = (btn.dataset.removeCustomCycle || '').split('::');
+      appState.customCycles = (appState.customCycles || []).filter(
+        cy => !(cy.cropId === cropId && cy.groupKey === groupKey)
+      );
+      updateAndRender();
+      toast('Ciclo personalizado removido.');
+    };
+  });
+
   const btnToggleNewCrop = $('#btn-toggle-new-crop');
   if (btnToggleNewCrop) {
     btnToggleNewCrop.onclick = () => {
@@ -2189,7 +2721,9 @@ function bindScreenEvents() {
   const ncRole = $('#nc-role');
   if (ncRole) ncRole.onchange = e => (newCropFormState.role = e.target.value);
   const ncCycle = $('#nc-cycle');
-  if (ncCycle) ncCycle.oninput = e => (newCropFormState.cycleDays = Number(e.target.value) || 85);
+  if (ncCycle) ncCycle.oninput = e => (newCropFormState.cycleDays = Number(e.target.value) || 95);
+  const ncEarlyCycle = $('#nc-early-cycle');
+  if (ncEarlyCycle) ncEarlyCycle.oninput = e => (newCropFormState.earlyCycleDays = Number(e.target.value) || 80);
   const ncTolerance = $('#nc-tolerance');
   if (ncTolerance) ncTolerance.onchange = e => (newCropFormState.droughtTolerance = e.target.value);
   const ncStart = $('#nc-start');
@@ -2214,16 +2748,22 @@ function bindScreenEvents() {
       const cropId = `CUSTOM_${slug}_${Date.now().toString().slice(-4)}`;
 
       const roleMeta = getCustomCropRoleMeta(newCropFormState.role);
-      const cycleDays = Math.max(40, Math.min(160, Number(newCropFormState.cycleDays) || 85));
+      const cycleDays = Math.max(40, Math.min(160, Number(newCropFormState.cycleDays) || 95));
+      const earlyCycleDays = Math.max(40, Math.min(cycleDays, Number(newCropFormState.earlyCycleDays) || Math.max(40, cycleDays - 15)));
       const createdCrop = {
         crop_id: cropId,
         common_name: name,
         role: roleMeta.value,
         cycleDays,
+        earlyCycleDays,
+        cycles: [
+          { groupKey: 'GRUPO_I_PRECOCE', cycleName: 'Ciclo Precoce', cycleDays: earlyCycleDays },
+          { groupKey: 'GRUPO_II_MEDIO', cycleName: 'Ciclo Médio', cycleDays }
+        ],
         windowStartDate: newCropFormState.windowStartDate || '2027-01-15',
         windowEndDate: newCropFormState.windowEndDate || '2027-04-10',
         droughtTolerance: newCropFormState.droughtTolerance || 'MODERADA',
-        cultivarName: `Ciclo ${cycleDays}d`,
+        cultivarName: `Ciclo Médio (${cycleDays}d)`,
         summary: roleMeta.defaultSummary(name)
       };
 
@@ -2232,7 +2772,9 @@ function bindScreenEvents() {
       newCropFormState.commonName = '';
 
       updateAndRender();
-      toast(`Cultura "${createdCrop.common_name}" incluída no catálogo e na simulação!`);
+      toast(
+        `Cultura "${createdCrop.common_name}" incluída com Ciclo Precoce (${earlyCycleDays}d) e Ciclo Médio (${cycleDays}d)!`
+      );
     };
   }
 
@@ -2240,18 +2782,190 @@ function bindScreenEvents() {
     btn.onclick = () => {
       const targetId = btn.dataset.removeCrop;
       appState.customCrops = (appState.customCrops || []).filter(c => c.crop_id !== targetId);
+      appState.customCycles = (appState.customCycles || []).filter(cy => cy.cropId !== targetId);
       updateAndRender();
       toast('Cultura removida do catálogo.');
     };
   });
 
   // Step 3: Planning & New Planning Builder bindings
+  const runSystemSuggestionConsultation = async () => {
+    if (!newPlanningFormState.propertyId) {
+      newPlanningFormState.propertyId = appState.propertyProfile.id || DEFAULT_PROP.id;
+    }
+    newPlanningFormState.showSuggestions = true;
+    newPlanningFormState.loadingSuggestions = true;
+    newPlanningFormState.suggestionsResult = null;
+    renderActiveScreen();
+
+    const allProps = [DEFAULT_PROP, ...(appState.customProperties || [])];
+    const targetProp =
+      allProps.find(pr => pr.id === newPlanningFormState.propertyId) ||
+      appState.propertyProfile ||
+      DEFAULT_PROP;
+
+    // Wait brief visual interval + live NASA POWER if coordinates changed
+    const delayPromise = new Promise(resolve => setTimeout(resolve, 420));
+    if (targetProp && nasaLiveState.lastCoords !== `${targetProp.latitude}, ${targetProp.longitude}`) {
+      try {
+        const res = await fetchLiveNasaPower(targetProp.latitude, targetProp.longitude);
+        nasaLiveState = {
+          ...nasaLiveState,
+          loading: false,
+          isLive: res.isLive,
+          lastCoords: `${targetProp.latitude}, ${targetProp.longitude}`,
+          meanAnnualRainMm: res.meanAnnualRainMm,
+          meanGwetRoot: res.meanGwetRoot,
+          meanGwetTop: res.meanGwetTop,
+          totalDays: res.totalDays,
+          endpoint: res.endpoint
+        };
+      } catch {
+        // Fallback dataset remains active
+      }
+    }
+    await delayPromise;
+
+    if (!newPlanningFormState.showSuggestions) return;
+
+    try {
+      newPlanningFormState.suggestionsResult = generateSystemSuggestedPlannings({
+        propertyProfile: targetProp,
+        baseSowingDate: newPlanningFormState.baseSowingDate || '2026-11-01',
+        operationalIntervalDays: Number(newPlanningFormState.operationalIntervalDays) || 7,
+        delayDays: appState.planningConfig.delayDays ?? 0,
+        customCrops: appState.customCrops || [],
+        customCycles: appState.customCycles || []
+      });
+    } catch (err) {
+      console.error('Erro na consulta de sugestões:', err);
+    }
+    newPlanningFormState.loadingSuggestions = false;
+    renderActiveScreen();
+  };
+
+  const toggleSystemSuggest = () => {
+    if (newPlanningFormState.showSuggestions) {
+      newPlanningFormState.showSuggestions = false;
+      newPlanningFormState.loadingSuggestions = false;
+      renderActiveScreen();
+    } else {
+      runSystemSuggestionConsultation();
+    }
+  };
+
+  const btnToggleSystemSuggest = $('#btn-toggle-system-suggest');
+  if (btnToggleSystemSuggest) {
+    btnToggleSystemSuggest.onclick = toggleSystemSuggest;
+  }
+  const btnInlineSystemSuggest = $('#btn-inline-system-suggest');
+  if (btnInlineSystemSuggest) {
+    btnInlineSystemSuggest.onclick = toggleSystemSuggest;
+  }
+  $$('[data-close-system-suggest]').forEach(btn => {
+    btn.onclick = () => {
+      newPlanningFormState.showSuggestions = false;
+      newPlanningFormState.loadingSuggestions = false;
+      renderActiveScreen();
+    };
+  });
+
+  const sysSugProp = $('#sys-sug-prop');
+  if (sysSugProp) {
+    sysSugProp.onchange = e => {
+      newPlanningFormState.propertyId = e.target.value;
+      runSystemSuggestionConsultation();
+    };
+  }
+  const sysSugDate = $('#sys-sug-date');
+  if (sysSugDate) {
+    sysSugDate.onchange = e => {
+      if (e.target.value) {
+        newPlanningFormState.baseSowingDate = e.target.value;
+        runSystemSuggestionConsultation();
+      }
+    };
+  }
+  const sysSugInterval = $('#sys-sug-interval');
+  if (sysSugInterval) {
+    sysSugInterval.onchange = e => {
+      newPlanningFormState.operationalIntervalDays = Math.max(5, Math.min(30, Number(e.target.value) || 7));
+      runSystemSuggestionConsultation();
+    };
+  }
+
+  $$('[data-load-suggested-plan]').forEach(btn => {
+    btn.onclick = () => {
+      const idx = Number(btn.dataset.loadSuggestedPlan);
+      const suggestedData = newPlanningFormState.suggestionsResult;
+      const chosen = suggestedData?.suggestions?.[idx];
+      if (!chosen) return;
+
+      newPlanningFormState.planningName = chosen.planningName;
+      newPlanningFormState.stages = structuredClone(chosen.stageDefs);
+      newPlanningFormState.showSuggestions = false;
+      newPlanningFormState.open = true;
+      renderActiveScreen();
+      toast(`Carta "${chosen.title}" carregada no formulário para revisão/edição!`);
+    };
+  });
+
+  $$('[data-save-suggested-plan]').forEach(btn => {
+    btn.onclick = () => {
+      const idx = Number(btn.dataset.saveSuggestedPlan);
+      const allProps = [DEFAULT_PROP, ...(appState.customProperties || [])];
+      const targetProp =
+        allProps.find(pr => pr.id === newPlanningFormState.propertyId) ||
+        appState.propertyProfile ||
+        DEFAULT_PROP;
+      const suggestedData = newPlanningFormState.suggestionsResult;
+      const chosen = suggestedData?.suggestions?.[idx];
+      if (!chosen) return;
+
+      const createdPlan = syncLegacyPlanningFields({
+        ...defaultPlanningConfig(),
+        id: `plan-sys-${Date.now()}`,
+        planningName: chosen.planningName,
+        propertyId: targetProp.id,
+        isPreRegistered: false,
+        baseSowingDate: newPlanningFormState.baseSowingDate || '2026-11-01',
+        delayDays: appState.planningConfig.delayDays ?? 20,
+        operationalIntervalDays: Math.max(5, Math.min(30, Number(newPlanningFormState.operationalIntervalDays) || 7)),
+        successionStages: structuredClone(chosen.stageDefs),
+        preservedDecisions: structuredClone(appState.planningConfig.preservedDecisions)
+      });
+
+      const propChanged = appState.propertyProfile.id !== targetProp.id;
+      appState.customPlannings = [...(appState.customPlannings || []), createdPlan];
+      appState.planningConfig = structuredClone(createdPlan);
+      appState.propertyProfile = structuredClone(targetProp);
+      newPlanningFormState.showSuggestions = false;
+      newPlanningFormState.loadingSuggestions = false;
+      newPlanningFormState.open = false;
+
+      if (propChanged) {
+        persistState();
+        refreshLiveNasaForActiveProperty(true);
+      } else {
+        updateAndRender();
+      }
+      toast(`Carta escolhida "${createdPlan.planningName}" incluída e ativada na simulação!`);
+    };
+  });
+
   const btnToggleNewPlanning = $('#btn-toggle-new-planning');
   if (btnToggleNewPlanning) {
     btnToggleNewPlanning.onclick = () => {
       newPlanningFormState.open = !newPlanningFormState.open;
       if (newPlanningFormState.open) {
         newPlanningFormState.propertyId = appState.propertyProfile.id || DEFAULT_PROP.id;
+        newPlanningFormState.planningName = '';
+        newPlanningFormState.stages = createBlankPlanningStages();
+        newPlanningFormState.showSuggestions = false;
+        newPlanningFormState.loadingSuggestions = false;
+      } else {
+        newPlanningFormState.showSuggestions = false;
+        newPlanningFormState.loadingSuggestions = false;
       }
       renderActiveScreen();
     };
@@ -2263,7 +2977,11 @@ function bindScreenEvents() {
   if (nplanProp) {
     nplanProp.onchange = e => {
       newPlanningFormState.propertyId = e.target.value;
-      renderActiveScreen();
+      if (newPlanningFormState.showSuggestions) {
+        runSystemSuggestionConsultation();
+      } else {
+        renderActiveScreen();
+      }
     };
   }
   const nplanBaseDate = $('#nplan-base-date');
@@ -2314,13 +3032,12 @@ function bindScreenEvents() {
   const btnAddStage = $('#btn-nplan-add-stage');
   if (btnAddStage) {
     btnAddStage.onclick = () => {
-      const nextIdx = newPlanningFormState.stages.length;
-      const isEven = nextIdx % 2 === 0;
-      newPlanningFormState.stages.push(
-        isEven
-          ? { cropId: 'SOJA', groupKey: 'GRUPO_II_MEDIO', cultivarName: 'Ciclo Médio (115d)' }
-          : { cropId: 'MILHO_2_SAFRA', groupKey: 'GRUPO_II_MEDIO', cultivarName: 'Ciclo Médio (110d)' }
-      );
+      newPlanningFormState.stages.push({
+        cropId: '',
+        groupKey: '',
+        cultivarName: '',
+        plannedSowDate: null
+      });
       renderActiveScreen();
     };
   }
@@ -2329,16 +3046,12 @@ function bindScreenEvents() {
     sel.onchange = e => {
       const idx = Number(sel.dataset.nplanStageCrop);
       const newCropId = e.target.value;
-      const avail = getAvailableCropsList();
-      const foundCrop = avail.find(c => c.cropId === newCropId) || avail[0];
-      const firstGroup = foundCrop.groups[0] || {
-        groupKey: 'GRUPO_UNICO',
-        cultivarName: 'Ciclo Padrão'
-      };
+      const currentStage = newPlanningFormState.stages[idx] || {};
       newPlanningFormState.stages[idx] = {
+        ...currentStage,
         cropId: newCropId,
-        groupKey: firstGroup.groupKey,
-        cultivarName: firstGroup.cultivarName
+        groupKey: '',
+        cultivarName: ''
       };
       renderActiveScreen();
     };
@@ -2348,7 +3061,16 @@ function bindScreenEvents() {
     sel.onchange = e => {
       const idx = Number(sel.dataset.nplanStageGroup);
       const newGroupKey = e.target.value;
-      const currentStage = newPlanningFormState.stages[idx];
+      const currentStage = newPlanningFormState.stages[idx] || {};
+      if (!newGroupKey || !currentStage.cropId) {
+        newPlanningFormState.stages[idx] = {
+          ...currentStage,
+          groupKey: '',
+          cultivarName: ''
+        };
+        renderActiveScreen();
+        return;
+      }
       const avail = getAvailableCropsList();
       const foundCrop = avail.find(c => c.cropId === currentStage.cropId) || avail[0];
       const foundGroup = foundCrop.groups.find(g => g.groupKey === newGroupKey) || foundCrop.groups[0];
@@ -2402,6 +3124,14 @@ function bindScreenEvents() {
   const btnSaveNewPlanning = $('#btn-save-new-planning');
   if (btnSaveNewPlanning) {
     btnSaveNewPlanning.onclick = () => {
+      const incompleteIdx = newPlanningFormState.stages.findIndex(st => !st.cropId || !st.groupKey);
+      if (incompleteIdx !== -1) {
+        toast(
+          `Selecione a Cultura e o Ciclo da ${incompleteIdx + 1}ª etapa antes de salvar (ou use "✨ Sugerir Planejamento").`
+        );
+        return;
+      }
+
       const allProps = [DEFAULT_PROP, ...(appState.customProperties || [])];
       const targetProp =
         allProps.find(pr => pr.id === newPlanningFormState.propertyId) || appState.propertyProfile || DEFAULT_PROP;
@@ -2431,6 +3161,7 @@ function bindScreenEvents() {
       appState.propertyProfile = structuredClone(targetProp);
       newPlanningFormState.open = false;
       newPlanningFormState.planningName = '';
+      newPlanningFormState.stages = createBlankPlanningStages();
 
       if (propChanged) {
         persistState();
@@ -2622,6 +3353,7 @@ function bindScreenEvents() {
         ...appState,
         ...saved,
         version: 7,
+        customCycles: saved.customCycles || [],
         customPlannings: saved.customPlannings || [],
         planningConfig: syncLegacyPlanningFields({
           ...defaultPlanningConfig(),

@@ -1,172 +1,101 @@
-# Rota Adaptada
+# Rota Adaptada — Documentação do Plano e Proposta de Solução
 
 Proposta de software para o desafio *Field Shift: Adapting Farms with NASA Data* (NASA Space Apps Challenge 2026).
 
-**Objetivo:** ajudar produtores e técnicos a comparar pequenas mudanças no planejamento de cultivos diante de atrasos operacionais ou climáticos, usando dados da NASA, características locais do solo e restrições reais da propriedade.
+**Objetivo:** ajudar produtores e técnicos a planejar safras e comparar pequenas mudanças na cadeia de sucessões diante de atrasos operacionais ou climáticos, utilizando exclusivamente **dados agroclimáticos da NASA POWER (2013–2024)** e **APIs abertas de solo e geolocalização (ISRIC SoilGrids + OpenStreetMap Nominatim)** cruzados com as culturas e ciclos disponíveis na propriedade.
 
 ---
 
-## 1. Recorte do projeto e referências regionais atualizadas
+## 1. Escopo Enxuto e Foco Estrito nos Dados da NASA e APIs de Terceiros
 
-O piloto atende o perfil pré-cadastrado de uma **propriedade produtora de grãos de sequeiro em Vilhena/RO** (Chapada dos Parecis, Macrorregião Sojícola 4, altitude média de $600\text{ m}$).
+Para provar o ponto de solução com máxima clareza e sem ruído técnico fora do escopo do desafio, todas as informações regulatórias, burocráticas ou laboratoriais que não são alimentadas pela NASA ou pelas APIs integradas foram removidas. O sistema opera estritamente sobre **três pilares de dados verificáveis**:
 
-O ponto de partida é um planejamento de dois anos baseado na sucessão soja e milho, avaliando possibilidades de ajuste de ciclo, diversificação comercial e cobertura do solo quando ocorre um atraso na semeadura da primeira safra.
+1. **Dados Agroclimáticos Diários da NASA POWER API (`2013–2024` — 12 safras históricas):**
+   - `PRECTOTCORR` / `IMERG_PRECTOT`: Precipitação diária corrigida por satélite ($\text{mm/dia}$) para cálculo de chuva acumulada por fase fenológica e detecção de veranicos (dias secos consecutivos).
+   - `GWETTOP`: Umidade superficial do solo de $0\text{ a }5\text{ cm}$ (fração $0,0\text{ a }1,0$) para avaliar condições de germinação e emergência na **Fase 1 (Estabelecimento)**.
+   - `GWETROOT`: Umidade na zona radicular (fração $0,0\text{ a }1,0$) para diagnosticar déficit hídrico durante a **Fase 3 (Floração e Enchimento de Grãos)**.
+   - `T2M_MAX` e `T2M_MIN`: Temperaturas máxima e mínima diárias a $2\text{ m}$ ($^\circ\text{C}$) para identificar picos de calor e estresse térmico noturno.
+   - `Altitude (m)`: Extraída da geometria do ponto consultado na NASA POWER.
 
-### Referências oficiais consolidadas no protótipo (Safra 2026/2027)
+2. **Dados de Solo e Localização via APIs de Terceiros (`ISRIC SoilGrids v2.0` + `OpenStreetMap Nominatim` + `Web Geolocation GPS`):**
+   - **ISRIC SoilGrids v2.0 REST API:** Consulta os teores médios estimados de argila (`clay`) e areia (`sand`) na camada de $0\text{ a }60\text{ cm}$ para sugerir automaticamente a classe de retenção de água do solo:
+     - **Solo de Textura Média (`AD3_MEDIA` — reserva útil de $48\text{ mm}$):** Maior sensibilidade a veranicos; fechamento mais cedo da janela segura de 2ª safra.
+     - **Solo Argiloso (`AD4_ARGILOSA` — reserva útil de $62\text{ mm}$):** Equilíbrio entre drenagem e retenção hídrica (perfil pré-cadastrado de referência em Vilhena/RO).
+     - **Solo Muito Argiloso (`AD5_MUITO_ARGILOSA` — reserva útil de $78\text{ mm}$):** Maior amortecimento hídrico na transição para a estação seca.
+   - **OpenStreetMap Nominatim API:** Geocodificação reversa das coordenadas (`latitude`/`longitude`) para preenchimento automático de **Município** e **UF**.
 
-A Embrapa Rondônia possui referências sobre produção de soja e alternativas de sucessão, incluindo milho, sorgo e milheto ([Publicação regional da Embrapa](https://www.infoteca.cnptia.embrapa.br/infoteca/handle/doc/983788)). Para garantir validade agronômica e regulatória na propriedade pré-cadastrada de Vilhena/RO, os ciclos, cultivares, perfis de solo e calendários seguem as seguintes fontes oficiais:
-
-- **Soja (Safra 2026/2027):** [Portaria SPA/MAPA nº 207, de 30/06/2026](https://www.gov.br/agricultura/pt-br/assuntos/riscos-seguro/programa-nacional-de-zoneamento-agricola-de-risco-climatico/portarias/safra-vigente/rondonia/PORTN207SOJARO.pdf) — janela de menor risco ($20\%$) em Vilhena de 01/10 a 10/01 (Decêndios 28 a 1), com cultivares homologadas de Grupo I ($GMR < 7,9$, ciclo de $100\text{ a }110\text{ dias}$, ex.: BRS 7582, BRS 1075IPRO) e Grupo II ($7,9 \le GMR \le 8,5$, ciclo de $115\text{ a }125\text{ dias}$, ex.: BRS 8481, BRSMT Pintado).
-- **Milho 2ª Safra Solteiro e Consorciado (Safra 2026/2027):** Portaria SPA/MAPA nº 331, de 28/07/2026, e [Portaria SPA/MAPA nº 346, de 28/07/2026](https://www.gov.br/agricultura/pt-br/assuntos/riscos-seguro/programa-nacional-de-zoneamento-agricola-de-risco-climatico/portarias/safra-vigente/rondonia/PO46791.PDF) — janela de menor risco ($20\%$) de 01/01 a 20/03 (Decêndios 1 a 8), Grupo I precoce ($\le 110\text{ dias}$, ex.: BRS 1055, 2A401PW, 3040VIP3).
-- **Sorgo Granífero (Safra 2026/2027):** [Portaria SPA/MAPA nº 285, de 20/07/2026](https://www.gov.br/agricultura/pt-br/assuntos/riscos-seguro/programa-nacional-de-zoneamento-agricola-de-risco-climatico/portarias/safra-vigente/rondonia/PORTN285SORGOGRANIFERORO.pdf) — janela de menor risco ($20\%$) estendida até 31/03 (Decêndios 1 a 9), Grupo I precoce ($\le 110\text{ dias}$, ex.: BRS 373, 84G02, BM 750) e menor exigência hídrica no florescimento ($\text{ISNA} \ge 0,45$).
-- **Milheto (Cobertura e Ciclagem):** Embrapa Milho e Sorgo (Comunicado Técnico 94/2022) e Embrapa Rondônia (Circular Técnica 54) — manejo para cobertura do solo com dessecação/rolagem no pleno florescimento aos $50\text{ a }60\text{ dias}$ (cultivares BRS 1501, BRS 1502 e ADR 300), reciclando nutrientes ($\text{K}$ e $\text{N}$) e suprimindo nematoides (*Meloidogyne* spp. e *Pratylenchus brachyurus*).
-- **Travas Fitossanitárias e Legais (2026/2027):** Portaria SDA/MAPA nº 1.579, de 09/04/2026, e [Orientação Oficial da Idaron/RO](https://rondonia.ro.gov.br/inicio-do-vazio-sanitario-da-soja-comeca-nesta-quarta-feira-10-em-rondonia/) — vazio sanitário da soja de 10/06 a 10/09 e janela legal de semeadura de 11/09 a 09/01.
-
-### Catálogo inicial proposto
-
-| Cultura | Papel no protótipo |
-|---|---|
-| **Soja** | Cultura comercial principal do planejamento inicial (Leguminosa – fixação biológica de $\text{N}$). |
-| **Milho** | Cultura comercial de sucessão, distinguindo primeira e segunda safra (Gramínea $\text{C}_4$). |
-| **Sorgo granífero** | Alternativa comercial candidata para janelas tardias de março, condicionada à aptidão e às restrições locais. |
-| **Milheto** | Alternativa candidata para cobertura do solo, formação rápida de palhada e proteção contra erosão no fechamento das chuvas. |
+3. **Catálogo Dinâmico de Culturas e Ciclos (Pré-Cadastrados + Cadastrados pelo Usuário):**
+   - Cada cultura possui ciclos fenológicos em dias (automaticamente fatiados nas 4 fases da planta: **F1 Emergência**, **F2 Crescimento Vegetativo**, **F3 Floração/Enchimento** e **F4 Maturação/Colheita**), janelas recomendadas de plantio ajustadas pela classe de solo e limites de tolerância climática testados contra a série da NASA.
 
 ---
 
-## 2. Problema central e diferencial
+## 2. Catálogo de Culturas, Finalidades sem Restrição de Safra e Cadastro de Ciclos
 
-A pergunta principal do software é:
+O sistema parte de 4 culturas pré-cadastradas de referência para Vilhena/RO e permite que o usuário expanda livremente tanto as **culturas** quanto os **ciclos de duração**:
 
-> **“Se minha primeira cultura atrasar, qual é a menor mudança que posso fazer no restante do plano?”**
-
-O agricultor revisa seu planejamento pré-cadastrado em Vilhena/RO e define quais decisões precisa manter. O sistema compara alternativas considerando o calendário resultante, o comportamento ano a ano na série histórica da NASA e as regras agronômicas e legais da região.
-
-O diferencial reúne quatro pilares:
-
-- **Dependência entre cultivos (Efeito Dominó):** o atraso na semeadura ou colheita de uma cultura desloca e limita o início da próxima etapa.
-- **Mudança limitada:** o agricultor pode preservar sua próxima cultura comercial (ajustando apenas o grupo de maturação/ciclo) ou permitir alterar apenas uma etapa crítica.
-- **"Teste de Estresse" contra Anos Históricos Reais (2013–2024):** em vez de resumir o clima em médias abstratas, cada alternativa mostra como o calendário teria se comportado ano a ano (ex.: *"9 anos sem alertas; 3 anos com estresse severo"*) e permite inspecionar em qual fase fenológica o evento crítico ocorreu.
-- **Compromissos explícitos e proteção do solo:** trocar uma cultura comercial fora de janela por uma cultura de cobertura aparece de forma transparente como mudança de finalidade produtiva em troca de proteção do solo (redução de dias de solo exposto) e redução de risco financeiro.
-
-Essa é a diferenciação proposta frente às referências analisadas, sem alegação de ineditismo mundial.
-
----
-
-## 3. Exemplo de utilização
-
-Um produtor com propriedade pré-cadastrada em Vilhena/RO pretende manter a soja de verão, mas deseja avaliar o efeito de um atraso no plantio (ex.: $+15\text{ a }+25\text{ dias}$) sobre a sequência seguinte.
-
-O aplicativo compara quatro caminhos:
-
-| Opção | Pergunta respondida |
-|---|---|
-| **Plano atual** | Quais alertas de chuva, temperatura, umidade do solo e janela ZARC aparecem se a sequência original for mantida apesar do atraso? |
-| **Ajuste de calendário / ciclo** | Há uma mudança de ciclo (ex.: troca para cultivar precoce Grupo I) compatível com as janelas e restrições? |
-| **Alternativa comercial (Sorgo)** | Outra espécie comercial do catálogo apresenta janela ZARC mais ampla (até 31/03) e menor exposição ao estresse hídrico histórico? |
-| **Alternativa de cobertura (Milheto)** | Faz sentido substituir uma safrinha comercial de alto risco por uma etapa rápida ($58\text{ dias}$) destinada à cobertura viva e palhada, considerando o compromisso produtivo envolvido? |
-
-As opções só aparecem quando passam pelas travas legais e sanitárias cadastradas. O resultado também pode ser: **“Não encontramos alternativa melhor dentro das restrições informadas.”**
-
----
-
-## 4. Funcionalidades principais e hierarquia visual (4 Telas)
-
-Para manter a experiência convidativa, clara e focada na decisão do produtor, a interface organiza o fluxo em quatro telas com separação estrita entre **informações essenciais (visíveis de imediato)** e **detalhes técnicos opcionais (recolhidos sob demanda)**:
-
-| Tela | Essencial (Visível na superfície) | Opcional / Técnico (Sob demanda) |
-|---|---|---|
-| **1. Propriedade** | Exibe pré-cadastrada **somente a propriedade padrão de Vilhena/RO** (`Sequeiro · 240 ha`) e **somente a sua classe de solo** (`Solo Argiloso — Classe AD4 · 55 mm`), consultando **ao vivo a NASA POWER API** sempre que utilizada. Inclui o botão **`+ Incluir Nova Propriedade (Lat/Lon)`**, que consulta automaticamente a **NASA POWER API** e a API aberta **ISRIC SoilGrids (licença CC-BY 4.0)** para exibir uma **sugestão de classe de solo estimada** a partir da latitude e longitude informadas. | Laudo físico-químico detalhado da amostra de solo e regras legais detalhadas da Idaron/MAPA. |
-| **2. Planejamento** | Controle deslizante de atraso na semeadura da soja ($0\text{ a }+80\text{ dias}$), visualização imediata do **Efeito Dominó** na 2ª safra e seleção das decisões que o produtor deseja preservar. | Ajuste fino da data base original, intervalo operacional de máquinas (dias) e configuração manual do Ano 2. |
-| **3. Comparação** | Plano atual e até três alternativas lado a lado com o resumo da mudança, status na janela oficial, placar do **Teste de Estresse ano a ano (2013–2024)** com anos clicáveis, proteção do solo e compromisso prático. | Cronograma completo das 4 safras do biênio (2026–2028), cultivares utilizadas e detalhes de famílias botânicas. |
-| **4. Explicação e Resumo** | Seleção do ano histórico (2013–2024), diagnóstico visual das **4 fases da cultura** (Chuva, Umidade do Solo e Temperatura em linguagem direta), resumo da recomendação em 3 pontos e botão para o **Resumo Imprimível**. | Variáveis brutas da NASA (`IMERG_PRECTOT`, `GWETTOP`, `GWETROOT`, `T2M_MAX`, `T2M_MIN`), lista de lacunas pendentes e links das fontes oficiais. |
-
-O cenário de atraso é informado pelo usuário. Ele representa uma hipótese operacional ou climática de planejamento, sem ser apresentado como previsão meteorológica da NASA.
-
----
-
-## 5. Dados da NASA
-
-O núcleo de observação da Terra utiliza dados diários acessados via **NASA POWER API** (*Agroclimatology Community*), combinando precipitação por satélite, temperaturas de reanálise e umidade do solo na mesma requisição estruturada:
-
-| Fonte / Produto | Parâmetro NASA POWER | Informação | Uso no software |
+### 2.1. Culturas Pré-Cadastradas
+| Cultura | Finalidade no Planejamento | Ciclos Pré-Cadastrados | Janela Recomendada Base |
 |---|---|---|---|
-| **GPM IMERG** | `IMERG_PRECTOT` | Precipitação diária ($\text{mm/dia}$). | Calcular acumulados por fase fenológica e identificar veranicos (dias secos consecutivos) em fases críticas. |
-| **MERRA-2** | `T2M_MAX` e `T2M_MIN` | Temperaturas máxima e mínima diárias a $2\text{ m}$ ($^\circ\text{C}$). | Identificar exposição a estresse térmico no florescimento (ex.: máximas $> 38\text{ a }40\text{ }^\circ\text{C}$ ou noites quentes $> 24\text{ }^\circ\text{C}$ no milho). |
-| **MERRA-2 Land Surface** | `GWETTOP` | Umidade superficial do solo de $0\text{ a }5\text{ cm}$ (fração $0,0\text{ a }1,0$). | Exibir alertas de déficit de umidade para germinação e emergência na **Fase I (Estabelecimento)**. |
-| **MERRA-2 Land Surface** | `GWETROOT` | Umidade na zona radicular (fração $0,0\text{ a }1,0$). | Exibir alertas de déficit de umidade radicular durante a **Fase III (Floração e Enchimento de Grãos)**. |
+| **Soja** | Safra Principal (1ª Safra / Verão) | Ciclo Precoce ($105\text{d}$) · Ciclo Médio ($115\text{d}$) | 01/10 a 10/01 |
+| **Milho 2ª Safra** | 2ª Safra Comercial (Sucessão) | Ciclo Precoce ($100\text{d}$) · Ciclo Médio ($110\text{d}$) | 01/01 a 20/03 |
+| **Sorgo Granífero** | Alternativa Comercial (Maior Tolerância à Seca) | Ciclo Precoce ($95\text{d}$) · Ciclo Médio ($108\text{d}$) | 01/01 a 31/03 |
+| **Milheto** | Cobertura do Solo / Formação de Palhada | Ciclo Rápido ($58\text{d}$) · Ciclo Médio ($75\text{d}$) | 01/01 a 30/04 |
 
-**Transparência espacial:** O NASA POWER documenta o produto IMERG diário em UTC, em grade de aproximadamente $10\text{ km}$ ($0,1^\circ \times 0,1^\circ$), enquanto as temperaturas e a umidade do solo derivam da reanálise MERRA-2 em resolução regional ($\approx 50\text{ km}$). O aplicativo apresenta as coordenadas consultadas ($-12,7405^\circ$, $-60,1458^\circ$) e as respectivas resoluções, sem atribuir precisão de talhão aos resultados. [Documentação das fontes do NASA POWER](https://power.larc.nasa.gov/docs/methodology/data/sources_meteorology/).
+### 2.2. Cadastro de Nova Cultura sem Restrição à 2ª Safra
+Como o produtor pode cadastrar novas propriedades e desenhar sucessões variadas, o campo **Papel / Finalidade no Planejamento e Sucessão** não restringe a cultura à 2ª safra, oferecendo **4 finalidades**:
+1. **`SAFRA_PRINCIPAL` (`1ª Safra / Safra Principal · Cultura Base de Abertura`)**: Permite iniciar o planejamento ou substituir a cultura principal por uma versão de ciclo mais curto diante de atraso.
+2. **`ALTERNATIVA_COMERCIAL` (`2ª Safra / Sucessão Comercial · Produção de Grãos ou Fibra`)**: Entra na sucessão comercial pós-colheita da 1ª safra.
+3. **`ROTACAO_CULTURAS` (`Rotação / Diversificação · Qualquer Etapa da Sucessão`)**: Permite alternar espécies na 1ª safra do Ano 2 ou nas sucessões para quebrar ciclos de estresse.
+4. **`COBERTURA_SOLO` (`Cobertura do Solo / Palhada · Proteção e Conservação Hídrica`)**: Foca na proteção física do solo e conservação da umidade (`GWETTOP`/`GWETROOT`) na transição para a seca.
 
-**Recorte histórico:** séries diárias completas de **2013 a 2024** ($12\text{ anos}$) para a área agrícola de Vilhena, armazenadas localmente junto ao demonstrador com registro de origem, período e parâmetros de consulta.
+Ao cadastrar uma nova cultura, o usuário já define a **Duração do Ciclo Médio (dias)** e a **Duração do Ciclo Precoce (dias)**, registrando automaticamente ambas as opções de ciclo para uso no planejamento e no ajuste de ciclo.
+
+### 2.3. Cadastro Independente de Novos Ciclos (`+ Cadastrar Novo Ciclo`)
+Disponível tanto na tela de **Culturas (Passo 2)** quanto na tela de **Planejamento (Passo 3)** (inclusive dentro de cada etapa da sucessão via botão **`+ Cadastrar Ciclo`**):
+- O usuário escolhe qualquer cultura disponível, informa o **Nome / Tipo do Ciclo** (ex.: *Ciclo Superprecoce*, *Ciclo Tardio*) e a **Duração Total em Dias** ($40\text{ a }180\text{ dias}$).
+- O motor divide automaticamente a duração informada nas 4 fases fenológicas ($\text{F1: }14\%$, $\text{F2: }31\%$, $\text{F3: }35\%$, $\text{F4: }20\%$) e disponibiliza o ciclo imediatamente nos seletores do planejamento e nas simulações da NASA POWER.
 
 ---
 
-## 6. Informações locais e calendário agrícola de Vilhena/RO
+## 3. Arquitetura do Planejamento e Sugestão Inteligente do Sistema (Baralho de 3 Cartas)
 
-A adaptação na propriedade pré-cadastrada de Vilhena/RO combina os dados orbitais da NASA com três conjuntos de regras locais:
+Na tela **3. Planejamento**, o usuário conta com:
 
-| Referência | Aplicação no sistema |
+1. **Planejamentos Disponíveis (Pré-Cadastrado + Cadastrados pelo Usuário):**
+   - Cada card de planejamento exibe a **propriedade vinculada**, o **perfil de solo**, a **data inicial do 1º plantio**, o **intervalo operacional** e o fluxo visual completo da **ordem das culturas, ciclos e sucessões** (`1ª Safra Inicial ➔ 1ª Sucessão ➔ 2ª Sucessão ➔ 3ª Sucessão...`).
+
+2. **Inclusão de Novo Planejamento (`+ Incluir Novo Planejamento`) com Campos Iniciais em Branco:**
+   - Permite escolher qualquer propriedade disponível (pré-cadastrada ou cadastrada pelo usuário), definir a data inicial e o intervalo operacional entre safras, e montar passo a passo a **ordem cronológica das sucessões** (com botões para adicionar etapas, remover etapas ou reordenar com `↑ Subir` e `↓ Descer`).
+   - Ao clicar em **`+ Incluir Novo Planejamento`** (ou em **`+ Adicionar Etapa na Sucessão`**), os campos de **Cultura** e **Ciclo na Etapa** vêm **em branco**, evitando preenchimentos automáticos indesejados até que o usuário escolha cada etapa ou acione a sugestão do sistema.
+
+3. **Sugestão de Planejamento pelo Sistema (`✨ Sugerir Planejamento (NASA + APIs)`):**
+   - Localizado exclusivamente dentro do painel **Incluir Novo Planejamento**.
+   - **Elemento de Loading Animado:** Ao clicar no botão, exibe um indicador visual de carregamento informando a consulta e o cruzamento entre a série histórica **NASA POWER (2013–2024)**, a classe de solo **ISRIC SoilGrids** da propriedade selecionada e todas as combinações de culturas e ciclos disponíveis.
+   - **Exibição em 3 Cartas de Baralho (`♠ CARTA 01`, `♦ CARTA 02`, `♣ CARTA 03`) + Botão de Cancelar/Sair:**
+     - **`♠ CARTA 01` — Opção 1 · Segurança Comercial (NASA + Solo):** Seleciona a combinação de safra principal e sucessão comercial com maior número de anos sem falha severa nos 12 anos da NASA POWER e melhor encaixe na janela hídrica do solo da propriedade.
+     - **`♦ CARTA 02` — Opção 2 · Rotação Diversificada:** Prioriza a diversidade de culturas na sequência do biênio (incluindo culturas e ciclos cadastrados pelo usuário) e equilíbrio hídrico.
+     - **`♣ CARTA 03` — Opção 3 · Blindagem e Cobertura do Solo:** Maximiza os dias de solo coberto no biênio e reduz a exigência de água na zona radicular (`GWETROOT`) no fechamento das chuvas.
+   - Em cada carta, o usuário pode clicar em **`🃏 Escolher CARTA 0X (Incluir e Ativar) →`**, **`↳ Carregar no Formulário (Editar Antes)`** ou fechar a qualquer momento pelo botão **`✕ Cancelar / Sair`**.
+
+---
+
+## 4. Fluxo de 5 Telas da Aplicação (`rota-adaptada-novo/src/main.js`)
+
+| Passo / Tela | Foco Principal e Funcionalidades |
 |---|---|
-| **Embrapa Rondônia e Embrapa Milho e Sorgo** | Ciclos fenológicos divididos em 4 fases ($\text{F1}$ a $\text{F4}$), funções agronômicas de saúde do solo, compatibilidade entre culturas e manejo de cobertura com milheto. |
-| **ZARC do MAPA (Safra 2026/2027)** | Janelas decendiais (Decêndios 1 a 36) em Vilhena por cultura, grupo de maturação e classe de Água Disponível do solo ($\text{AD3}$, $\text{AD4}$ e $\text{AD5}$). [Orientação oficial sobre o ZARC](https://www.gov.br/agricultura/pt-br/assuntos/noticias/2026/novo-painel-do-zarc-moderniza-consulta-as-janelas-de-plantio-e-reforca-gestao-de-riscos-na-agricultura). |
-| **Idaron/RO e SDA/MAPA (2026)** | Travas obrigatórias de vazio sanitário da soja (10/06 a 10/09) e limite legal de semeadura (11/09 a 09/01). [Orientação da Idaron](https://rondonia.ro.gov.br/inicio-do-vazio-sanitario-da-soja-comeca-nesta-quarta-feira-10-em-rondonia/). |
+| **1. Propriedade** | Propriedade pré-cadastrada de Vilhena/RO com consulta ao vivo à **NASA POWER API**; botão **`+ Incluir Nova Propriedade (Lat/Lon)`** que consulta automaticamente **NASA POWER**, **ISRIC SoilGrids v2.0** (sugestão de classe de solo `AD3`/`AD4`/`AD5` a partir de `% argila` e `% areia`) e **OpenStreetMap Nominatim** (Município/UF). |
+| **2. Culturas** | Catálogo enxuto de culturas e ciclos utilizados pela simulação; **`+ Cadastrar Nova Cultura`** (com 4 finalidades de sucessão e cadastro duplo de Ciclo Médio e Ciclo Precoce) e **`+ Cadastrar Novo Ciclo`** (em dias) para qualquer cultura. |
+| **3. Planejamento** | Seleção entre o planejamento pré-cadastrado e os planejamentos do usuário; **`+ Cadastrar Novo Ciclo`**; **`+ Incluir Novo Planejamento`** (iniciando com campos de cultura e ciclo em branco, reordenação de sucessões e botão interno **`✨ Sugerir Planejamento (NASA + APIs)`** com loading e 3 cartas de baralho); e **Simulador de Atraso (`0` a `+45 dias`)** com visualização do **Efeito Dominó**. |
+| **4. Comparação** | **Preferências do Produtor** integradas no topo da tela (filtros de ajuste de ciclo, troca comercial e transição para cobertura); comparação lado a lado entre o **Plano Atual (com atraso)** e as **Alternativas de Adaptação**, exibindo o placar nos **12 anos da NASA POWER (`2013–2024`)**, janela recomendada, dias de solo protegido e anos clicáveis. |
+| **5. Explicação e Resumo** | Inspeção ano a ano (`2013–2024`) das **4 fases da planta (`F1` a `F4`)** com base em Chuva (`PRECTOTCORR`), Umidade Superficial (`GWETTOP`), Umidade Radicular (`GWETROOT`) e Temperatura (`T2M_MAX`/`T2M_MIN`), síntese da decisão e geração do **Relatório Imprimível (PDF / A4)**. |
 
 ---
 
-## 7. Como comparar as alternativas e executar o "Teste de Estresse"
+## 5. Como o Motor Determinístico Executa o Teste Histórico (2013–2024)
 
-O motor determinístico executa a comparação em duas etapas:
-
-1. **Verificação de Restrições Operacionais, Legais e ZARC:** Ao aplicar o atraso na primeira cultura, o sistema propaga as novas datas de colheita e plantio ao longo dos dois anos, bloqueia imediatamente qualquer sequência que invada o vazio sanitário da Idaron e classifica cada semeadura nos decêndios de risco do ZARC ($20\%$, $30\%$, $40\%$ ou fora de janela) conforme o solo da propriedade.
-2. **"Teste de Estresse" contra Anos Históricos Reais (2013–2024):** Em vez de calcular médias climáticas genéricas que escondem extremos, o motor testa o calendário resultante contra cada um dos **12 anos históricos reais** da série da NASA.
-   - Os resultados aparecem em linguagem direta para o produtor: por exemplo, ***"Em 12 anos históricos (2013–2024): 9 anos sem alertas críticos; 3 anos com estresse severo na Fase III"***.
-   - **Inspeção de Anos Críticos por Fase Fenológica:** O usuário pode clicar sobre qualquer ano com alerta (ex.: 2015, 2019 ou 2023) para visualizar exatamente em qual fase sensível da cultura (`Fase 1: Emergência`, `Fase 2: Crescimento`, `Fase 3: Floração e Grãos` ou `Fase 4: Maturação`) ocorreu a redução de chuva, a queda na umidade do solo ou o pico de temperatura.
-
-Os indicadores comparativos permanecem transparentes e separados:
-
-- Quantidade de etapas e datas alteradas em relação ao plano original do produtor.
-- Desempenho no Teste de Estresse ano a ano (2013–2024) e fases fenológicas afetadas.
-- Enquadramento na janela oficial do ZARC (proteção ao crédito e seguro rural).
-- Diversidade de espécies/famílias botânicas e alerta de **sucessão recorrente** (quando a sequência Soja $\rightarrow$ Milho se repete nos dois anos sem rotação efetiva).
-- Contador de **dias de solo protegido** por cobertura viva/palhada versus dias de solo exposto entre safras.
-
-Os indicadores históricos são exploratórios e voltados à comparação de resiliência entre calendários. Não representam previsão de safra futura, produtividade garantida ou substituição de recomendação agronômica presencial.
-
----
-
-## 8. MVP viável para a equipe pequena
-
-O escopo fechado para desenvolvimento ágil compreende:
-
-- Uma propriedade pré-cadastrada em Vilhena/RO (`Fazenda Chapada dos Parecis`, sequeiro).
-- Catálogo validado com quatro espécies (Soja, Milho 1ª/2ª safra, Sorgo Granífero e Milheto) e cultivares reais homologadas em Rondônia.
-- Comparação simultânea entre o plano atual (com atraso) e até três estratégias alternativas no horizonte de dois anos.
-- Série histórica diária real da NASA (2013–2024) contendo precipitação (`IMERG_PRECTOT`), temperaturas (`T2M_MAX`, `T2M_MIN`) e umidade do solo (`GWETROOT`, `GWETTOP`).
-- Teste de Estresse ano a ano com clique nos anos críticos para inspeção por fase fenológica.
-- Quatro telas interativas enxutas e resumo técnico imprimível (capaz de rodar $100\%$ offline no navegador após o carregamento inicial).
-
----
-
-## 9. Execução em aproximadamente 48 horas
-
-| Período | Entrega |
-|---|---|
-| **0–8 horas** | Consolidar as referências ZARC/Embrapa/Idaron 2026/2027 para a propriedade pré-cadastrada de Vilhena/RO e o arquivo histórico local do NASA POWER (2013–2024) incluindo `GWETROOT` e `GWETTOP`. |
-| **8–24 horas** | Implementar o motor determinístico de efeito dominó no calendário, validação decendial/sanitária e o algoritmo do Teste de Estresse ano a ano por fase fenológica. |
-| **24–36 horas** | Construir as quatro telas focadas (com o perfil de Vilhena pré-cadastrado, simulação de atraso, clique em anos críticos e resumo imprimível). |
-| **36–48 horas** | Conferir cálculos contra as regras documentadas, testar cenários de atraso extremo e preparar a demonstração final. |
-
-Se for necessário reduzir escopo durante o evento, a entrega mantém a comparação completa entre o plano atual atrasado e uma alternativa comercial/cobertura com inspeção detalhada dos anos críticos.
-
----
-
-## 10. Demonstração para os avaliadores
-
-A equipe abre a aplicação com a propriedade do produtor de Vilhena/RO já pré-cadastrada e seu planejamento original de dois anos (Soja seguida de Milho 2ª safra). Em seguida, introduz um atraso hipotético na semeadura da soja, preservando a decisão do produtor de colher a cultura principal.
-
-A aplicação demonstra visualmente:
-1. O **efeito dominó** empurrando o milho safrinha para o final de março, fora da janela de baixo risco do ZARC.
-2. O **Teste de Estresse ano a ano (2013–2024)** revelando quantos anos históricos sofreram déficit de chuva e de umidade radicular exatamente na Fase III (florescimento) do milho atrasado — permitindo clicar em um ano crítico para inspecionar o evento.
-3. Como a troca mínima por **Sorgo Granífero** (janela até 31/03) ou **Milheto de cobertura** ($58\text{ dias}$) reduz os alertas históricos, respeita o vazio sanitário da Idaron e protege o solo.
-
-A mensagem central para os juízes será: **dados históricos de chuva, temperatura e umidade do solo da NASA combinados às regras agronômicas locais de Vilhena/RO, ajudando o produtor a adaptar seu calendário com a menor mudança possível, de forma visual, convidativa e transparente.**
+1. **Propagação do Calendário e Efeito Dominó (`resolveSuccessionSchedule`):**
+   - A partir da data base da 1ª safra, da duração em dias do ciclo escolhido em cada etapa e do intervalo operacional de máquinas, o motor calcula as datas exatas de semeadura e colheita de todas as sucessões, com e sem o atraso simulado.
+2. **Avaliação da Janela Recomendada por Classe de Solo (`evaluateZarcWindow`):**
+   - Verifica se a data de semeadura de cada etapa cai no período ideal, na faixa de transição ou fora da janela recomendada para a classe de retenção hídrica do solo (`AD3_MEDIA`, `AD4_ARGILOSA` ou `AD5_MUITO_ARGILOSA`).
+3. **Teste de Estresse nos 12 Anos da NASA POWER (`runHistoricalStressTest`):**
+   - Reaplica o calendário de cada etapa nos 12 anos reais da série histórica da NASA (`2013–2024`), avaliando fase por fase (`F1` a `F4`) a chuva acumulada, o maior veranico (dias secos consecutivos), a umidade superficial (`GWETTOP`), a umidade na zona radicular (`GWETROOT`) e os extremos de temperatura (`T2M_MAX` e `T2M_MIN`), classificando cada ano como **Favorável (`OK`)**, **Alerta Moderado (`MODERADO`)** ou **Falha Severa (`SEVERO`)**.

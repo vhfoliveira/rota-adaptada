@@ -162,16 +162,15 @@ Utilizada no botão `"📍 Usar Minha Localização (GPS)"` no formulário de in
 
 ---
 
-### 2.2. Fontes Oficiais e Governamentais de Terceiros (Dados Estáticos / Regras Locais)
+### 2.2. Cruzamento dos Dados da NASA e APIs de Terceiros na Sugestão de Planejamento (`generateSystemSuggestedPlannings`)
 
-Além das APIs consultadas em tempo de execução, os arquivos de configuração (`vilhena_rules-v2.json`, `vilhena_rules.json` e `data/ro/config.json`) referenciam documentos e portais públicos de terceiros cujas regras estão embutidas localmente:
+Dentro da tela de **Planejamento (`Incluir Novo Planejamento` ➔ `✨ Sugerir Planejamento (NASA + APIs)`)**, a função `generateSystemSuggestedPlannings` (`rota-adaptada-novo/src/vilhena-engine.js`) combina automaticamente os dados das APIs ativas com o catálogo de culturas e ciclos (pré-cadastrados e cadastrados pelo usuário):
 
-| Instituição / Provedor | Escopo dos Dados | URLs Referenciadas nos Metadados |
+| Fonte Integrada | Dados Utilizados pelo Motor de Sugestão | Impacto nas 3 Cartas de Baralho Sugeridas (`♠ CARTA 01`, `♦ CARTA 02`, `♣ CARTA 03`) |
 |---|---|---|
-| **MAPA — ZARC / SISZARC** | Janelas oficiais de plantio por decêndio e classes de solo (`AD3`, `AD4`, `AD5`) para Rondônia (Safra 2026/2027) | - Soja (Portaria nº 207/2026): `https://www.gov.br/agricultura/pt-br/assuntos/riscos-seguro/programa-nacional-de-zoneamento-agricola-de-risco-climatico/portarias/safra-vigente/rondonia/PORTN207SOJARO.pdf`<br>- Milho 2ª Safra (Portarias nº 331 e 346/2026): `https://www.gov.br/agricultura/pt-br/assuntos/riscos-seguro/programa-nacional-de-zoneamento-agricola-de-risco-climatico/portarias/safra-vigente/rondonia/PO46791.PDF`<br>- Sorgo Granífero (Portaria nº 285/2026): `https://www.gov.br/agricultura/pt-br/assuntos/riscos-seguro/programa-nacional-de-zoneamento-agricola-de-risco-climatico/portarias/safra-vigente/rondonia/PORTN285SORGOGRANIFERORO.pdf`<br>- Painel ZARC: `https://mapa-indicadores.agricultura.gov.br/publico/extensions/Zarc/Zarc.html` |
-| **Idaron/RO & SDA/MAPA** | Vazio sanitário da soja (`10/06` a `10/09`) e calendário legal de semeadura (`11/09` a `09/01`) em Rondônia | - `https://rondonia.ro.gov.br/inicio-do-vazio-sanitario-da-soja-comeca-nesta-quarta-feira-10-em-rondonia/`<br>- `https://rondonia.ro.gov.br/wp-content/uploads/2026/06/SEI_71685192_Instrucao_Normativa_4.pdf` |
-| **Embrapa (Rondônia & Milho e Sorgo)** | Fases fenológicas, manejo de cobertura com Milheto (COT 94/2022 e CT 54) e cultivares recomendadas | - `https://www.infoteca.cnptia.embrapa.br/infoteca/handle/doc/983788` |
-| **IBGE / Calculadora Rural** | Código IBGE (`1100304`), linha de base da Produção Agrícola Municipal (PAM) de Vilhena/RO e síntese municipal | - `https://calculadorarural.com.br/agro/ro/vilhena` |
+| **NASA POWER API (`2013–2024`)** | `PRECTOTCORR` (`IMERG_PRECTOT`), `GWETROOT`, `GWETTOP`, `T2M_MAX`, `T2M_MIN` | Pontua cada combinação candidata pelo número de anos sem falha severa (`noCriticalYears`), anos favoráveis (`okYears`), chuva média no ciclo (`avgCycleRainMm`) e umidade radicular média na fase reprodutiva F3 (`avgF3GwetRootPct`). |
+| **ISRIC SoilGrids v2.0 + Nominatim** | Classe de solo sugerida (`AD3_MEDIA` 48 mm, `AD4_ARGILOSA` 62 mm, `AD5_MUITO_ARGILOSA` 78 mm), `% argila` e Município/UF | Ajusta a janela recomendada de semeadura de cada etapa e a tolerância máxima a veranicos conforme a capacidade de retenção hídrica do solo da propriedade. |
+| **Catálogo de Culturas e Ciclos** | Culturas (`SAFRA_PRINCIPAL`, `ALTERNATIVA_COMERCIAL`, `ROTACAO_CULTURAS`, `COBERTURA_SOLO`) e ciclos em dias (`F1` a `F4`) | Gera e ranqueia 3 perfis de plano em cartas de baralho: **Opção 1 (Segurança Comercial)**, **Opção 2 (Rotação Diversificada)** e **Opção 3 (Blindagem e Cobertura do Solo)**. |
 
 ---
 

@@ -1035,24 +1035,69 @@ export function getCustomCropRoleMeta(roleKey) {
   return CUSTOM_CROP_ROLES[roleKey] || CUSTOM_CROP_ROLES.ALTERNATIVA_COMERCIAL;
 }
 
+export function buildCycleGroupObject(groupKey, cycleName, daysInput, isCustomCycle = false) {
+  const totalDays = Math.max(40, Math.min(180, Number(daysInput) || 90));
+  const f1 = Math.max(10, Math.round(totalDays * 0.18));
+  const f2 = Math.max(15, Math.round(totalDays * 0.32));
+  const f3 = Math.max(15, Math.round(totalDays * 0.32));
+  const f4 = Math.max(8, totalDays - f1 - f2 - f3);
+  const cleanName = (cycleName || 'Ciclo Cadastrado').trim();
+
+  return {
+    group_id: groupKey,
+    is_custom_cycle: isCustomCycle,
+    cycle_name: cleanName,
+    cycle_label: `${cleanName} (${totalDays}d)`,
+    gmr_criterion: `${cleanName} · ${totalDays} dias`,
+    cycle_days_default: totalDays,
+    cycle_days_range: [Math.max(35, totalDays - 5), totalDays + 5],
+    phases_days: {
+      F1_estabelecimento: f1,
+      F2_vegetativo: f2,
+      F3_floracao_enchimento: f3,
+      F4_maturacao: f4
+    },
+    recommended_cultivars_ro: [{ name: `${cleanName} (${totalDays}d)`, group: 'I' }]
+  };
+}
+
+export function getCycleGroupLabel(groupKey, groupObj) {
+  const cycleDays = groupObj?.cycle_days_default || 100;
+  if (groupObj?.cycle_label) return groupObj.cycle_label;
+  if (groupObj?.cycle_name) return `${groupObj.cycle_name} (${cycleDays}d)`;
+  if (groupKey === 'GRUPO_I_PRECOCE') return `Ciclo Precoce (${cycleDays}d)`;
+  if (groupKey === 'MANEJO_COBERTURA_FLORESCIMENTO') return `Ciclo Rápido (${cycleDays}d)`;
+  return `Ciclo Médio (${cycleDays}d)`;
+}
+
 /**
- * Registers user-created custom crops into rulesPackage.crops_catalog so the deterministic engine
- * can evaluate their planting window, 4 phenological phases, and 12-year NASA POWER stress test.
+ * Registers user-created custom crops and custom cycles into rulesPackage.crops_catalog
+ * so the deterministic engine can evaluate their planting window, 4 phenological phases,
+ * and 12-year NASA POWER stress test.
  */
-export function registerCustomCropsInCatalog(customCrops = []) {
+export function registerCustomCropsInCatalog(customCrops = [], customCycles = []) {
   for (const key of Object.keys(rulesPackage.crops_catalog)) {
     if (key.startsWith('CUSTOM_')) {
       delete rulesPackage.crops_catalog[key];
+    } else {
+      const c = rulesPackage.crops_catalog[key];
+      if (c?.cultivar_groups) {
+        for (const gKey of Object.keys(c.cultivar_groups)) {
+          if (gKey.startsWith('CUSTOM_CYCLE_') || c.cultivar_groups[gKey]?.is_custom_cycle) {
+            delete c.cultivar_groups[gKey];
+          }
+        }
+      }
     }
   }
 
   for (const cc of customCrops) {
     if (!cc || !cc.crop_id) continue;
     const totalDays = Math.max(40, Math.min(180, Number(cc.cycleDays) || 90));
-    const f1 = Math.max(10, Math.round(totalDays * 0.18));
-    const f2 = Math.max(15, Math.round(totalDays * 0.32));
-    const f3 = Math.max(15, Math.round(totalDays * 0.32));
-    const f4 = Math.max(8, totalDays - f1 - f2 - f3);
+    const earlyDays = Math.max(
+      40,
+      Math.min(totalDays, Number(cc.earlyCycleDays) || Math.max(40, totalDays - 10))
+    );
 
     const startDec = dateToDecendio(cc.windowStartDate || '2027-01-01').decendio;
     const endDec = dateToDecendio(cc.windowEndDate || '2027-03-31').decendio;
@@ -1068,6 +1113,24 @@ export function registerCustomCropsInCatalog(customCrops = []) {
     const isRustic = cc.droughtTolerance === 'ALTA';
     const isSensitive = cc.droughtTolerance === 'SENSIVEL';
     const roleMeta = getCustomCropRoleMeta(cc.role);
+
+    const cultivarGroups = {};
+    if (Array.isArray(cc.cycles) && cc.cycles.length > 0) {
+      cc.cycles.forEach((cy, idx) => {
+        const gKey = cy.groupKey || (idx === 0 ? 'GRUPO_I_PRECOCE' : idx === 1 ? 'GRUPO_II_MEDIO' : `CICLO_${idx + 1}`);
+        cultivarGroups[gKey] = buildCycleGroupObject(gKey, cy.cycleName || `Ciclo ${idx + 1}`, cy.cycleDays, false);
+      });
+    } else {
+      if (earlyDays < totalDays) {
+        cultivarGroups.GRUPO_I_PRECOCE = buildCycleGroupObject('GRUPO_I_PRECOCE', 'Ciclo Precoce', earlyDays, false);
+      }
+      cultivarGroups.GRUPO_II_MEDIO = buildCycleGroupObject(
+        'GRUPO_II_MEDIO',
+        earlyDays < totalDays ? 'Ciclo Médio' : 'Ciclo Padrão',
+        totalDays,
+        false
+      );
+    }
 
     rulesPackage.crops_catalog[cc.crop_id] = {
       crop_id: cc.crop_id,
@@ -1085,21 +1148,7 @@ export function registerCustomCropsInCatalog(customCrops = []) {
           AD5_MUITO_ARGILOSA: { risk_20pct: [...decList, nextDec], risk_30pct: [], risk_40pct: [] }
         }
       },
-      cultivar_groups: {
-        GRUPO_PADRAO: {
-          group_id: 'GRUPO_I',
-          gmr_criterion: `Ciclo de ${totalDays} dias`,
-          cycle_days_default: totalDays,
-          cycle_days_range: [totalDays - 5, totalDays + 5],
-          phases_days: {
-            F1_estabelecimento: f1,
-            F2_vegetativo: f2,
-            F3_floracao_enchimento: f3,
-            F4_maturacao: f4
-          },
-          recommended_cultivars_ro: [{ name: `Ciclo ${totalDays}d`, group: 'I' }]
-        }
-      },
+      cultivar_groups: cultivarGroups,
       climate_thresholds_nasa: {
         water_cycle_requirement_mm: { min: isRustic ? 250 : 400, max: 700 },
         alert_triggers: {
@@ -1115,6 +1164,19 @@ export function registerCustomCropsInCatalog(customCrops = []) {
         }
       }
     };
+  }
+
+  for (const cy of customCycles || []) {
+    if (!cy || !cy.cropId || !cy.groupKey) continue;
+    const targetCrop = rulesPackage.crops_catalog[cy.cropId];
+    if (!targetCrop) continue;
+    if (!targetCrop.cultivar_groups) targetCrop.cultivar_groups = {};
+    targetCrop.cultivar_groups[cy.groupKey] = buildCycleGroupObject(
+      cy.groupKey,
+      cy.cycleName || 'Ciclo Cadastrado',
+      cy.cycleDays,
+      true
+    );
   }
 }
 
@@ -1170,13 +1232,7 @@ export function getPlanningStagesList(planningConfig = defaultPlanningConfig()) 
     const groupKeys = Object.keys(crop.cultivar_groups || {});
     const resolvedGroupKey = crop.cultivar_groups?.[st.groupKey] ? st.groupKey : groupKeys[0];
     const groupObj = crop.cultivar_groups?.[resolvedGroupKey];
-    const cycleDays = groupObj?.cycle_days_default || 100;
-    const cycleLabel =
-      resolvedGroupKey === 'GRUPO_I_PRECOCE'
-        ? `Ciclo Precoce (${cycleDays}d)`
-        : resolvedGroupKey === 'MANEJO_COBERTURA_FLORESCIMENTO'
-          ? `Ciclo Rápido (${cycleDays}d)`
-          : `Ciclo Médio (${cycleDays}d)`;
+    const cycleLabel = getCycleGroupLabel(resolvedGroupKey, groupObj);
     const orderNum = idx + 1;
     const defaultLabel =
       idx === 0 ? '1ª Etapa · Safra Inicial' : `${orderNum}ª Etapa · ${idx}ª Sucessão`;
@@ -1207,12 +1263,7 @@ export function resolveSuccessionSchedule(stageDefs, initialSowDate, opInterval 
     const groupKey = crop.cultivar_groups?.[st.groupKey] ? st.groupKey : groupKeys[0];
     const group = crop.cultivar_groups[groupKey];
     const cycleDays = group?.cycle_days_default || 100;
-    const cycleLabel =
-      groupKey === 'GRUPO_I_PRECOCE'
-        ? `Ciclo Precoce (${cycleDays}d)`
-        : groupKey === 'MANEJO_COBERTURA_FLORESCIMENTO'
-          ? `Ciclo Rápido (${cycleDays}d)`
-          : `Ciclo Médio (${cycleDays}d)`;
+    const cycleLabel = getCycleGroupLabel(groupKey, group);
 
     let sowDate = initialSowDate;
     if (i > 0 && prevHarvest) {
@@ -1252,9 +1303,10 @@ export function resolveSuccessionSchedule(stageDefs, initialSowDate, opInterval 
 export function simulateAdaptation(
   propertyProfile = defaultPropertyProfile(),
   planningConfig = defaultPlanningConfig(),
-  customCrops = []
+  customCrops = [],
+  customCycles = []
 ) {
-  registerCustomCropsInCatalog(customCrops);
+  registerCustomCropsInCatalog(customCrops, customCycles);
   const delayDays = Math.max(0, Math.min(45, Number(planningConfig.delayDays) || 0));
   const opInterval = Math.max(5, Math.min(30, Number(planningConfig.operationalIntervalDays) || 7));
 
@@ -1285,15 +1337,19 @@ export function simulateAdaptation(
     baselineStages
   });
 
-  // STRATEGY 2: AJUSTE DE CICLO (Ciclo Precoce + intervalo operacional enxuto)
+  // STRATEGY 2: AJUSTE DE CICLO (Seleciona automaticamente o ciclo mais precoce cadastrado da cultura)
   const fastInterval = Math.max(5, opInterval - 2);
   const s2Defs = planStages.map((st, idx) => {
     const crop = rulesPackage.crops_catalog[st.cropId] || rulesPackage.crops_catalog.SOJA;
-    if ((idx === 0 || idx === 1 || idx === 3) && crop.cultivar_groups?.GRUPO_I_PRECOCE) {
-      return {
-        ...st,
-        groupKey: 'GRUPO_I_PRECOCE'
-      };
+    if (idx === 0 || idx === 1 || idx === 3) {
+      const entries = Object.entries(crop.cultivar_groups || {});
+      if (entries.length > 0) {
+        entries.sort((a, b) => (a[1]?.cycle_days_default || 999) - (b[1]?.cycle_days_default || 999));
+        return {
+          ...st,
+          groupKey: entries[0][0]
+        };
+      }
     }
     return { ...st };
   });
@@ -1474,5 +1530,318 @@ export function simulateAdaptation(
     allStrategies: [strategyPlanoAtual, strategyAjusteCiclo, strategySorgo, strategyMilheto, ...customStrategies],
     validAlternativesCount: validAlternatives.length,
     noBetterAlternativeMessage
+  };
+}
+
+/**
+ * Analyzes all available crops and cycles (pre-registered + user-registered),
+ * the property's soil water retention class (ISRIC SoilGrids), and the 12-year
+ * NASA POWER climate series (2013-2024) to generate ranked planning suggestions.
+ */
+export function generateSystemSuggestedPlannings({
+  propertyProfile = defaultPropertyProfile(),
+  baseSowingDate = '2026-11-01',
+  operationalIntervalDays = 7,
+  delayDays = 20,
+  customCrops = [],
+  customCycles = []
+} = {}) {
+  registerCustomCropsInCatalog(customCrops, customCycles);
+
+  const soilProfileId = propertyProfile.soilProfileId || 'AD4_ARGILOSA';
+  const soilObj = rulesPackage.soil_profiles[soilProfileId] || rulesPackage.soil_profiles.AD4_ARGILOSA;
+  const opInterval = Math.max(5, Math.min(30, Number(operationalIntervalDays) || 7));
+  const simDelay = Math.max(0, Math.min(45, Number(delayDays) || 0));
+  const delayedSowDate = addDaysUTC(baseSowingDate, simDelay);
+
+  // Collect all available crops & their registered cycles
+  const allCropEntries = Object.values(rulesPackage.crops_catalog || {});
+  const mainOptions = [];
+  const commSuccessionOptions = [];
+  const rotationOptions = [];
+  const coverSuccessionOptions = [];
+
+  let totalCyclesAnalyzed = 0;
+
+  for (const crop of allCropEntries) {
+    if (!crop || !crop.crop_id) continue;
+    const groups = Object.entries(crop.cultivar_groups || {});
+    for (const [groupKey, groupObj] of groups) {
+      totalCyclesAnalyzed++;
+      const cycleDays = groupObj?.cycle_days_default || 100;
+      const cycleLabel = getCycleGroupLabel(groupKey, groupObj);
+      const item = {
+        cropId: crop.crop_id,
+        cropName: crop.common_name,
+        isCustomCrop: Boolean(crop.is_custom),
+        isCustomCycle: Boolean(groupObj?.is_custom_cycle),
+        groupKey,
+        cycleDays,
+        cultivarName: cycleLabel
+      };
+
+      const role = crop.custom_role || '';
+      if (crop.crop_id === 'SOJA' || role === 'SAFRA_PRINCIPAL') {
+        mainOptions.push(item);
+      } else if (crop.crop_id === 'MILHO_1_SAFRA' || role === 'ROTACAO_CULTURAS') {
+        rotationOptions.push(item);
+        if (role === 'ROTACAO_CULTURAS') {
+          commSuccessionOptions.push(item);
+          mainOptions.push(item);
+        }
+      } else if (crop.crop_id === 'MILHETO' || crop.role_in_prototype === 'COVER_CROP_SOIL_PROTECTION' || role === 'COBERTURA_SOLO') {
+        coverSuccessionOptions.push(item);
+      } else {
+        commSuccessionOptions.push(item);
+      }
+    }
+  }
+
+  // Score helper for a 4-stage candidate plan under delayed date (fast single evaluation)
+  function evaluateCandidatePlan(stageDefs, id, suitSymbol, cardNumber, badge, title, planningName, rationaleBuilder) {
+    const delayedResolved = resolveSuccessionSchedule(stageDefs, delayedSowDate, opInterval);
+
+    const dummyPlanCfg = {
+      ...defaultPlanningConfig(),
+      planningName,
+      propertyId: propertyProfile.id,
+      baseSowingDate,
+      delayDays: simDelay,
+      operationalIntervalDays: opInterval,
+      successionStages: stageDefs
+    };
+
+    const delayedEval = buildStrategyEvaluation({
+      strategyId: `${id}_DELAYED`,
+      title,
+      shortTitle: title,
+      questionAnswered: '',
+      modificationsCount: 1,
+      changedDescriptions: [],
+      stagesInput: delayedResolved,
+      propertyProfile,
+      planningConfig: dummyPlanCfg,
+      baselineStages: delayedResolved
+    });
+
+    const critDelayed = delayedEval.criticalStage;
+
+    const avgCycleRainMm = Math.round(
+      critDelayed.stressTest.years.reduce((acc, y) => acc + y.cycleRainMm, 0) /
+        Math.max(1, critDelayed.stressTest.years.length)
+    );
+    const avgF3GwetRootPct = Math.round(
+      (critDelayed.stressTest.years.reduce((acc, y) => {
+        const f3 = y.phases.find(p => p.phaseKey === 'F3_floracao_enchimento') || y.phases[0];
+        return acc + (f3?.avgGwetRoot || 0.55);
+      }, 0) /
+        Math.max(1, critDelayed.stressTest.years.length)) *
+        100
+    );
+
+    const noCriticalYears = critDelayed.stressTest.noCriticalYears;
+    const okYears = critDelayed.stressTest.okYears;
+    const protectedDays = delayedEval.soilMetrics.protectedDays;
+
+    const score =
+      noCriticalYears * 14 +
+      okYears * 9 +
+      (delayedEval.anyZarcOut ? -45 : 30) +
+      Math.round(protectedDays / 12);
+
+    return {
+      suggestionId: id,
+      suitSymbol,
+      cardNumber,
+      badge,
+      title,
+      planningName,
+      stageDefs,
+      evaluation: delayedEval,
+      delayedEval,
+      avgCycleRainMm,
+      avgF3GwetRootPct,
+      metrics: {
+        noCriticalYears,
+        okYears,
+        avgCycleRainMm,
+        avgF3GwetRootPct,
+        protectedDays
+      },
+      score,
+      rationale: rationaleBuilder({
+        delayedEval,
+        critDelayed,
+        avgCycleRainMm,
+        avgF3GwetRootPct,
+        noCriticalYears,
+        okYears,
+        protectedDays
+      })
+    };
+  }
+
+  let totalCombinationsTested = 0;
+
+  // Ensure pools are non-empty
+  if (mainOptions.length === 0 && allCropEntries.length > 0) {
+    const firstCrop = allCropEntries[0];
+    const [gk, go] = Object.entries(firstCrop.cultivar_groups || {})[0] || ['GRUPO_II_MEDIO', { cycle_days_default: 110 }];
+    mainOptions.push({
+      cropId: firstCrop.crop_id,
+      cropName: firstCrop.common_name,
+      isCustomCrop: Boolean(firstCrop.is_custom),
+      isCustomCycle: Boolean(go?.is_custom_cycle),
+      groupKey: gk,
+      cycleDays: go?.cycle_days_default || 110,
+      cultivarName: getCycleGroupLabel(gk, go)
+    });
+  }
+  if (commSuccessionOptions.length === 0) {
+    commSuccessionOptions.push(...mainOptions);
+  }
+
+  // 1. Carta #1: Maior Segurança Comercial (Main Crop + Commercial Succession)
+  const commercialCandidates = [];
+  for (const m1 of mainOptions) {
+    for (const s1 of commSuccessionOptions) {
+      totalCombinationsTested++;
+      const y2Main = mainOptions.find(m => m.cropId === 'SOJA' && m.groupKey === 'GRUPO_II_MEDIO') || m1;
+      const y2Succ =
+        commSuccessionOptions.find(s => s.cropId === 'MILHO_2_SAFRA' && s.groupKey === 'GRUPO_I_PRECOCE') || s1;
+
+      const stageDefs = [
+        { cropId: m1.cropId, groupKey: m1.groupKey, cultivarName: m1.cultivarName, plannedSowDate: null },
+        { cropId: s1.cropId, groupKey: s1.groupKey, cultivarName: s1.cultivarName, plannedSowDate: null },
+        { cropId: y2Main.cropId, groupKey: y2Main.groupKey, cultivarName: y2Main.cultivarName, plannedSowDate: '2027-10-20' },
+        { cropId: y2Succ.cropId, groupKey: y2Succ.groupKey, cultivarName: y2Succ.cultivarName, plannedSowDate: null }
+      ];
+
+      const cand = evaluateCandidatePlan(
+        stageDefs,
+        `SUG_COM_${m1.cropId}_${m1.groupKey}_${s1.cropId}_${s1.groupKey}`,
+        '♠',
+        'CARTA 01',
+        '🏆 Opção 1 · Segurança Comercial (NASA + Solo)',
+        `${m1.cropName} (${m1.cycleDays}d) ➔ ${s1.cropName} (${s1.cycleDays}d)`,
+        `Sugestão NASA Comercial — ${m1.cropName} (${m1.cycleDays}d) + ${s1.cropName} (${s1.cycleDays}d)`,
+        ({ noCriticalYears, avgCycleRainMm, avgF3GwetRootPct }) =>
+          `Prioriza ${m1.cropName} (${m1.cultivarName}) para liberar a área cedo e encaixar ${s1.cropName} (${s1.cultivarName}) na janela hídrica do solo ${soilObj.id} (${soilObj.available_water_mm} mm). Alcança ${noCriticalYears}/12 anos sem falha severa na NASA POWER (${avgCycleRainMm} mm médios; GWETROOT ${avgF3GwetRootPct}%).`
+      );
+      commercialCandidates.push(cand);
+    }
+  }
+  commercialCandidates.sort((a, b) => b.score - a.score);
+  const bestCommercial = commercialCandidates[0];
+
+  // 2. Carta #2: Rotação Diversificada e Equilíbrio Hídrico
+  const rotationCandidates = [];
+  const y2RotPool = rotationOptions.length > 0 ? rotationOptions : mainOptions;
+  for (const m1 of mainOptions.slice(0, 4)) {
+    for (const s1 of commSuccessionOptions.slice(0, 5)) {
+      for (const m2 of y2RotPool.slice(0, 3)) {
+        const s2 = coverSuccessionOptions[0] || s1;
+        totalCombinationsTested++;
+        const distinctCrops = new Set([m1.cropId, s1.cropId, m2.cropId, s2.cropId]).size;
+        const hasCustom =
+          m1.isCustomCrop || s1.isCustomCrop || m2.isCustomCrop || s2.isCustomCrop || m1.isCustomCycle || s1.isCustomCycle;
+        const stageDefs = [
+          { cropId: m1.cropId, groupKey: m1.groupKey, cultivarName: m1.cultivarName, plannedSowDate: null },
+          { cropId: s1.cropId, groupKey: s1.groupKey, cultivarName: s1.cultivarName, plannedSowDate: null },
+          { cropId: m2.cropId, groupKey: m2.groupKey, cultivarName: m2.cultivarName, plannedSowDate: '2027-10-20' },
+          { cropId: s2.cropId, groupKey: s2.groupKey, cultivarName: s2.cultivarName, plannedSowDate: null }
+        ];
+
+        const cand = evaluateCandidatePlan(
+          stageDefs,
+          `SUG_ROT_${m1.cropId}_${s1.cropId}_${m2.cropId}_${s2.cropId}`,
+          '♦',
+          'CARTA 02',
+          '🔄 Opção 2 · Rotação Diversificada',
+          `${m1.cropName} ➔ ${s1.cropName} ➔ ${m2.cropName} ➔ ${s2.cropName}`,
+          `Sugestão NASA Rotação — ${m1.cropName} + ${s1.cropName} + ${m2.cropName}`,
+          ({ protectedDays, noCriticalYears, avgCycleRainMm }) =>
+            `Alterna ${distinctCrops} culturas na sucessão (${m1.cropName} ➔ ${s1.cropName} ➔ ${m2.cropName} ➔ ${s2.cropName}), mantendo o solo coberto por ${protectedDays} dias no biênio e garantindo ${noCriticalYears}/12 anos sem falha severa na NASA POWER (${avgCycleRainMm} mm médios).`
+        );
+        cand.score += distinctCrops * 10 + (hasCustom ? 18 : 0);
+        rotationCandidates.push(cand);
+      }
+    }
+  }
+  rotationCandidates.sort((a, b) => b.score - a.score);
+  const bestRotation =
+    rotationCandidates.find(r => r.suggestionId !== bestCommercial?.suggestionId) || rotationCandidates[0];
+
+  // 3. Carta #3: Blindagem Climática e Cobertura do Solo
+  const coverCandidates = [];
+  const coverPool = coverSuccessionOptions.length > 0 ? coverSuccessionOptions : commSuccessionOptions;
+  for (const m1 of mainOptions) {
+    for (const c1 of coverPool) {
+      totalCombinationsTested++;
+      const y2Main = mainOptions[0] || m1;
+      const y2Succ = commSuccessionOptions[0] || c1;
+      const stageDefs = [
+        { cropId: m1.cropId, groupKey: m1.groupKey, cultivarName: m1.cultivarName, plannedSowDate: null },
+        { cropId: c1.cropId, groupKey: c1.groupKey, cultivarName: c1.cultivarName, plannedSowDate: null },
+        { cropId: y2Main.cropId, groupKey: y2Main.groupKey, cultivarName: y2Main.cultivarName, plannedSowDate: '2027-10-20' },
+        { cropId: y2Succ.cropId, groupKey: y2Succ.groupKey, cultivarName: y2Succ.cultivarName, plannedSowDate: null }
+      ];
+
+      const cand = evaluateCandidatePlan(
+        stageDefs,
+        `SUG_COV_${m1.cropId}_${m1.groupKey}_${c1.cropId}_${c1.groupKey}`,
+        '♣',
+        'CARTA 03',
+        '🛡️ Opção 3 · Blindagem e Cobertura do Solo',
+        `${m1.cropName} (${m1.cycleDays}d) ➔ ${c1.cropName} (${c1.cycleDays}d)`,
+        `Sugestão NASA Proteção do Solo — ${m1.cropName} + ${c1.cropName} (${c1.cycleDays}d)`,
+        ({ protectedDays, noCriticalYears, avgF3GwetRootPct }) =>
+          `Blindagem máxima contra corte precoce de chuvas no solo ${soilObj.id}: posiciona ${c1.cropName} (${c1.cultivarName}) para exigir menos água radicular (GWETROOT ${avgF3GwetRootPct}%), atingindo ${noCriticalYears}/12 anos sem falha severa e ${protectedDays} dias de solo protegido.`
+      );
+      cand.score += cand.delayedEval.soilMetrics.protectedDays / 5;
+      coverCandidates.push(cand);
+    }
+  }
+  coverCandidates.sort((a, b) => b.score - a.score);
+  const bestCover =
+    coverCandidates.find(
+      c => c.suggestionId !== bestCommercial?.suggestionId && c.suggestionId !== bestRotation?.suggestionId
+    ) || coverCandidates[0];
+
+  const activeDs = getActiveNasaDataset();
+  const suggestions = [bestCommercial, bestRotation, bestCover].filter(Boolean);
+  const meanGwetRoot = activeDs?.metadata?.summary?.mean_gwetroot || 0.64;
+  const meanGwetTop = activeDs?.metadata?.summary?.mean_gwettop || 0.61;
+  const clayPct = propertyProfile.soilEvidence?.clayPercent || 46;
+
+  return {
+    analysisSummary: {
+      propertyName: propertyProfile.propertyName,
+      municipality: propertyProfile.municipality,
+      state: propertyProfile.state,
+      latitude: propertyProfile.latitude,
+      longitude: propertyProfile.longitude,
+      altitudeM: propertyProfile.altitudeM,
+      soilProfileId,
+      soilName: soilObj.name,
+      waterRetentionMm: soilObj.available_water_mm,
+      clayPercent: clayPct,
+      clayPct,
+      meanAnnualRainMm: activeDs?.metadata?.summary?.mean_annual_rain_mm || 1920,
+      meanGwetRoot,
+      meanGwetTop,
+      meanGwetRootPct: Math.round(meanGwetRoot * 100),
+      meanGwetTopPct: Math.round(meanGwetTop * 100),
+      baseSowingDate,
+      delayDays: simDelay,
+      operationalIntervalDays: opInterval,
+      totalCropsAnalyzed: allCropEntries.length,
+      availableCropsCount: allCropEntries.length,
+      totalCyclesAnalyzed,
+      availableCyclesCount: totalCyclesAnalyzed,
+      totalCombinationsTested,
+      evaluatedCombinationsCount: totalCombinationsTested
+    },
+    suggestions
   };
 }
