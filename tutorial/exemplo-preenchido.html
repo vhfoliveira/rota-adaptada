@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rota Adaptada · Resumo Técnico Imprimível — Fazenda Exemplo Tutorial (Vilhena/RO)</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#eef2ef;color:#1b3128;font:13.5px/1.58 system-ui,-apple-system,sans-serif}
+  main{max-width:1020px;margin:20px auto;padding:40px;background:#fff;border-radius:10px;box-shadow:0 6px 24px #00000012}
+  header{border-bottom:3px solid #1f5c41;padding-bottom:18px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:flex-start;gap:20px}
+  .eyebrow{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#4a6b5b;font-weight:700}
+  h1{font-size:26px;margin:6px 0 4px;color:#123526}
+  h2{font-size:17px;margin:26px 0 10px;border-bottom:1px solid #d7e2dc;padding-bottom:6px;color:#184732}
+  h3{font-size:14px;margin:14px 0 6px;color:#204d38}
+  p{margin:6px 0}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .card{border:1px solid #d5e0da;border-radius:8px;padding:12px 14px;background:#f8fbf9}
+  .badge{display:inline-block;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700}
+  .badge.success{background:#e1f3e8;color:#185a37}
+  .badge.warning{background:#fef1d6;color:#8a5300}
+  .badge.danger{background:#fde2e0;color:#98231c}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:12px}
+  th,td{border:1px solid #d5e0da;padding:8px 9px;text-align:left;vertical-align:top}
+  th{background:#edf4f0;color:#1d4231;font-weight:700}
+  .notice{padding:12px 14px;background:#fff7e5;border-left:4px solid #d18c1d;border-radius:4px;font-size:12px;margin:14px 0}
+  .print-bar{background:#0b1c2e;color:#fff;padding:12px 20px;text-align:center;font-size:12px}
+  ul{margin:6px 0;padding-left:20px}
+  li{margin:4px 0}
+  footer{margin-top:32px;padding-top:14px;border-top:1px solid #d5e0da;font-size:11px;color:#586e63;display:flex;justify-content:space-between}
+  @page{size:A4;margin:12mm}
+  @media print{
+    body{background:#fff;font-size:10pt}
+    main{margin:0;padding:0;box-shadow:none;max-width:none}
+    .print-bar{display:none}
+    *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  }
+</style>
+</head>
+<body>
+<div class="print-bar">
+  Resumo Técnico Imprimível (100% Offline) · Use <strong>Ctrl+P / Imprimir</strong> para salvar em PDF e discutir com o Engenheiro Agrônomo.
+</div>
+<main>
+  <header>
+    <div>
+      <span class="eyebrow">NASA Space Apps 2026 · Field Shift: Adapting Farms with NASA Data · Equipe Interplários</span>
+      <h1>Rota Adaptada — Relatório Técnico de Adaptação de Calendário</h1>
+      <p><strong>Pergunta central:</strong> “Se minha primeira cultura atrasar (+20 dias), qual é a menor mudança defensável no restante do plano?”</p>
+    </div>
+    <div style="text-align:right;font-size:11px;color:#4a6358">
+      <strong>Pacote Regional Ativo:</strong><br>vilhena_rules-v2.json<br>
+      <strong>Emitido em:</strong> 14/11/2026, 15:07:29
+    </div>
+  </header>
+
+  <section>
+    <h2>1. Propriedade Pré-Cadastrada e Contexto Edafoclimático Local</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Identificação da Área</h3>
+        <p><strong>Propriedade / Talhão:</strong> Fazenda Exemplo Tutorial — Talhão 01 — Gleba Sul (Sequeiro)</p>
+        <p><strong>Município / UF:</strong> Vilhena/RO (IBGE 1100304) · Altitude média: 600 m</p>
+        <p><strong>Coordenadas de referência NASA POWER:</strong> -12.7405°, -60.1458° (Chapada dos Parecis · Macrorregião Sojícola 4)</p>
+        <p><strong>Área e Sistema:</strong> 120 ha · Sequeiro (Plantio Direto) (Irrigação: Não)</p>
+      </div>
+      <div class="card">
+        <h3>Perfil de Solo e Água Disponível (ZARC)</h3>
+        <p><strong>Classe selecionada:</strong> Latossolo Vermelho-Amarelo Argiloso (AD4 / Tipo 3) - Padrão Vilhena</p>
+        <p><strong>Capacidade de Água Disponível (CAD):</strong> Soja: 55 mm | Milho: 54.6 mm | Sorgo: 75 mm</p>
+        <p><strong>Amostra local (LAB-RO-2026-018):</strong> Argila 46% · MO 2.8% · pH 5.4</p>
+        <p><strong>Cenário Simulado:</strong> Semeadura original em 01/11/2026 com <strong>atraso de +20 dias</strong> (21/11/2026) e intervalo operacional de 7 dias.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Comparação Lado a Lado das Estratégias (Horizonte de 2 Anos)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Estratégia</th>
+          <th>Mudanças vs. Original</th>
+          <th>2ª Safra Ano 1 (Etapa Crítica)</th>
+          <th>Enquadramento ZARC / Idaron</th>
+          <th>Teste de Estresse NASA (2013–2024)</th>
+          <th>Solo Protegido vs. Exposto (730d)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1. Plano Atual (Manter Sequência com Atraso)</strong><br><span class="badge success">Em foco na inspeção</span></td>
+          <td>0 etapa(s)<br><small>Nenhuma cultura ou grupo alterado (propaga o atraso de +20 dias por efeito dominó).</small></td>
+          <td><strong>Milho 2ª Safra</strong><br>AG 8088 PRO2<br>26/03/2027 a 23/07/2027 (120d)</td>
+          <td><span class="badge danger">Fora da Janela ZARC · Dec. 9 (21 a 31/Mar)</span></td>
+          <td><strong>1/12 anos sem estresse severo</strong><br><small>0 sem alertas · 1 mod. · 11 severos</small></td>
+          <td><strong>536d protegidos</strong><br>194d expostos (97d/ano)<br><small style="color:#8a5300">⚠ Sucessão recorrente</small></td>
+        </tr><tr>
+          <td><strong>2. Ajuste de Ciclo / Janela (Cultivares Precoces Grupo I)</strong></td>
+          <td>1 etapa(s)<br><small>Troca para cultivares precoces Grupo I (Soja BRS 7582 de 105d + Milho BRS 1055 de 100d) e janela operacional enxuta (5d), antecipando a safrinha em 15 dias.</small></td>
+          <td><strong>Milho 2ª Safra</strong><br>BRS 1055 (Precoce G-I)<br>11/03/2027 a 18/06/2027 (100d)</td>
+          <td><span class="badge warning">ZARC 30% (Risco Moderado) · Dec. 8 (11 a 20/Mar)</span></td>
+          <td><strong>2/12 anos sem estresse severo</strong><br><small>2 sem alertas · 0 mod. · 10 severos</small></td>
+          <td><strong>503d protegidos</strong><br>227d expostos (114d/ano)<br><small style="color:#8a5300">⚠ Sucessão recorrente</small></td>
+        </tr><tr>
+          <td><strong>3. Alternativa Comercial (Sorgo Granífero 2ª Safra)</strong></td>
+          <td>1 etapa(s)<br><small>Substituição apenas da 2ª safra comercial do Ano 1 (Milho → Sorgo Granífero BRS 373 / 84G02, Grupo I de 100d), mantendo a Soja original.</small></td>
+          <td><strong>Sorgo Granífero</strong><br>BRS 373 / 84G02<br>26/03/2027 a 03/07/2027 (100d)</td>
+          <td><span class="badge success">ZARC 20% (Menor Risco) · Dec. 9 (21 a 31/Mar)</span></td>
+          <td><strong>7/12 anos sem estresse severo</strong><br><small>2 sem alertas · 5 mod. · 5 severos</small></td>
+          <td><strong>531d protegidos</strong><br>199d expostos (100d/ano)</td>
+        </tr><tr>
+          <td><strong>4. Alternativa de Cobertura (Milheto 58 dias)</strong></td>
+          <td>1 etapa(s)<br><small>Transição da 2ª safra do Ano 1 para Milheto de cobertura (BRS 1501 / BRS 1502, manejo pleno florescimento aos 58 dias), protegendo o solo até a safra seguinte.</small></td>
+          <td><strong>Milheto Cobertura</strong><br>BRS 1501 / BRS 1502 (58d)<br>26/03/2027 a 22/05/2027 (58d)</td>
+          <td><span class="badge success">Janela Ideal Cobertura · Dec. 9 (21 a 31/Mar)</span></td>
+          <td><strong>10/12 anos sem estresse severo</strong><br><small>8 sem alertas · 2 mod. · 2 severos</small></td>
+          <td><strong>534d protegidos</strong><br>196d expostos (98d/ano)</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>3. Detalhamento da Estratégia Selecionada: 1. Plano Atual (Manter Sequência com Atraso)</h2>
+    <p><strong>Compromisso produtivo e justificativa:</strong> Quais alertas de chuva, temperatura, umidade do solo e janela ZARC aparecem se a sequência original for mantida apesar do atraso? Mantém 100% das culturas e ciclos originais mesmo após o atraso: não altera compra de insumos, mas transfere todo o efeito dominó para o florescimento da 2ª safra.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Etapa (Biênio)</th>
+          <th>Cultura e Cultivar / Grupo</th>
+          <th>Semeadura → Colheita</th>
+          <th>Decêndio e Janela ZARC</th>
+          <th>Trava Legal / Fitossanitária (Idaron)</th>
+          <th>Placar Histórico NASA (2013–2024)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Ano 1 · 1ª Safra (Verão)</strong></td>
+          <td>Soja<br><small>BRS 8481 (118 dias)</small></td>
+          <td>21/11/2026 → 18/03/2027<br><small>Deslocamento: +20d</small></td>
+          <td><span class="badge success">ZARC 20% (Menor Risco) · Dec. 33 (21 a 30/Nov)</span></td>
+          <td>✓ Conforme (Sem invasão do vazio 10/06–10/09)</td>
+          <td>5 OK · 5 mod. · 2 sev.</td>
+        </tr><tr>
+          <td><strong>Ano 1 · 2ª Safra (Safrinha)</strong></td>
+          <td>Milho 2ª Safra<br><small>AG 8088 PRO2 (120 dias)</small></td>
+          <td>26/03/2027 → 23/07/2027<br><small>Deslocamento: +20d</small></td>
+          <td><span class="badge danger">Fora da Janela ZARC · Dec. 9 (21 a 31/Mar)</span></td>
+          <td>✓ Conforme (Sem invasão do vazio 10/06–10/09)</td>
+          <td>0 OK · 1 mod. · 11 sev.</td>
+        </tr><tr>
+          <td><strong>Ano 2 · 1ª Safra (Verão)</strong></td>
+          <td>Soja<br><small>BRSMT Pintado (118 dias)</small></td>
+          <td>20/10/2027 → 14/02/2028</td>
+          <td><span class="badge success">ZARC 20% (Menor Risco) · Dec. 29 (11 a 20/Out)</span></td>
+          <td>✓ Conforme (Sem invasão do vazio 10/06–10/09)</td>
+          <td>7 OK · 3 mod. · 2 sev.</td>
+        </tr><tr>
+          <td><strong>Ano 2 · 2ª Safra (Safrinha)</strong></td>
+          <td>Milho 2ª Safra<br><small>BRS 1055 (100 dias)</small></td>
+          <td>22/02/2028 → 31/05/2028</td>
+          <td><span class="badge success">ZARC 20% (Menor Risco) · Dec. 6 (21 a 28/Fev)</span></td>
+          <td>✓ Conforme (Sem invasão do vazio 10/06–10/09)</td>
+          <td>3 OK · 0 mod. · 9 sev.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Inspeção Fenológica do Ano Histórico Selecionado (2013) — Etapa Crítica: Milho 2ª Safra</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Fase Fenológica</th>
+          <th>Duração</th>
+          <th>Chuva Acumulada (IMERG_PRECTOT)</th>
+          <th>Maior Veranico</th>
+          <th>Umidade Superficial (GWETTOP 0–5cm)</th>
+          <th>Umidade Radicular (GWETROOT)</th>
+          <th>Temp. Máx / Mín (MERRA-2)</th>
+          <th>Diagnóstico na Fase</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Fase I — Germinação e Emergência</strong></td>
+          <td>20 dias</td>
+          <td>130.2 mm</td>
+          <td>1 dias secos</td>
+          <td>Média 0.57 (mín. 0.51)</td>
+          <td>Média 0.54 (mín. 0.51)</td>
+          <td>Máx 28.3°C / Mín 19.9°C</td>
+          <td>✓ Sem alertas críticos nesta fase</td>
+        </tr><tr>
+          <td><strong>Fase II — Crescimento Vegetativo</strong></td>
+          <td>40 dias</td>
+          <td>48.2 mm</td>
+          <td>14 dias secos</td>
+          <td>Média 0.44 (mín. 0.4)</td>
+          <td>Média 0.43 (mín. 0.39)</td>
+          <td>Máx 29.6°C / Mín 16.1°C</td>
+          <td>✓ Sem alertas críticos nesta fase</td>
+        </tr><tr>
+          <td><strong>Fase III — Floração e Enchimento de Grãos</strong></td>
+          <td>40 dias</td>
+          <td>52.5 mm</td>
+          <td>12 dias secos</td>
+          <td>Média 0.41 (mín. 0.37)</td>
+          <td>Média 0.39 (mín. 0.36)</td>
+          <td>Máx 29.5°C / Mín 17.5°C</td>
+          <td><strong>[SEVERO] Estresse hídrico severo no florescimento/enchimento (Fase III):</strong> Precipitação de apenas 52.5 mm na Fase III (12 dias secos consecutivos) combinada com queda da umidade na zona radicular (GWETROOT médio 0.39, mín. 0.36 vs. limiar crítico 0.5 em solo AD4 CAD 54.6 mm).</td>
+        </tr><tr>
+          <td><strong>Fase IV — Maturação e Colheita</strong></td>
+          <td>20 dias</td>
+          <td>4 mm</td>
+          <td>17 dias secos</td>
+          <td>Média 0.34 (mín. 0.32)</td>
+          <td>Média 0.34 (mín. 0.33)</td>
+          <td>Máx 30.8°C / Mín 17°C</td>
+          <td>✓ Sem alertas críticos nesta fase</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>4. Lacunas Pendentes, Limitações Espaciais e Fontes Normativas</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Lacunas de Informação Pendentes de Validação Local</h3>
+        <ul>
+          <li>Levantamento laboratorial de nematoides (Meloidogyne spp. e Pratylenchus brachyurus) no talhão ainda pendente.</li><li>Avaliação de compactação subsuperficial (20–40 cm) pendente para confirmar profundidade efetiva de raízes (Ze).</li><li>Disponibilidade local de sementes das cultivares homologadas e cotação regional para comercialização (especialmente Sorgo).</li>
+        </ul>
+        <h3>Riscos para Revisão com o Engenheiro Agrônomo</h3>
+        <ul>
+          <li>Ano 1 · 2ª Safra (Safrinha): Semeadura em 26/03/2027 (Decêndio 9 — 21 a 31/Mar) ocorre após o fechamento da janela oficial do ZARC (01 de janeiro a 20 de março). Sem cobertura padrão de seguro/crédito.</li><li>Os dados do NASA POWER possuem resolução espacial regional (~10 km GPM IMERG e ~50 km MERRA-2) e não substituem pluviômetros de talhão ou prescrição presencial de engenheiro agrônomo.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Transparência de Dados NASA e Normativas (Safra 2026/2027)</h3>
+        <p><strong>NASA POWER API (2013–2024):</strong> Coordenadas -12.7405°, -60.1458°. Resolução espacial regional: ~10 km (0,1°×0,1°) para precipitação GPM IMERG e ~50 km para temperatura e umidade do solo MERRA-2.</p>
+        <ul>
+          <li><strong>Embrapa Rondônia (CPAF-RO):</strong> Publicação Regional da Embrapa Rondônia - Produção de Soja e Alternativas de Sucessão</li><li><strong>Ministério da Agricultura e Pecuária (MAPA):</strong> Portaria SPA/MAPA nº 207, de 30 de junho de 2026 (D.O.U. 03/07/2026, Seção 1) - ZARC Soja Rondônia Safra 2026/2027</li><li><strong>Ministério da Agricultura e Pecuária (MAPA):</strong> Portaria SPA/MAPA nº 331, de 28 de julho de 2026 (D.O.U. 30/07/2026) e Portaria SPA/MAPA nº 346, de 28 de julho de 2026 (D.O.U. 06/08/2026) - ZARC Milho 2ª Safra Solteiro e Consorciado c/ Braquiária em Rondônia Safra 2026/2027</li><li><strong>Ministério da Agricultura e Pecuária (MAPA):</strong> Portaria SPA/MAPA nº 233, de 30 de junho de 2026 (D.O.U. 10/07/2026) e Portaria SPA/MAPA nº 260, de 14 de julho de 2026 - ZARC Milho 1ª Safra Rondônia Safra 2026/2027</li><li><strong>Ministério da Agricultura e Pecuária (MAPA):</strong> Portaria SPA/MAPA nº 285, de 20 de julho de 2026 (D.O.U. 22/07/2026, Seção 1) - ZARC Sorgo Granífero Rondônia Safra 2026/2027</li><li><strong>Agência de Defesa Sanitária Agrosilvopastoril do Estado de Rondônia (Idaron) / SDA-MAPA:</strong> Portaria SDA/MAPA nº 1.579, de 9 de abril de 2026 &amp; Orientação Oficial Idaron/Governo de Rondônia (Vazio Sanitário e Calendário de Semeadura da Soja 2026/2027)</li>
+        </ul>
+      </div>
+    </div>
+    <div class="notice">
+      <strong>Nota de Segurança Agronômica:</strong> Os indicadores históricos são exploratórios e voltados à comparação de resiliência entre calendários. Não representam previsão de safra futura, produtividade garantida ou substituição de recomendação agronômica presencial.
+    </div>
+  </section>
+
+  <footer>
+    <span>Rota Adaptada · Equipe Interplários · NASA Space Apps Challenge 2026</span>
+    <span>Motor Determinístico vilhena-deterministic-v2.0 · Pacote BR-RO-VILHENA-2026-2027</span>
+  </footer>
+</main>
+</body>
+</html>

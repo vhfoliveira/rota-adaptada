@@ -1,43 +1,44 @@
-# Rota Adaptada — Interplários
+# Rota Adaptada — Equipe Interplários (NASA Space Apps 2026)
 
-Protótipo web de apoio ao planejamento agrícola e observação da Terra, criado como conceito independente para o NASA Space Apps. Não é um produto oficial da NASA.
+> **Desafio:** *Field Shift: Adapting Farms with NASA Data*  
+> **Pergunta Central:** *“Se a minha primeira cultura atrasar, qual é a menor mudança que posso fazer no restante do plano para continuar viável?”*
 
-## Executar localmente
+Aplicação web de apoio à decisão agrícola para adaptação de planos de dois anos em uma **propriedade pré-cadastrada de grãos de sequeiro em Vilhena, Rondônia (`Fazenda Chapada dos Parecis`)**, combinando **12 anos de dados diários reais da NASA (`2013–2024`)** com as janelas oficiais de plantio da região.
 
-Requer Node.js moderno (recomendado Node.js 22) e npm.
+---
+
+## Executar localmente e gerar build estático
 
 ```bash
 cd rota-adaptada-novo
-npm ci
-npm run dev
+npm install
+npm run dev      # Inicia o servidor local do Vite
 ```
 
-Abra o endereço exibido pelo Vite. Para verificar e gerar a aplicação estática:
+Para executar os testes unitários e gerar o pacote estático pronto para hospedagem:
 
 ```bash
 npm test
 npm run build
 ```
 
-O resultado do build fica em `rota-adaptada-novo/dist/`.
+O pacote final fica em `rota-adaptada-novo/dist/`, 100% compatível com a oferta global **GoDaddy Registry (Free Domain and Website Hosting + SSL)** do NASA Space Apps.
 
-## O que existe
+---
 
-Cadastro de propriedades e talhões com MapLibre e GeoJSON; amostras de solo; planejamento demonstrativo; observatório ambiental; comparação espacial e temporal; cenários; revisão de calendário; diário de operações; relatórios e backup JSON.
+## Fluxo Enxuto de 4 Telas (`rota-adaptada-novo/src/main.js`)
 
-JavaScript, Vite, MapLibre GL JS, polygon-clipping, Web Workers e IndexedDB. Não há backend ou autenticação do aplicativo. Mapas e fontes externas precisam de internet.
+A interface prioriza uma experiência limpa, visual e convidativa, exibindo apenas os **campos essenciais de decisão** na tela principal e mantendo os **detalhes técnicos opcionais** recolhidos sob demanda:
 
-## Dados e limitações
+1. **1. Propriedade:** Propriedade pré-cadastrada em Vilhena/RO (`Sequeiro · 240 ha`), escolha simples da retenção de água do solo e visão rápida das 4 culturas da sucessão (`Soja`, `Milho 2ª Safra`, `Sorgo Granífero` e `Milheto`).
+2. **2. Planejamento:** Simulador de atraso na semeadura da Soja (`0` a `+80 dias`), visualização imediata do **Efeito Dominó** na 2ª safra e seleção das decisões que o produtor deseja preservar.
+3. **3. Comparação:** Comparação lado a lado entre o **Plano Atual** e **até 3 alternativas de menor mudança**, com placar nos **12 anos reais da NASA (`2013–2024`)**, proteção do solo e compromisso prático.
+4. **4. Explicação e Resumo:** Diagnóstico visual das **4 fases da planta** ao clicar em qualquer ano histórico (`2013–2024`), síntese em 3 pontos e **Resumo Imprimível (PDF / A4 100% offline)** para conversa com o agrônomo.
 
-Os dados ambientais atuais são sintéticos: nenhuma API NASA está integrada. As pontuações de culturas são didáticas e não constituem previsão de produtividade ou recomendação agronômica. Os dados cadastrados ficam no navegador, por origem; não são compartilhados ao clonar este repositório. Use a exportação de backup do aplicativo quando precisar transferir cadastros.
+---
 
-O direcionamento acordado é validar um piloto em Vilhena, Rondônia, priorizando chuva (GPM IMERG), temperatura (NASA POWER), relevo (SRTM), evidências locais de solo e regras oficiais verificadas por safra. Essas integrações e a restrição da interface a Vilhena ainda são trabalho futuro; o código preserva o protótipo existente.
+## Documentação no Repositório
 
-## Documentação
-
-- [Aplicação e instruções técnicas](rota-adaptada-novo/README.md)
-- [Escopo e registro de evolução](rota-adaptada-novo/docs/ESCOPO.md)
-- [Visão regional original](docs/ESCOPO_RONDONIA.md)
-- [Roteiro de validação com agrônomo](docs/ROTEIRO_AGRONOMO.md)
-
-Os documentos incluem registros históricos: confira o código antes de considerar um recurso implementado. As datas e regras em `data/ro/config.json` precisam ser verificadas nas fontes oficiais antes de uso real.
+- [Proposta de Software (`rota_adaptada_proposta_de_software.md`)](rota_adaptada_proposta_de_software.md)
+- [Instruções da Aplicação e Deploy GoDaddy (`rota-adaptada-novo/README.md`)](rota-adaptada-novo/README.md)
+- [Roteiro de Validação com Engenheiro Agrônomo (`docs/ROTEIRO_AGRONOMO.md`)](docs/ROTEIRO_AGRONOMO.md)

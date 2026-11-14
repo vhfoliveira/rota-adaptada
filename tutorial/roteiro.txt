@@ -1,0 +1,35 @@
+1. Conheça o fluxo
+Vamos aprender a usar o Rota Adaptada pelo endereço deltashift ponto udisoft ponto app ponto br. Este vídeo usa capturas reais do preenchimento, com pausas explicativas. O fluxo tem quatro telas: propriedade, planejamento, comparação, e explicação. Vamos usar um exemplo fictício em Vilhena.
+
+2. Preencha a propriedade
+Na tela Propriedade, role até os campos de identificação. Digite Fazenda Exemplo Tutorial e informe cento e vinte hectares. Depois de cada campo, pressione Tab ou clique fora para confirmar a alteração. O nome e a área aparecerão no relatório. Os demais dados deste perfil são demonstrativos.
+
+3. Confira a classe de solo
+Abaixo, confira a classe de solo. Neste exemplo, mantemos A D quatro. Os botões permitem comparar outros perfis. Na utilização real, a escolha deve vir das evidências do talhão e da avaliação técnica, e não da alternativa que produz a melhor cor. Observe também as informações pendentes.
+
+4. Comece sem atraso
+Abra Planejamento e clique no botão zero dias. Assim você vê o cenário de referência. Vamos manter a data base de primeiro de novembro de dois mil e vinte e seis e o intervalo operacional de sete dias. Nesta configuração, o aplicativo calcula a segunda safra para seis de março de dois mil e vinte e sete.
+
+5. Simule vinte dias
+Agora clique em mais vinte dias. A semeadura da soja passa para vinte e um de novembro. Observe o efeito dominó: a segunda safra passa de seis para vinte e seis de março. O protótipo sinaliza que o milho sai da janela cadastrada. O atraso é uma hipótese informada por você, não uma previsão do tempo.
+
+6. Defina o que pode mudar
+Role até Decisões que Devem ser Preservadas. Aqui você permite ajustes de ciclo, substituição comercial por sorgo e transição para milheto de cobertura. Estou desmarcando a cobertura para mostrar o controle. Só mantenha marcadas as mudanças que o produtor aceita. Permitir uma alternativa não significa escolhê-la.
+
+7. Revise os dois anos
+Neste tutorial, reativo a cobertura para visualizar todas as opções. Confira os grupos de ciclo de soja e milho e o planejamento do segundo ano. Vamos manter os valores do exemplo. Ao terminar, clique em Executar Comparação e Teste de Estresse, no fim da tela.
+
+8. Leia os resultados
+A tela Comparação mostra o plano atual e as alternativas permitidas. Compare datas, mudanças e alertas antes de olhar apenas as cores. Neste exemplo, o ajuste de ciclo aparece na categoria ZARC trinta por cento do pacote. Sorgo mantém finalidade comercial; milheto muda para cobertura. Esses resultados precisam de revisão técnica.
+
+9. Abra um ano histórico
+Clique em um dos anos coloridos para abrir a explicação detalhada. Aqui abri dois mil e treze no plano atual. Na tela quatro, você pode selecionar outra estratégia, outra etapa do biênio e outro ano. A contagem de anos com alerta descreve o teste histórico do protótipo. Ela não é a probabilidade de perder a próxima safra.
+
+10. Entenda a fase crítica
+Role até as fases da cultura. A fase três deste exemplo apresenta um alerta. Leia a justificativa e observe chuva acumulada, dias secos, índices de umidade e temperaturas. O propósito é entender de onde saiu o alerta. Os dados são regionais e os critérios do pacote ainda precisam de validação antes de orientar uma decisão real.
+
+11. Gere o resumo
+Clique em Resumo Imprimível. A prévia reúne a fazenda de cento e vinte hectares, o atraso e a comparação. Use Baixar Arquivo HTML Independente para guardar um relatório que abre no navegador. Para um PDF, use Imprimir e escolha Salvar como PDF na janela de impressão. Neste tutorial, exportei o HTML.
+
+12. Guarde a simulação
+Por fim, clique em Exportar Simulação, no rodapé, para guardar o arquivo JSON. O HTML serve para leitura e discussão; o JSON registra os dados do cenário. Repita o exercício mudando uma variável por vez. O uso correto é preencher, simular, comparar, entender os motivos e revisar com o agrônomo antes de decidir.

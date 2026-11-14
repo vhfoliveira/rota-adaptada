@@ -1,0 +1,10 @@
+services:
+  web:
+    networks:
+      default: {}
+      proxy:
+        aliases:
+          - rota-adaptada-web
+networks:
+  proxy:
+    external: true

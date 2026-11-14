@@ -1,0 +1,1338 @@
+{
+  "metadata": {
+    "package_id": "BR-RO-VILHENA-2026-2027",
+    "package_name": "Vilhena/RO - Grãos de Sequeiro (Safra 2026/2027)",
+    "schema_version": "1.0.0",
+    "challenge": "NASA Space Apps 2026 - Field Shift: Adapting Farms with NASA Data",
+    "project": "Rota Adaptada",
+    "location": {
+      "municipality": "Vilhena",
+      "state": "RO",
+      "country": "Brasil",
+      "ibge_code": "1100304",
+      "latitude": -12.7405,
+      "longitude": -60.1458,
+      "altitude_m": 600,
+      "biome_transition": "Cerrado / Amazônia (Chapada dos Parecis)",
+      "climate_koppen": "Aw (Tropical chuvoso com estação seca de maio a setembro)",
+      "soy_macroregion": 4,
+      "corn_rec": "401",
+      "source_reference": "IBGE (Código Municipal 1100304, Chapada dos Parecis ~600m) & IN SPA/MAPA nº 1, de 09/11/2021 (Macrorregião Sojícola 4, citada no Item 4.1 e 4.2.3 da Portaria SPA/MAPA nº 207/2026)."
+    },
+    "production_baseline_ibge": {
+      "soy_harvested_area_ha": 43221,
+      "soy_avg_yield_kg_ha": 3852,
+      "soy_avg_yield_sacks_60kg_ha": 64.2,
+      "source_reference": "IBGE - Pesquisa da Produção Agrícola Municipal (PAM) para Vilhena/RO."
+    },
+    "nasa_data_sources": {
+      "provider": "NASA POWER API (Prediction Of Worldwide Energy Resources)",
+      "endpoint_template": "https://power.larc.nasa.gov/api/temporal/daily/point?parameters=IMERG_PRECTOT,PRECTOTCORR,T2M_MAX,T2M_MIN,T2M,GWETROOT,GWETTOP&community=AG&longitude=-60.1458&latitude=-12.7405&start=20130101&end=20241231&format=JSON",
+      "historical_window": {
+        "start_year": 2013,
+        "end_year": 2024,
+        "total_years": 12
+      },
+      "parameters_used": {
+        "IMERG_PRECTOT": {
+          "unit": "mm/day",
+          "resolution": "~10 km (0.1° x 0.1°), daily in UTC",
+          "role": "Precipitação diária para cálculo de acumulados por fase fenológica e veranicos (dias consecutivos sem chuva útil)."
+        },
+        "T2M_MAX": {
+          "unit": "°C",
+          "resolution": "~50 km (0.5° x 0.625° MERRA-2 reanalysis)",
+          "role": "Temperatura máxima diária a 2m para alerta de abortamento floral e estresse térmico."
+        },
+        "T2M_MIN": {
+          "unit": "°C",
+          "resolution": "~50 km (0.5° x 0.625° MERRA-2 reanalysis)",
+          "role": "Temperatura mínima diária a 2m para alerta de noites quentes no milho (>24°C) ou frio tardio no sorgo (<12°C)."
+        },
+        "GWETROOT": {
+          "unit": "fração (0.0 a 1.0)",
+          "resolution": "~50 km (MERRA-2 Land Surface Model)",
+          "role": "Umidade na zona radicular para apoiar alertas de déficit hídrico no estabelecimento (Fase I) e florescimento (Fase III)."
+        },
+        "GWETTOP": {
+          "unit": "fração (0.0 a 1.0)",
+          "resolution": "~50 km (MERRA-2 Land Surface Model)",
+          "role": "Umidade superficial do solo (0-5 cm) para avaliar condição de semeadura e emergência."
+        }
+      },
+      "scientific_disclaimer": "Os dados do NASA POWER têm resolução espacial regional (~10 km para GPM IMERG e ~50 km para reanálise MERRA-2) e não substituem pluviômetros de talhão ou laudos agronômicos locais.",
+      "source_reference": "NASA POWER Documentation (https://power.larc.nasa.gov/docs/methodology/data/sources_meteorology/) & Portaria SPA/MAPA nº 346/2026, Anexo, Item 1.12 (que utiliza oficialmente o NASA POWER para estimativa de ETo Penman-Monteith FAO 56 no ZARC)."
+    }
+  },
+  "decendios_table": [
+    {
+      "decendio": 1,
+      "month": 1,
+      "month_name": "Janeiro",
+      "start_day": 1,
+      "end_day": 10,
+      "label": "01 a 10/Jan"
+    },
+    {
+      "decendio": 2,
+      "month": 1,
+      "month_name": "Janeiro",
+      "start_day": 11,
+      "end_day": 20,
+      "label": "11 a 20/Jan"
+    },
+    {
+      "decendio": 3,
+      "month": 1,
+      "month_name": "Janeiro",
+      "start_day": 21,
+      "end_day": 31,
+      "label": "21 a 31/Jan"
+    },
+    {
+      "decendio": 4,
+      "month": 2,
+      "month_name": "Fevereiro",
+      "start_day": 1,
+      "end_day": 10,
+      "label": "01 a 10/Fev"
+    },
+    {
+      "decendio": 5,
+      "month": 2,
+      "month_name": "Fevereiro",
+      "start_day": 11,
+      "end_day": 20,
+      "label": "11 a 20/Fev"
+    },
+    {
+      "decendio": 6,
+      "month": 2,
+      "month_name": "Fevereiro",
+      "start_day": 21,
+      "end_day": 28,
+      "label": "21 a 28/Fev"
+    },
+    {
+      "decendio": 7,
+      "month": 3,
+      "month_name": "Março",
+      "start_day": 1,
+      "end_day": 10,
+      "label": "01 a 10/Mar"
+    },
+    {
+      "decendio": 8,
+      "month": 3,
+      "month_name": "Março",
+      "start_day": 11,
+      "end_day": 20,
+      "label": "11 a 20/Mar"
+    },
+    {
+      "decendio": 9,
+      "month": 3,
+      "month_name": "Março",
+      "start_day": 21,
+      "end_day": 31,
+      "label": "21 a 31/Mar"
+    },
+    {
+      "decendio": 10,
+      "month": 4,
+      "month_name": "Abril",
+      "start_day": 1,
+      "end_day": 10,
+      "label": "01 a 10/Abr"
+    },
+    {
+      "decendio": 11,
+      "month": 4,
+      "month_name": "Abril",
+      "start_day": 11,
+      "end_day": 20,
+      "label": "11 a 20/Abr"
+    },
+    {
+      "decendio": 12,
+      "month": 4,
+      "month_name": "Abril",
+      "start_day": 21,
+      "end_day": 30,
+      "label": "21 a 30/Abr"
+    },
+    {
+      "decendio": 13,
+      "month": 5,
+      "month_name": "Maio",
+      "start_day": 1,
+      "end_day": 10,
+      "label": "01 a 10/Mai"
+    },
+    {
+      "decendio": 14,
+      "month": 5,
+      "month_name": "Maio",
+      "start_day": 11,
+      "end_day": 20,
+      "label": "11 a 20/Mai"
+    },
+    {
+      "decendio": 15,
+      "month": 5,
+      "month_name": "Maio",
+      "start_day": 21,
+      "end_day": 31,
+      "label": "21 a 31/Mai"
+    },
+    {
+      "decendio": 16,
+      "month": 6,
+      "month_name": "Junho",
+      "start_day": 1,
+      "end_day": 10,
+      "label": "01 a 10/Jun"
+    },
+    {
+      "decendio": 17,
+      "month": 6,
+      "month_name": "Junho",
+      "start_day": 11,
+      "end_day": 20,
+      "label": "11 a 20/Jun"
+    },
+    {
+      "decendio": 18,
+      "month": 6,
+      "month_name": "Junho",
+      "start_day": 21,
+      "end_day": 30,
+      "label": "21 a 30/Jun"
+    },
+    {
+      "decendio": 19,
+      "month": 7,
+      "month_name": "Julho",
+      "start_day": 1,
+      "end_day": 10,
+      "label": "01 a 10/Jul"
+    },
+    {
+      "decendio": 20,
+      "month": 7,
+      "month_name": "Julho",
+      "start_day": 11,
+      "end_day": 20,
+      "label": "11 a 20/Jul"
+    },
+    {
+      "decendio": 21,
+      "month": 7,
+      "month_name": "Julho",
+      "start_day": 21,
+      "end_day": 31,
+      "label": "21 a 31/Jul"
+    },
+    {
+      "decendio": 22,
+      "month": 8,
+      "month_name": "Agosto",
+      "start_day": 1,
+      "end_day": 10,
+      "label": "01 a 10/Ago"
+    },
+    {
+      "decendio": 23,
+      "month": 8,
+      "month_name": "Agosto",
+      "start_day": 11,
+      "end_day": 20,
+      "label": "11 a 20/Ago"
+    },
+    {
+      "decendio": 24,
+      "month": 8,
+      "month_name": "Agosto",
+      "start_day": 21,
+      "end_day": 31,
+      "label": "21 a 31/Ago"
+    },
+    {
+      "decendio": 25,
+      "month": 9,
+      "month_name": "Setembro",
+      "start_day": 1,
+      "end_day": 10,
+      "label": "01 a 10/Set"
+    },
+    {
+      "decendio": 26,
+      "month": 9,
+      "month_name": "Setembro",
+      "start_day": 11,
+      "end_day": 20,
+      "label": "11 a 20/Set"
+    },
+    {
+      "decendio": 27,
+      "month": 9,
+      "month_name": "Setembro",
+      "start_day": 21,
+      "end_day": 30,
+      "label": "21 a 30/Set"
+    },
+    {
+      "decendio": 28,
+      "month": 10,
+      "month_name": "Outubro",
+      "start_day": 1,
+      "end_day": 10,
+      "label": "01 a 10/Out"
+    },
+    {
+      "decendio": 29,
+      "month": 10,
+      "month_name": "Outubro",
+      "start_day": 11,
+      "end_day": 20,
+      "label": "11 a 20/Out"
+    },
+    {
+      "decendio": 30,
+      "month": 10,
+      "month_name": "Outubro",
+      "start_day": 21,
+      "end_day": 31,
+      "label": "21 a 31/Out"
+    },
+    {
+      "decendio": 31,
+      "month": 11,
+      "month_name": "Novembro",
+      "start_day": 1,
+      "end_day": 10,
+      "label": "01 a 10/Nov"
+    },
+    {
+      "decendio": 32,
+      "month": 11,
+      "month_name": "Novembro",
+      "start_day": 11,
+      "end_day": 20,
+      "label": "11 a 20/Nov"
+    },
+    {
+      "decendio": 33,
+      "month": 11,
+      "month_name": "Novembro",
+      "start_day": 21,
+      "end_day": 30,
+      "label": "21 a 30/Nov"
+    },
+    {
+      "decendio": 34,
+      "month": 12,
+      "month_name": "Dezembro",
+      "start_day": 1,
+      "end_day": 10,
+      "label": "01 a 10/Dez"
+    },
+    {
+      "decendio": 35,
+      "month": 12,
+      "month_name": "Dezembro",
+      "start_day": 11,
+      "end_day": 20,
+      "label": "11 a 20/Dez"
+    },
+    {
+      "decendio": 36,
+      "month": 12,
+      "month_name": "Dezembro",
+      "start_day": 21,
+      "end_day": 31,
+      "label": "21 a 31/Dez"
+    }
+  ],
+  "soil_profiles": {
+    "AD3_MEDIA": {
+      "id": "AD3_MEDIA",
+      "name": "Latossolo Textura Média (AD3 / Tipo 2)",
+      "zarc_ad_class": "AD3",
+      "sorghum_soil_type": "Tipo 2",
+      "water_availability_mm_cm": {
+        "min": 0.61,
+        "max": 0.8
+      },
+      "cad_mm": {
+        "soja_ze_60cm": 42.0,
+        "milho_ze_60cm": 41.4,
+        "sorgo_ze_50cm": 55.0
+      },
+      "drainage": "Boa",
+      "notes": "Menor retenção hídrica na transição março-abril; exige fechamento de janela de 2ª safra mais cedo.",
+      "source_reference": {
+        "soja_and_milho_ad_classes": "Instrução Normativa SPA/MAPA nº 1, de 21/06/2022; Portaria SPA/MAPA nº 207/2026 (Itens 1.9.3, 2.1, 2.2 e 2.3) e Portaria SPA/MAPA nº 346/2026 (Itens 1.16, 2.1 e 2.2) - Ze = 60 cm.",
+        "sorgo_soil_types": "Instrução Normativa SPA/MAPA nº 2, de 09/11/2021 e Portaria SPA/MAPA nº 285/2026 (Itens 1.8.3 e 2.1) - Ze = 50 cm."
+      }
+    },
+    "AD4_ARGILOSA": {
+      "id": "AD4_ARGILOSA",
+      "name": "Latossolo Vermelho-Amarelo Argiloso (AD4 / Tipo 3) - Padrão Vilhena",
+      "zarc_ad_class": "AD4",
+      "sorghum_soil_type": "Tipo 3",
+      "water_availability_mm_cm": {
+        "min": 0.8,
+        "max": 1.06
+      },
+      "cad_mm": {
+        "soja_ze_60cm": 55.0,
+        "milho_ze_60cm": 54.6,
+        "sorgo_ze_50cm": 75.0
+      },
+      "drainage": "Boa (Profundo, > 0.5m, sem pedregosidade)",
+      "notes": "Perfil demonstrativo principal da Chapada dos Parecis em Vilhena.",
+      "source_reference": {
+        "soja_and_milho_ad_classes": "Instrução Normativa SPA/MAPA nº 1, de 21/06/2022; Portaria SPA/MAPA nº 207/2026 (Itens 1.9.3, 2.1, 2.2 e 2.3) e Portaria SPA/MAPA nº 346/2026 (Itens 1.16, 2.1 e 2.2) - Ze = 60 cm.",
+        "sorgo_soil_types": "Instrução Normativa SPA/MAPA nº 2, de 09/11/2021 e Portaria SPA/MAPA nº 285/2026 (Itens 1.8.3 e 2.1) - Ze = 50 cm."
+      }
+    },
+    "AD5_MUITO_ARGILOSA": {
+      "id": "AD5_MUITO_ARGILOSA",
+      "name": "Latossolo Muito Argiloso c/ Plantio Direto Consolidado (AD5 / Tipo 3)",
+      "zarc_ad_class": "AD5",
+      "sorghum_soil_type": "Tipo 3",
+      "water_availability_mm_cm": {
+        "min": 1.06,
+        "max": 1.4
+      },
+      "cad_mm": {
+        "soja_ze_60cm": 72.0,
+        "milho_ze_60cm": 72.6,
+        "sorgo_ze_50cm": 75.0
+      },
+      "drainage": "Boa",
+      "notes": "Alta reserva útil de água; suporta melhor veranicos curtos no final de março.",
+      "source_reference": {
+        "soja_and_milho_ad_classes": "Instrução Normativa SPA/MAPA nº 1, de 21/06/2022; Portaria SPA/MAPA nº 207/2026 (Itens 1.9.3, 2.1, 2.2 e 2.3) e Portaria SPA/MAPA nº 346/2026 (Itens 1.16, 2.1 e 2.2) - Ze = 60 cm.",
+        "sorgo_soil_types": "Instrução Normativa SPA/MAPA nº 2, de 09/11/2021 e Portaria SPA/MAPA nº 285/2026 (Itens 1.8.3 e 2.1) - Ze = 50 cm."
+      }
+    }
+  },
+  "sanitary_and_legal_constraints": [
+    {
+      "rule_id": "RO_VAZIO_SANITARIO_SOJA_2026",
+      "crop_id": "SOJA",
+      "type": "HARD_BLOCK_NO_LIVE_PLANTS",
+      "authority": "Idaron/RO & Portaria SDA/MAPA nº 1.579, de 9 de abril de 2026",
+      "start_mm_dd": "06-10",
+      "end_mm_dd": "09-10",
+      "enforcement_message": "Bloqueio Fitossanitário: O ciclo da soja não pode adentrar o Vazio Sanitário de Rondônia (10/06 a 10/09) para prevenção da ferrugem asiática (Phakopsora pachyrhizi)."
+    },
+    {
+      "rule_id": "RO_CALENDARIO_SEMEADURA_SOJA_2026_2027",
+      "crop_id": "SOJA",
+      "type": "HARD_BLOCK_SOWING_WINDOW",
+      "authority": "Idaron/RO & Portaria SDA/MAPA nº 1.579, de 9 de abril de 2026",
+      "allowed_start_mm_dd": "09-11",
+      "allowed_end_mm_dd": "01-09",
+      "enforcement_message": "Bloqueio Legal: Em Rondônia, a semeadura da soja só é permitida entre 11 de setembro e 09 de janeiro."
+    },
+    {
+      "rule_id": "ZARC_DELAYED_EMERGENCE_RULE",
+      "crop_id": "ALL",
+      "type": "ZARC_METHODOLOGY_RULE",
+      "authority": "Portarias ZARC SPA/MAPA 2026/2027 (Item 3.2)",
+      "emergence_expected_days": [
+        5,
+        10
+      ],
+      "delay_threshold_days": 11,
+      "enforcement_message": "Nota ZARC: O risco considera emergência em 5 a 10 dias. Se a falta de chuva atrasar a emergência em 11 dias ou mais, o enquadramento passa ao decêndio anterior."
+    }
+  ],
+  "crops_catalog": {
+    "SOJA": {
+      "crop_id": "SOJA",
+      "common_name": "Soja (1ª Safra - Verão)",
+      "scientific_name": "Glycine max (L.) Merr.",
+      "botanical_family": "Fabaceae (Leguminosa)",
+      "role_in_prototype": "COMMERCIAL_MAIN",
+      "legal_reference": "Portaria SPA/MAPA nº 207, de 30 de junho de 2026 (D.O.U. 03/07/2026) - Safra 2026/2027",
+      "agronomic_functions": {
+        "nitrogen_fixation": true,
+        "cover_biomass_potential": "Baixa (relação C/N baixa, decomposição rápida da palhada)",
+        "pest_and_disease_notes": "Hospedeira da ferrugem asiática e de nematoides (Meloidogyne spp. e Pratylenchus brachyurus); exige rotação com gramíneas não hospedeiras.",
+        "soil_health_summary": "Fornece aporte biológico de Nitrogênio (FBN), mas deixa pouca cobertura residual no solo após a colheita."
+      },
+      "zarc_windows_vilhena": {
+        "synthesized_low_risk_20pct_dates": "01 de outubro a 10 de janeiro",
+        "decendios_by_soil": {
+          "AD3_MEDIA": {
+            "risk_20pct": [
+              28,
+              29,
+              30,
+              31,
+              32,
+              33,
+              34,
+              35,
+              36
+            ],
+            "risk_30pct": [
+              1
+            ],
+            "risk_40pct": [
+              27
+            ]
+          },
+          "AD4_ARGILOSA": {
+            "risk_20pct": [
+              28,
+              29,
+              30,
+              31,
+              32,
+              33,
+              34,
+              35,
+              36,
+              1
+            ],
+            "risk_30pct": [
+              27
+            ],
+            "risk_40pct": [
+              2
+            ]
+          },
+          "AD5_MUITO_ARGILOSA": {
+            "risk_20pct": [
+              28,
+              29,
+              30,
+              31,
+              32,
+              33,
+              34,
+              35,
+              36,
+              1
+            ],
+            "risk_30pct": [
+              27,
+              2
+            ],
+            "risk_40pct": []
+          }
+        },
+        "pre_zarc_legal_Note": "De 11/09 a 30/09 (Decêndios 26 e 27), o plantio é legalmente permitido pela Idaron, mas apresenta maior risco de veranico inicial no ZARC."
+      },
+      "cultivar_groups": {
+        "GRUPO_I_PRECOCE": {
+          "group_id": "GRUPO_I",
+          "gmr_criterion": "GMR < 7.9 (Macrorregião 4)",
+          "cycle_days_default": 105,
+          "cycle_days_range": [
+            100,
+            110
+          ],
+          "phases_days": {
+            "F1_estabelecimento": 15,
+            "F2_vegetativo": 30,
+            "F3_floracao_enchimento": 40,
+            "F4_maturacao": 20
+          },
+          "recommended_cultivars_ro": [
+            {
+              "name": "BRS 7582",
+              "maintainer": "Embrapa Soja",
+              "group": "I"
+            },
+            {
+              "name": "BRS 1075IPRO",
+              "maintainer": "Embrapa Soja",
+              "group": "I"
+            },
+            {
+              "name": "TMG 2374IPRO",
+              "maintainer": "TMG",
+              "group": "I"
+            },
+            {
+              "name": "75I77RSF IPRO",
+              "maintainer": "GDM Genética",
+              "group": "I"
+            }
+          ]
+        },
+        "GRUPO_II_MEDIO": {
+          "group_id": "GRUPO_II",
+          "gmr_criterion": "7.9 <= GMR <= 8.5 (Macrorregião 4)",
+          "cycle_days_default": 118,
+          "cycle_days_range": [
+            115,
+            125
+          ],
+          "phases_days": {
+            "F1_estabelecimento": 15,
+            "F2_vegetativo": 35,
+            "F3_floracao_enchimento": 45,
+            "F4_maturacao": 23
+          },
+          "recommended_cultivars_ro": [
+            {
+              "name": "BRS 8481",
+              "maintainer": "Embrapa Soja",
+              "group": "II"
+            },
+            {
+              "name": "BRSMT Pintado",
+              "maintainer": "Embrapa Soja",
+              "group": "II"
+            },
+            {
+              "name": "M8372IPRO",
+              "maintainer": "D&PL Brasil",
+              "group": "II"
+            },
+            {
+              "name": "TMG 2381IPRO",
+              "maintainer": "TMG",
+              "group": "II"
+            }
+          ]
+        }
+      },
+      "climate_thresholds_nasa": {
+        "water_cycle_requirement_mm": {
+          "min": 450,
+          "max": 800
+        },
+        "peak_daily_water_need_f3_mm": 7.5,
+        "zarc_isna_thresholds": {
+          "F1": 0.5,
+          "F3": 0.55
+        },
+        "alert_triggers": {
+          "f1_establishment_min_rain_15d_mm": 45.0,
+          "f1_max_consecutive_dry_days": 7,
+          "f3_reproductive_min_rain_30d_mm": 160.0,
+          "f3_max_consecutive_dry_days": 8,
+          "f4_harvest_excess_rain_10d_mm": 120.0,
+          "temp_optimal_range_c": [
+            20.0,
+            30.0
+          ],
+          "temp_max_heat_stress_c": 40.0,
+          "temp_max_warning_f3_c": 36.0,
+          "temp_min_growth_arrest_c": 10.0,
+          "gwetroot_critical_f3": 0.45
+        }
+      },
+      "source_details": {
+        "normative_act": "Portaria SPA/MAPA nº 207, de 30 de junho de 2026 (D.O.U. 03/07/2026)",
+        "url": "https://www.gov.br/agricultura/pt-br/assuntos/riscos-seguro/programa-nacional-de-zoneamento-agricola-de-risco-climatico/portarias/safra-vigente/rondonia/PORTN207SOJARO.pdf/@@download/file",
+        "items_extracted": {
+          "water_requirements": "Anexo, Item 1.4 (450 a 800 mm/ciclo; pico de 7 a 8 mm/dia na floração/enchimento)",
+          "temperature_thresholds": "Anexo, Item 1.5 (faixa ótima 20 a 30°C; ideal ~30°C; paralisa < 10°C; abortamento floral/vagens > 40°C) e Item 1.9.1 (mínima <= 3°C)",
+          "cycles_and_phases": "Anexo, Item 1.9.2 (ciclos de 100, 115 e 130 dias em 4 fases fenológicas)",
+          "isna_thresholds": "Anexo, Item 1.9.4 (ISNA >= 0,50 na Fase I e ISNA >= 0,55 na Fase III)",
+          "cultivar_groups_and_list": "Anexo, Item 4.1 (Macrorregião 4: Grupo I GMR < 7,9; Grupo II 7,9 <= GMR <= 8,5; Grupo III GMR > 8,5)",
+          "vilhena_window": "Item 5 (SISZARC / Painel ZARC para Vilhena/RO: menor risco 20% de 01/10 a 10/01 - Decêndios 28 a 1)"
+        }
+      }
+    },
+    "MILHO_2_SAFRA": {
+      "crop_id": "MILHO_2_SAFRA",
+      "common_name": "Milho 2ª Safra (Safrinha - Solteiro ou Consorciado c/ Braquiária)",
+      "scientific_name": "Zea mays L.",
+      "botanical_family": "Poaceae (Gramínea C4)",
+      "role_in_prototype": "COMMERCIAL_SUCCESSION",
+      "legal_reference": "Portarias SPA/MAPA nº 331, de 28/07/2026 (Milho 2ª Safra) e nº 346, de 28/07/2026 (Milho + Braquiária 2ª Safra) - Safra 2026/2027",
+      "agronomic_functions": {
+        "nitrogen_fixation": false,
+        "cover_biomass_potential": "Alta (especialmente quando consorciado com Brachiaria brizantha)",
+        "pest_and_disease_notes": "Excelente produtor de palhada, mas a sucessão contínua Soja-Milho ano após ano pode manter populações de Pratylenchus brachyurus e cigarrinha-do-milho.",
+        "soil_health_summary": "Aporta elevado volume de palhada com alta relação C/N, mas exige alta disponibilidade hídrica e nitrogenada."
+      },
+      "zarc_windows_vilhena": {
+        "synthesized_low_risk_20pct_dates": "01 de janeiro a 20 de março",
+        "decendios_by_soil": {
+          "AD3_MEDIA": {
+            "risk_20pct": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "risk_30pct": [
+              7
+            ],
+            "risk_40pct": [
+              8
+            ]
+          },
+          "AD4_ARGILOSA": {
+            "risk_20pct": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "risk_30pct": [
+              8
+            ],
+            "risk_40pct": []
+          },
+          "AD5_MUITO_ARGILOSA": {
+            "risk_20pct": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "risk_30pct": [],
+            "risk_40pct": [
+              9
+            ]
+          }
+        }
+      },
+      "cultivar_groups": {
+        "GRUPO_I_PRECOCE": {
+          "group_id": "GRUPO_I",
+          "gmr_criterion": "Ciclo até 110 dias (Tabela Oficial Item 1.15 da Portaria)",
+          "cycle_days_default": 100,
+          "cycle_days_range": [
+            90,
+            110
+          ],
+          "phases_days": {
+            "F1_estabelecimento": 20,
+            "F2_vegetativo": 30,
+            "F3_floracao_enchimento": 30,
+            "F4_maturacao": 20
+          },
+          "recommended_cultivars_ro": [
+            {
+              "name": "BRS 1055",
+              "maintainer": "Embrapa Milho e Sorgo",
+              "group": "I"
+            },
+            {
+              "name": "2A401PW",
+              "maintainer": "Corteva Agriscience",
+              "group": "I"
+            },
+            {
+              "name": "3040VIP3",
+              "maintainer": "Syngenta Seeds",
+              "group": "I"
+            },
+            {
+              "name": "BM 207",
+              "maintainer": "Helix Sementes",
+              "group": "I"
+            }
+          ]
+        },
+        "GRUPO_II_MEDIO": {
+          "group_id": "GRUPO_II",
+          "gmr_criterion": "Ciclo de 111 a 130 dias (Tabela Oficial Item 1.15 da Portaria)",
+          "cycle_days_default": 120,
+          "cycle_days_range": [
+            111,
+            130
+          ],
+          "phases_days": {
+            "F1_estabelecimento": 20,
+            "F2_vegetativo": 40,
+            "F3_floracao_enchimento": 40,
+            "F4_maturacao": 20
+          },
+          "recommended_cultivars_ro": [
+            {
+              "name": "AG 8088 PRO2",
+              "maintainer": "Agroceres / Bayer",
+              "group": "II"
+            },
+            {
+              "name": "30F53",
+              "maintainer": "Corteva Agriscience",
+              "group": "II"
+            }
+          ]
+        }
+      },
+      "climate_thresholds_nasa": {
+        "water_cycle_requirement_mm": {
+          "min": 500,
+          "max": 800
+        },
+        "zarc_isna_thresholds": {
+          "F1": 0.7,
+          "F3": 0.5,
+          "F4_excess_max": 0.9
+        },
+        "alert_triggers": {
+          "f1_establishment_min_rain_20d_mm": 70.0,
+          "f3_reproductive_min_rain_30d_mm": 135.0,
+          "f3_max_consecutive_dry_days": 7,
+          "f4_excess_rain_20d_mm": 140.0,
+          "temp_day_optimal_c": [
+            30.0,
+            33.0
+          ],
+          "temp_night_optimal_c": [
+            17.0,
+            23.0
+          ],
+          "temp_night_warm_stress_f3_c": 24.0,
+          "temp_mean_min_f3_c": 18.0,
+          "temp_min_frost_damage_c": 2.0,
+          "gwetroot_critical_f3": 0.5
+        }
+      },
+      "source_details": {
+        "normative_act": "Portaria SPA/MAPA nº 331, de 28/07/2026 (D.O.U. 30/07/2026) e Portaria SPA/MAPA nº 346, de 28/07/2026 (D.O.U. 06/08/2026)",
+        "url": "https://www.gov.br/agricultura/pt-br/assuntos/riscos-seguro/programa-nacional-de-zoneamento-agricola-de-risco-climatico/portarias/safra-vigente/rondonia/PO46791.PDF",
+        "items_extracted": {
+          "temperature_thresholds": "Anexo, Item 1.4 (germinação > 10°C; diurna ideal 30 a 33°C; noturna ideal 17 a 23°C; noite > 24°C prejudica enchimento de grãos) e Item 1.17 'b' e 'c' (média < 18°C na Fase III; mínima < 2°C nas Fases I, II e III)",
+          "altitude_effect": "Anexo, Item 1.5 (influência da altitude na radiação, fotossíntese e duração do ciclo)",
+          "nasa_power_official_use": "Anexo, Item 1.12 (uso oficial do projeto NASA POWER pelo MAPA para cálculo de ETo Penman-Monteith FAO 56)",
+          "cycles_and_phases_table": "Anexo, Item 1.15 (Tabela oficial: Grupo I até 110 dias -> F1: 20d, F2: 30d, F3: 30d, F4: 20d; Grupo II 111 a 130 dias -> F1: 20d, F2: 40d, F3: 40d, F4: 20d)",
+          "isna_thresholds": "Anexo, Item 1.17 'a' e 'd' (limite de deficiência hídrica ISNA 0,70 na Fase I e 0,50 na Fase III; excesso hídrico ISNA >= 0,90 na Fase IV)",
+          "vilhena_window": "Item 5 (SISZARC / Painel ZARC para Vilhena/RO: menor risco 20% de 01/01 a 20/03 - Decêndios 1 a 8)",
+          "cultivars_rnc": "Item 4.1 e listagem RNC/SISZARC RO 2026/2027 (2A401PW RNC 32984, 3040VIP3 RNC 34357, BM 207, BRS 1055)"
+        }
+      }
+    },
+    "MILHO_1_SAFRA": {
+      "crop_id": "MILHO_1_SAFRA",
+      "common_name": "Milho 1ª Safra (Verão - Rotação de Safra Principal)",
+      "scientific_name": "Zea mays L.",
+      "botanical_family": "Poaceae (Gramínea C4)",
+      "role_in_prototype": "COMMERCIAL_SUMMER_ROTATION",
+      "legal_reference": "Portarias SPA/MAPA nº 233, de 30/06/2026 e nº 260, de 14/07/2026 - Safra 2026/2027",
+      "agronomic_functions": {
+        "nitrogen_fixation": false,
+        "cover_biomass_potential": "Muito Alta",
+        "pest_and_disease_notes": "Quebra o ciclo de doenças necrotróficas da soja no verão.",
+        "soil_health_summary": "Alternativa de rotação comercial no verão para diversificar a família botânica na safra principal."
+      },
+      "zarc_windows_vilhena": {
+        "synthesized_low_risk_20pct_dates": "11 de novembro a 31 de dezembro",
+        "decendios_by_soil": {
+          "AD3_MEDIA": {
+            "risk_20pct": [
+              32,
+              33,
+              34,
+              35,
+              36
+            ],
+            "risk_30pct": [
+              31
+            ],
+            "risk_40pct": []
+          },
+          "AD4_ARGILOSA": {
+            "risk_20pct": [
+              32,
+              33,
+              34,
+              35,
+              36
+            ],
+            "risk_30pct": [
+              31,
+              1
+            ],
+            "risk_40pct": []
+          },
+          "AD5_MUITO_ARGILOSA": {
+            "risk_20pct": [
+              32,
+              33,
+              34,
+              35,
+              36
+            ],
+            "risk_30pct": [
+              31,
+              1
+            ],
+            "risk_40pct": []
+          }
+        }
+      },
+      "cultivar_groups": {
+        "GRUPO_I_PRECOCE": {
+          "group_id": "GRUPO_I",
+          "gmr_criterion": "Ciclo até 110 dias",
+          "cycle_days_default": 105,
+          "cycle_days_range": [
+            95,
+            110
+          ],
+          "phases_days": {
+            "F1_estabelecimento": 20,
+            "F2_vegetativo": 30,
+            "F3_floracao_enchimento": 30,
+            "F4_maturacao": 25
+          },
+          "recommended_cultivars_ro": [
+            {
+              "name": "20A55PWU",
+              "maintainer": "Longping High-Tech",
+              "group": "I"
+            },
+            {
+              "name": "3040VIP3",
+              "maintainer": "Syngenta Seeds",
+              "group": "I"
+            }
+          ]
+        }
+      },
+      "climate_thresholds_nasa": {
+        "water_cycle_requirement_mm": {
+          "min": 500,
+          "max": 800
+        },
+        "zarc_isna_thresholds": {
+          "F1": 0.7,
+          "F3": 0.5
+        },
+        "alert_triggers": {
+          "f1_establishment_min_rain_20d_mm": 70.0,
+          "f3_reproductive_min_rain_30d_mm": 135.0,
+          "f3_max_consecutive_dry_days": 7,
+          "temp_night_warm_stress_f3_c": 24.0,
+          "gwetroot_critical_f3": 0.5
+        }
+      },
+      "source_details": {
+        "normative_act": "Portaria SPA/MAPA nº 233, de 30/06/2026 (D.O.U. 10/07/2026) e Portaria SPA/MAPA nº 260, de 14/07/2026",
+        "url": "https://calculadorarural.com.br/agro/ro/vilhena",
+        "items_extracted": {
+          "vilhena_window": "SISZARC / Painel ZARC para Vilhena/RO: menor risco 20% de 11/11 a 31/12 (Decêndios 32 a 36)",
+          "cultivars_rnc": "Listagem RNC/SISZARC RO 2026/2027 (20A55PWU RNC 39741, 3040VIP3 RNC 34357)"
+        }
+      }
+    },
+    "SORGO_GRANIFERO": {
+      "crop_id": "SORGO_GRANIFERO",
+      "common_name": "Sorgo Granífero (2ª Safra - Alternativa Comercial Resiliente)",
+      "scientific_name": "Sorghum bicolor (L.) Moench",
+      "botanical_family": "Poaceae (Gramínea C4)",
+      "role_in_prototype": "COMMERCIAL_ALTERNATIVE",
+      "legal_reference": "Portaria SPA/MAPA nº 285, de 20 de julho de 2026 (D.O.U. 22/07/2026) - Safra 2026/2027 & Embrapa Rondônia",
+      "agronomic_functions": {
+        "nitrogen_fixation": false,
+        "cover_biomass_potential": "Alta (sistema radicular profundo, alta concentração de pelos absorventes e sílica na endoderme)",
+        "pest_and_disease_notes": "Menor risco de perda quando a soja atrasa; reduz pressão de pragas específicas do milho.",
+        "soil_health_summary": "Sistema radicular denso e profundo que estrutura o solo e mantém cobertura viva por mais tempo sob transição para a seca."
+      },
+      "zarc_windows_vilhena": {
+        "synthesized_low_risk_20pct_dates": "01 de janeiro a 31 de março (2ª Safra) | 21 de novembro a 31 de dezembro (1ª Safra)",
+        "decendios_by_soil": {
+          "AD3_MEDIA": {
+            "risk_20pct": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "risk_30pct": [
+              9
+            ],
+            "risk_40pct": []
+          },
+          "AD4_ARGILOSA": {
+            "risk_20pct": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "risk_30pct": [],
+            "risk_40pct": [
+              10
+            ]
+          },
+          "AD5_MUITO_ARGILOSA": {
+            "risk_20pct": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "risk_30pct": [
+              10
+            ],
+            "risk_40pct": []
+          }
+        },
+        "window_advantage_vs_corn": "+10 a +20 dias de janela ZARC em março comparado ao milho 2ª safra."
+      },
+      "cultivar_groups": {
+        "GRUPO_I_PRECOCE": {
+          "group_id": "GRUPO_I",
+          "gmr_criterion": "Grupo I (n <= 110 dias da emergência à maturação fisiológica)",
+          "cycle_days_default": 100,
+          "cycle_days_range": [
+            95,
+            110
+          ],
+          "phases_days": {
+            "F1_estabelecimento": 15,
+            "F2_vegetativo": 30,
+            "F3_floracao_enchimento": 35,
+            "F4_maturacao": 20
+          },
+          "recommended_cultivars_ro": [
+            {
+              "name": "50A40",
+              "maintainer": "Corteva Agriscience",
+              "group": "II"
+            },
+            {
+              "name": "84G02",
+              "maintainer": "Corteva Agriscience",
+              "group": "I"
+            },
+            {
+              "name": "BM 750",
+              "maintainer": "Helix Sementes",
+              "group": "I"
+            },
+            {
+              "name": "ADV 1106",
+              "maintainer": "Advanta Sementes",
+              "group": "I"
+            },
+            {
+              "name": "BRS 373",
+              "maintainer": "Embrapa Milho e Sorgo (Referência Regional)",
+              "group": "I"
+            }
+          ]
+        }
+      },
+      "climate_thresholds_nasa": {
+        "water_cycle_requirement_mm": {
+          "min": 350,
+          "max": 600
+        },
+        "zarc_isna_thresholds": {
+          "F1": 0.6,
+          "F3": 0.45
+        },
+        "alert_triggers": {
+          "f1_establishment_min_rain_15d_mm": 45.0,
+          "f3_reproductive_min_rain_35d_mm": 95.0,
+          "f3_max_consecutive_dry_days": 11,
+          "temp_optimal_min_c": 21.0,
+          "temp_max_heat_stress_c": 38.0,
+          "temp_min_growth_inhibition_c": 16.0,
+          "temp_min_zarc_restriction_c": 12.0,
+          "gwetroot_critical_f3": 0.38
+        }
+      },
+      "source_details": {
+        "normative_act": "Portaria SPA/MAPA nº 285, de 20 de julho de 2026 (D.O.U. 22/07/2026, Seção 1)",
+        "url": "https://www.gov.br/agricultura/pt-br/assuntos/riscos-seguro/programa-nacional-de-zoneamento-agricola-de-risco-climatico/portarias/safra-vigente/rondonia/PORTN285SORGOGRANIFERORO.pdf",
+        "items_extracted": {
+          "physiology_and_drought_resistance": "Anexo, Item 1.1 e 1.2 (planta C4, sistema radicular profundo, alta concentração de pelos absorventes, sílica na endoderme e lignificação no periciclo)",
+          "temperature_thresholds": "Anexo, Item 1.1 (requer > 21°C; não suporta < 16°C; reduz produtividade > 38°C) e Item 1.8.1 (restrição para mínimas médias < 12°C, máximas > 38°C e geada < 2°C)",
+          "cycles_and_phases": "Anexo, Item 1.8.2 (4 fases fenológicas; Grupo I <= 110 dias, Grupo II 111 a 130 dias, Grupo III > 130 dias)",
+          "soil_cad": "Anexo, Item 1.8.3 (Ze = 50 cm; Tipo 1 CAD 35 mm, Tipo 2 CAD 55 mm, Tipo 3 CAD 75 mm)",
+          "isna_thresholds": "Anexo, Item 1.8.4 (ISNA >= 0,60 na Fase I e ISNA >= 0,45 na Fase III)",
+          "cultivar_list": "Anexo, Item 4.1 (Grupo I: 84G02, BM750, ADV 1106; Grupo II: 50A40)",
+          "vilhena_window": "Item 5 (SISZARC / Painel ZARC para Vilhena/RO: 2ª Safra menor risco 20% de 01/01 a 31/03 - Decêndios 1 a 9; 1ª Safra de 21/11 a 31/12 - Decêndios 33 a 36)"
+        }
+      }
+    },
+    "MILHETO": {
+      "crop_id": "MILHETO",
+      "common_name": "Milheto (Alternativa de Cobertura e Ciclagem no Fechamento das Chuvas)",
+      "scientific_name": "Pennisetum glaucum (L.) R. Br.",
+      "botanical_family": "Poaceae (Gramínea C4 anual)",
+      "role_in_prototype": "COVER_CROP_ALTERNATIVE",
+      "legal_reference": "Embrapa Milho e Sorgo (Comunicado Técnico 94 / 2022) & Embrapa Rondônia (CT 54 / Sistemas de Produção)",
+      "agronomic_functions": {
+        "nitrogen_fixation": false,
+        "cover_biomass_potential": "Altíssima (6 a 10 t/ha de massa seca com raízes de até 2m de profundidade)",
+        "pest_and_disease_notes": "Reduz drasticamente populações de nematoides das galhas (Meloidogyne incognita, M. javanica) e das lesões (Pratylenchus brachyurus).",
+        "soil_health_summary": "Protege o solo contra erosão, recicla nutrientes lixiviados (K e N) sem exigir adubação nitrogenada após a soja e conserva a umidade para a safra seguinte."
+      },
+      "zarc_windows_vilhena": {
+        "synthesized_low_risk_20pct_dates": "01 de fevereiro a 30 de abril (Manejo para cobertura do solo)",
+        "decendios_by_soil": {
+          "AD3_MEDIA": {
+            "recommended_cover": [
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11
+            ],
+            "marginal_late": [
+              12
+            ]
+          },
+          "AD4_ARGILOSA": {
+            "recommended_cover": [
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12
+            ],
+            "marginal_late": [
+              13
+            ]
+          },
+          "AD5_MUITO_ARGILOSA": {
+            "recommended_cover": [
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12
+            ],
+            "marginal_late": [
+              13
+            ]
+          }
+        },
+        "window_advantage_vs_corn": "Permite semeadura em abril após colheitas de soja muito tardias, onde nenhuma cultura comercial de grãos tem janela ZARC."
+      },
+      "cultivar_groups": {
+        "MANEJO_COBERTURA_FLORESCIMENTO": {
+          "group_id": "COBERTURA_55D",
+          "gmr_criterion": "Dessecação/rolagem no pleno florescimento (50 a 60 dias) para evitar ressemeadura e otimizar palhada",
+          "cycle_days_default": 58,
+          "cycle_days_range": [
+            50,
+            65
+          ],
+          "phases_days": {
+            "F1_estabelecimento": 10,
+            "F2_vegetativo_biomassa": 35,
+            "F3_florescimento_manejo": 13,
+            "F4_maturacao": 0
+          },
+          "recommended_cultivars_ro": [
+            {
+              "name": "BRS 1501",
+              "maintainer": "Embrapa Milho e Sorgo",
+              "cycle_note": "50 dias até florescimento"
+            },
+            {
+              "name": "BRS 1502",
+              "maintainer": "Embrapa Milho e Sorgo",
+              "cycle_note": "60 dias até florescimento, alta biomassa e raiz profunda"
+            },
+            {
+              "name": "ADR 300",
+              "maintainer": " Sementes Adriana / Atto",
+              "cycle_note": "Alto vigor para formação de palhada"
+            }
+          ]
+        },
+        "MANEJO_GRAOS_SEMENTES": {
+          "group_id": "GRAOS_90D",
+          "gmr_criterion": "Ciclo completo até maturidade fisiológica (ED 9)",
+          "cycle_days_default": 90,
+          "cycle_days_range": [
+            85,
+            100
+          ],
+          "phases_days": {
+            "F1_estabelecimento": 12,
+            "F2_vegetativo": 33,
+            "F3_floracao_enchimento": 28,
+            "F4_maturacao": 17
+          },
+          "recommended_cultivars_ro": [
+            {
+              "name": "BRS 1501",
+              "maintainer": "Embrapa Milho e Sorgo",
+              "cycle_note": "90 a 100 dias para grãos"
+            },
+            {
+              "name": "BRS 1502",
+              "maintainer": "Embrapa Milho e Sorgo",
+              "cycle_note": "95 a 100 dias para grãos"
+            }
+          ]
+        }
+      },
+      "climate_thresholds_nasa": {
+        "water_cycle_requirement_mm": {
+          "min": 200,
+          "max": 400
+        },
+        "alert_triggers": {
+          "f1_establishment_min_rain_10d_mm": 25.0,
+          "total_cycle_min_rain_mm": 180.0,
+          "max_consecutive_dry_days_f2": 15,
+          "temp_min_growth_inhibition_c": 12.0,
+          "gwettop_min_emergence": 0.35
+        }
+      },
+      "source_details": {
+        "normative_act": "Publicações Técnicas Embrapa Rondônia (Infoteca doc 983788 / CT 54) & Embrapa Milho e Sorgo (Comunicado Técnico 94 / 2022)",
+        "url": "https://www.infoteca.cnptia.embrapa.br/infoteca/handle/doc/983788",
+        "items_extracted": {
+          "cycles_and_cultivars": "Embrapa Milho e Sorgo COT 94/2022 (BRS 1501 florescimento aos 50 dias; BRS 1502 florescimento aos 60 dias; ciclo para grãos de 90 a 100 dias)",
+          "agronomic_benefits": "Embrapa Rondônia / Sistemas de Produção (formação de 6 a 10 t/ha de massa seca, ciclagem de K e N, supressão de Meloidogyne incognita, M. javanica e Pratylenchus brachyurus)"
+        }
+      }
+    }
+  },
+  "comparison_engine_rules": {
+    "operational_constraints": {
+      "min_interval_between_crops_days": 5,
+      "default_interval_between_crops_days": 7,
+      "horizon_years": 2
+    },
+    "soil_exposure_metrics": {
+      "bare_soil_warning_threshold_days_per_year": 60,
+      "mulch_protection_factor_after_cover_crop_days": 90,
+      "description": "Intervalos entre colheita e próximo plantio sem palhada ativa contam como 'Dias de Solo Exposto' (Bare-Field Days)."
+    },
+    "succession_vs_rotation_detection": {
+      "recurrent_succession_pattern": [
+        "SOJA",
+        "MILHO_2_SAFRA",
+        "SOJA",
+        "MILHO_2_SAFRA"
+      ],
+      "warning_message": "Sucessão Recorrente Detectada: Repetir Soja -> Milho nos 2 anos configura sucessão e não rotação plena. Avalie incluir Sorgo, Milheto ou consórcio com Braquiária para quebrar ciclos biológicos."
+    },
+    "strategy_archetypes": [
+      {
+        "strategy_id": "PLANO_ATUAL",
+        "title": "1. Manter Sequência Original (Com Atraso)",
+        "modifications_count": 0,
+        "goal": "Avaliar o efeito dominó do atraso mantendo exatamente as culturas planejadas pelo produtor."
+      },
+      {
+        "strategy_id": "AJUSTE_CALENDARIO_CICLO",
+        "title": "2. Ajuste de Ciclo / Janela",
+        "modifications_count": 1,
+        "goal": "Preservar a espécie comercial seguinte trocando para grupo precoce (Grupo I) ou reduzindo o intervalo operacional."
+      },
+      {
+        "strategy_id": "ALTERNATIVA_COMERCIAL_SORGO",
+        "title": "3. Substituição Comercial por Sorgo Granífero",
+        "modifications_count": 1,
+        "goal": "Substituir o Milho 2ª safra tardio por Sorgo Granífero (janela ZARC até 31/03 e menor exigência hídrica ISNA >= 0,45)."
+      },
+      {
+        "strategy_id": "ALTERNATIVA_COBERTURA_MILHETO",
+        "title": "4. Transição para Cobertura do Solo (Milheto)",
+        "modifications_count": 1,
+        "goal": "Trocar a 2ª safra comercial de alto risco por Milheto (58 dias), protegendo o solo, reciclando K/N e reduzindo nematoides para a soja do Ano 2."
+      }
+    ],
+    "mandatory_explanation_fields_space_apps": [
+      "why_suggested",
+      "historical_nasa_evidence_2013_2024",
+      "soil_health_and_system_benefits",
+      "information_gaps_pending_validation",
+      "risks_for_local_agronomic_review"
+    ]
+  },
+  "references_catalog": {
+    "REF_PROPOSTA_EMBRAPA_RO": {
+      "title": "Publicação Regional da Embrapa Rondônia - Produção de Soja e Alternativas de Sucessão",
+      "institution": "Embrapa Rondônia (CPAF-RO)",
+      "url": "https://www.infoteca.cnptia.embrapa.br/infoteca/handle/doc/983788"
+    },
+    "REF_ZARC_SOJA_RO_2026_2027": {
+      "title": "Portaria SPA/MAPA nº 207, de 30 de junho de 2026 (D.O.U. 03/07/2026, Seção 1) - ZARC Soja Rondônia Safra 2026/2027",
+      "institution": "Ministério da Agricultura e Pecuária (MAPA)",
+      "url": "https://www.gov.br/agricultura/pt-br/assuntos/riscos-seguro/programa-nacional-de-zoneamento-agricola-de-risco-climatico/portarias/safra-vigente/rondonia/PORTN207SOJARO.pdf/@@download/file"
+    },
+    "REF_ZARC_MILHO_2SAFRA_RO_2026_2027": {
+      "title": "Portaria SPA/MAPA nº 331, de 28 de julho de 2026 (D.O.U. 30/07/2026) e Portaria SPA/MAPA nº 346, de 28 de julho de 2026 (D.O.U. 06/08/2026) - ZARC Milho 2ª Safra Solteiro e Consorciado c/ Braquiária em Rondônia Safra 2026/2027",
+      "institution": "Ministério da Agricultura e Pecuária (MAPA)",
+      "url": "https://www.gov.br/agricultura/pt-br/assuntos/riscos-seguro/programa-nacional-de-zoneamento-agricola-de-risco-climatico/portarias/safra-vigente/rondonia/PO46791.PDF"
+    },
+    "REF_ZARC_MILHO_1SAFRA_RO_2026_2027": {
+      "title": "Portaria SPA/MAPA nº 233, de 30 de junho de 2026 (D.O.U. 10/07/2026) e Portaria SPA/MAPA nº 260, de 14 de julho de 2026 - ZARC Milho 1ª Safra Rondônia Safra 2026/2027",
+      "institution": "Ministério da Agricultura e Pecuária (MAPA)",
+      "url": "https://mapa-indicadores.agricultura.gov.br/publico/extensions/Zarc/Zarc.html"
+    },
+    "REF_ZARC_SORGO_RO_2026_2027": {
+      "title": "Portaria SPA/MAPA nº 285, de 20 de julho de 2026 (D.O.U. 22/07/2026, Seção 1) - ZARC Sorgo Granífero Rondônia Safra 2026/2027",
+      "institution": "Ministério da Agricultura e Pecuária (MAPA)",
+      "url": "https://www.gov.br/agricultura/pt-br/assuntos/riscos-seguro/programa-nacional-de-zoneamento-agricola-de-risco-climatico/portarias/safra-vigente/rondonia/PORTN285SORGOGRANIFERORO.pdf"
+    },
+    "REF_IDARON_VAZIO_SANITARIO_2026": {
+      "title": "Portaria SDA/MAPA nº 1.579, de 9 de abril de 2026 & Orientação Oficial Idaron/Governo de Rondônia (Vazio Sanitário e Calendário de Semeadura da Soja 2026/2027)",
+      "institution": "Agência de Defesa Sanitária Agrosilvopastoril do Estado de Rondônia (Idaron) / SDA-MAPA",
+      "url": "https://rondonia.ro.gov.br/inicio-do-vazio-sanitario-da-soja-comeca-nesta-quarta-feira-10-em-rondonia/"
+    },
+    "REF_NASA_POWER_METHODOLOGY": {
+      "title": "NASA POWER Methodology & Meteorology Data Sources Documentation (GPM IMERG & MERRA-2)",
+      "institution": "NASA Langley Research Center (LaRC)",
+      "url": "https://power.larc.nasa.gov/docs/methodology/data/sources_meteorology/"
+    },
+    "REF_PAINEL_ZARC_MAPA": {
+      "title": "Painel de Indicação de Riscos do ZARC e Sistema SISZARC",
+      "institution": "Ministério da Agricultura e Pecuária (MAPA)",
+      "url": "https://www.gov.br/agricultura/pt-br/assuntos/noticias/2026/novo-painel-do-zarc-moderniza-consulta-as-janelas-de-plantio-e-reforca-gestao-de-riscos-na-agricultura"
+    },
+    "REF_EMBRAPA_MILHETO_COT94": {
+      "title": "Comunicado Técnico 94 (2022) - Cultivares e Manejo de Milheto (BRS 1501 / BRS 1502) & Comunicado Técnico 54 (Embrapa Rondônia)",
+      "institution": "Embrapa Milho e Sorgo / Embrapa Rondônia",
+      "url": "https://www.infoteca.cnptia.embrapa.br/infoteca/handle/doc/983788"
+    },
+    "REF_SINTESE_VILHENA_IBGE_SISZARC": {
+      "title": "Síntese Municipal de Vilhena/RO (IBGE Produção Agrícola Municipal, Censo Agropecuário e Tabelas Decendiais SISZARC/MAPA 2026/2027)",
+      "institution": "IBGE / MAPA SISZARC (compilado via Calculadora Rural - Perfil Vilhena/RO)",
+      "url": "https://calculadorarural.com.br/agro/ro/vilhena"
+    }
+  }
+}

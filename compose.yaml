@@ -1,0 +1,22 @@
+name: rota-adaptada
+services:
+  web:
+    image: rota-adaptada:${ROTA_IMAGE_TAG:-local}
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${ROTA_BIND_IP:-127.0.0.1}:${ROTA_PORT:-8088}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

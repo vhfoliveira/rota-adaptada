@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/.git
+**/.openai
+.agents
+.aws
+.codex
+backups
+**/.env
+**/.env.*
+*.tar.gz
