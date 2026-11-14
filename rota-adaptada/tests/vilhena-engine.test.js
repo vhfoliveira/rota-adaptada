@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 import {
   dateToDecendio,
   defaultPlanningConfig,
   defaultPropertyProfile,
-  evaluateSanitaryAndLegal,
   evaluateZarcWindow,
   runHistoricalStressTest,
   simulateAdaptation
@@ -11,45 +11,31 @@ import {
 
 describe('Motor Determinístico Vilhena/RO (vilhena-engine)', () => {
   it('mapeia datas corretamente para os 36 decêndios oficiais do ZARC', () => {
-    expect(dateToDecendio('2026-01-05').decendio).toBe(1);
-    expect(dateToDecendio('2026-03-18').decendio).toBe(8);
-    expect(dateToDecendio('2026-03-22').decendio).toBe(9);
-    expect(dateToDecendio('2026-04-02').decendio).toBe(10);
-    expect(dateToDecendio('2026-10-15').decendio).toBe(29);
-  });
-
-  it('aplica travas rígidas do vazio sanitário da soja (10/06 a 10/09) e calendário Idaron (11/09 a 09/01)', () => {
-    const validSoy = evaluateSanitaryAndLegal('SOJA', '2026-10-25', '2027-02-20');
-    expect(validSoy.blocked).toBe(false);
-
-    const lateSoySowing = evaluateSanitaryAndLegal('SOJA', '2027-01-25', '2027-05-15');
-    expect(lateSoySowing.blocked).toBe(true);
-    expect(lateSoySowing.violations[0].code).toBe('CALENDARIO_SEMEADURA_SOJA');
-
-    const voidOverlapSoy = evaluateSanitaryAndLegal('SOJA', '2027-03-01', '2027-06-25');
-    expect(voidOverlapSoy.blocked).toBe(true);
-    expect(voidOverlapSoy.violations.some(v => v.code === 'VAZIO_SANITARIO_SOJA')).toBe(true);
+    assert.equal(dateToDecendio('2026-01-05').decendio, 1);
+    assert.equal(dateToDecendio('2026-03-18').decendio, 8);
+    assert.equal(dateToDecendio('2026-03-22').decendio, 9);
+    assert.equal(dateToDecendio('2026-04-02').decendio, 10);
+    assert.equal(dateToDecendio('2026-10-15').decendio, 29);
   });
 
   it('avalia janelas ZARC de Vilhena/RO por decêndio e classe AD de solo', () => {
-    // Em 22/03 (Decêndio 9), Milho 2ª Safra está FORA_DE_JANELA no solo AD4, mas Sorgo Granífero está IDEAL_20 (até Decêndio 9 = 31/03)
-    const cornMar22 = evaluateZarcWindow('MILHO_2_SAFRA', 'GRUPO_II_MEDIO', 'AD4_ARGILOSA', '2027-03-22');
-    expect(cornMar22.status).toBe('FORA_DE_JANELA');
+    // Em 22/03 (Decêndio 9), Milho 2ª Safra está FORA_DE_JANELA no solo AD4, mas Sorgo Granífero está ZARC_20 (até Decêndio 9 = 31/03)
+    const cornMar22 = evaluateZarcWindow('MILHO_2_SAFRA', 'AD4_ARGILOSA', '2027-03-22');
+    assert.equal(cornMar22.status, 'FORA_DE_JANELA');
 
-    const sorghumMar22 = evaluateZarcWindow('SORGO_GRANIFERO', 'GRUPO_II_MEDIO', 'AD4_ARGILOSA', '2027-03-22');
-    expect(sorghumMar22.status).toBe('IDEAL_20');
+    const sorghumMar22 = evaluateZarcWindow('SORGO_GRANIFERO', 'AD4_ARGILOSA', '2027-03-22');
+    assert.equal(sorghumMar22.status, 'ZARC_20');
 
     // Com ajuste de ciclo precoce (15/02, Decêndio 5), Milho 2ª Safra entra na janela ideal de 20%
-    const cornFeb15 = evaluateZarcWindow('MILHO_2_SAFRA', 'GRUPO_I_PRECOCE', 'AD4_ARGILOSA', '2027-02-15');
-    expect(cornFeb15.status).toBe('IDEAL_20');
+    const cornFeb15 = evaluateZarcWindow('MILHO_2_SAFRA', 'AD4_ARGILOSA', '2027-02-15');
+    assert.equal(cornFeb15.status, 'ZARC_20');
   });
 
   it('executa Teste de Estresse Histórico real (2013-2024) sobre os 12 anos do NASA POWER', () => {
-    const stressLateCorn = runHistoricalStressTest('MILHO_2_SAFRA', '2027-03-22', 120);
-    expect(stressLateCorn.totalYears).toBe(12);
-    expect(stressLateCorn.years.length).toBe(12);
-    expect(stressLateCorn.severeYears).toBeGreaterThanOrEqual(8);
-    expect(stressLateCorn.years[0].phases.length).toBe(4);
+    const stressLateCorn = runHistoricalStressTest('MILHO_2_SAFRA', 'GRUPO_II_MEDIO', '2027-03-22');
+    assert.equal(stressLateCorn.years.length, 12);
+    assert.ok(stressLateCorn.severeYears >= 8);
+    assert.equal(stressLateCorn.years[0].phases.length, 4);
   });
 
   it('simula o efeito dominó (+20d) e gera o plano atual e as 3 estratégias alternativas', () => {
@@ -57,15 +43,15 @@ describe('Motor Determinístico Vilhena/RO (vilhena-engine)', () => {
     const cfg = defaultPlanningConfig(); // +20 dias
     const sim = simulateAdaptation(prop, cfg);
 
-    expect(sim.strategies.length).toBe(4);
-    expect(sim.delayedSafrinhaDate).toBe('2027-03-22');
-    expect(sim.strategies[0].strategyId).toBe('PLANO_ATUAL');
-    expect(sim.strategies[0].criticalStage.zarc.status).toBe('FORA_DE_JANELA');
-    expect(sim.strategies[1].strategyId).toBe('AJUSTE_CALENDARIO_CICLO');
-    expect(sim.strategies[1].criticalStage.zarc.status).toBe('IDEAL_20');
-    expect(sim.strategies[2].strategyId).toBe('ALTERNATIVA_COMERCIAL_SORGO');
-    expect(sim.strategies[2].criticalStage.zarc.status).toBe('IDEAL_20');
-    expect(sim.strategies[3].strategyId).toBe('ALTERNATIVA_COBERTURA_MILHETO');
+    assert.equal(sim.strategies.length, 4);
+    assert.equal(sim.delayedSafrinhaDate, '2027-03-26');
+    assert.equal(sim.strategies[0].strategyId, 'PLANO_ATUAL');
+    assert.equal(sim.strategies[0].criticalStage.zarc.status, 'FORA_DE_JANELA');
+    assert.equal(sim.strategies[1].strategyId, 'AJUSTE_CALENDARIO_CICLO');
+    assert.equal(sim.strategies[1].criticalStage.zarc.status, 'ZARC_30');
+    assert.equal(sim.strategies[2].strategyId, 'ALTERNATIVA_COMERCIAL_SORGO');
+    assert.equal(sim.strategies[2].criticalStage.zarc.status, 'ZARC_20');
+    assert.equal(sim.strategies[3].strategyId, 'ALTERNATIVA_COBERTURA_MILHETO');
   });
 
   it('informa explicitamente quando não encontra alternativa melhor dentro das restrições', () => {
@@ -76,8 +62,8 @@ describe('Motor Determinístico Vilhena/RO (vilhena-engine)', () => {
     cfg.preservedDecisions.allowCoverCropTransition = false;
 
     const sim = simulateAdaptation(prop, cfg);
-    expect(sim.noBetterAlternativeMessage).toBe(
-      'Não encontramos alternativa melhor dentro das restrições informadas.'
+    assert.equal(sim.noBetterAlternativeMessage,
+      'Nenhuma das opções marcadas reduz o risco em relação ao Plano Atual. Marque outras adaptações acima.'
     );
   });
 });

@@ -76,3 +76,36 @@ alinhados ao pacote recebido: ciclo padrão da soja de 118 dias, intervalo de
 7 dias, safrinha atrasada em 26/03/2027 e ajuste de ciclo em janela `ZARC_30`.
 Não foram alterados o motor ou as regras agronômicas para fazer os testes passar.
 Esses testes não certificam a origem dos dados nem validam as regras oficiais.
+
+## Deploy em um comando
+
+Na raiz deste repositório, execute:
+
+```bash
+./deploy/serveros.sh
+```
+
+Requer SSH configurado para `serveros`, acesso pela rede Tailscale e Docker
+Compose no servidor. O script usa `~/.ssh/config` explicitamente. Para outro
+host/configuração, defina `SERVEROS_HOST` e `SERVEROS_SSH_CONFIG`.
+
+Publica os arquivos locais de `rota-adaptada`, incluindo mudanças ainda sem
+commit. Exclui dependências locais, builds anteriores e arquivos `.env*`.
+O `.env` do servidor é preservado. O build executa `npm ci`, todos os testes e
+Vite antes de alterar o serviço. Um bloqueio impede dois deploys simultâneos.
+
+Cada publicação recebe uma tag única e um backup em
+`/opt/stacks/rota-adaptada-backups/`. Após iniciar o contêiner, verifica a saúde,
+o HTTPS e se o HTML público corresponde à imagem nova. Se a ativação falhar,
+restaura o backup e tenta reativar a imagem anterior. As imagens anteriores e
+os backups são mantidos para reversão; a limpeza é manual.
+
+```bash
+./deploy/serveros.sh --check # Valida sintaxe e pacote, sem acessar o servidor
+./deploy/serveros.sh --help
+```
+
+Na atualização `9cdfab4`, os testes foram adequados ao motor atual: a função
+`evaluateSanitaryAndLegal` foi removida nessa versão, e o texto de ausência de
+alternativas mudou. O teste dessa função removida foi retirado; os testes das
+janelas ZARC, histórico e simulação continuam sendo executados com `node:test`.
