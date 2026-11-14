@@ -7,6 +7,8 @@ import {
   defaultPropertyProfile,
   defaultPlanningConfig,
   simulateAdaptation,
+  CUSTOM_CROP_ROLES,
+  getCustomCropRoleMeta,
   formatBRDate,
   parseUTCDate
 } from './vilhena-engine.js';
@@ -25,17 +27,17 @@ const num = (n, digits = 1) =>
 const DEFAULT_PROP = defaultPropertyProfile();
 
 let appState = {
-  version: 4,
+  version: 5,
   activeTab: 0,
   propertyProfile: structuredClone(DEFAULT_PROP),
   customProperties: [],
+  customCrops: [],
   planningConfig: defaultPlanningConfig(),
   selectedStrategyId: 'ALTERNATIVA_COMERCIAL_SORGO',
   selectedStageIndex: 1,
   inspectedYear: 2023
 };
 
-// Runtime state for live NASA POWER & ISRIC SoilGrids queries (not persisted as static cache so NASA is always queried live)
 let nasaLiveState = {
   loading: false,
   isLive: false,
@@ -58,15 +60,28 @@ let newPropertyFormState = {
   areaHa: 200,
   latitude: '-12.7405',
   longitude: '-60.1458',
-  lookupResult: null, // Holds { nasa, soil } after automatic query
+  lookupResult: null,
   selectedSoilProfileId: 'AD4_ARGILOSA'
 };
 
-let simResult = simulateAdaptation(appState.propertyProfile, appState.planningConfig);
+let newCropFormState = {
+  open: false,
+  commonName: '',
+  role: 'ALTERNATIVA_COMERCIAL',
+  cycleDays: 85,
+  windowStartDate: '2027-01-15',
+  windowEndDate: '2027-04-10',
+  droughtTolerance: 'MODERADA',
+  botanicalFamily: 'Fabaceae (Leguminosa)',
+  cultivarName: '',
+  summary: ''
+};
+
+let simResult = simulateAdaptation(appState.propertyProfile, appState.planningConfig, appState.customCrops);
 let dbReady = false;
 
 function recomputeSimulation() {
-  simResult = simulateAdaptation(appState.propertyProfile, appState.planningConfig);
+  simResult = simulateAdaptation(appState.propertyProfile, appState.planningConfig, appState.customCrops || []);
   const exists = simResult.strategies.some(s => s.strategyId === appState.selectedStrategyId);
   if (!exists) {
     appState.selectedStrategyId = simResult.strategies[0]?.strategyId || 'PLANO_ATUAL';
@@ -165,19 +180,25 @@ const TABS = [
   {
     index: 1,
     step: 'PASSO 2',
-    title: '2. Planejamento',
-    subtitle: 'Simular Atraso e O Que Manter'
+    title: '2. Culturas',
+    subtitle: 'Catálogo Vilhena e Novas Culturas'
   },
   {
     index: 2,
     step: 'PASSO 3',
-    title: '3. Comparação',
-    subtitle: 'Plano Atual vs. 3 Alternativas'
+    title: '3. Planejamento',
+    subtitle: 'Simular Atraso e O Que Manter'
   },
   {
     index: 3,
     step: 'PASSO 4',
-    title: '4. Explicação e Resumo',
+    title: '4. Comparação',
+    subtitle: 'Plano Atual vs. Alternativas'
+  },
+  {
+    index: 4,
+    step: 'PASSO 5',
+    title: '5. Explicação e Resumo',
     subtitle: 'Fases da Planta e Impressão'
   }
 ];
@@ -202,25 +223,25 @@ const SOIL_FRIENDLY = {
 
 const CROP_FRIENDLY = {
   SOJA: {
-    badge: '1ª Safra · Cultura Principal',
+    badge: '1ª Safra · Cultura Principal (Ref. Vilhena/RO)',
     cycleText: '105 a 118 dias',
     windowText: '01/10 a 10/01 (Limite Idaron: 09/01)',
-    summary: 'Cultura comercial principal do verão. Seu atraso empurra a entrada da 2ª safra.'
+    summary: 'Cultura comercial principal do verão em Vilhena/RO. Seu atraso empurra a entrada da 2ª safra.'
   },
   MILHO_2_SAFRA: {
-    badge: '2ª Safra · Sucessão Padrão',
+    badge: '2ª Safra · Sucessão Padrão (Ref. Vilhena/RO)',
     cycleText: '100 a 120 dias',
     windowText: '01/01 a 20/03 (Janela recomendada)',
-    summary: 'Sucessão comercial padrão; perde segurança quando plantado após 20 de março.'
+    summary: 'Sucessão comercial padrão em Vilhena/RO; perde segurança quando plantado após 20 de março.'
   },
   SORGO_GRANIFERO: {
-    badge: '2ª Safra · Alternativa Comercial',
+    badge: '2ª Safra · Alternativa Comercial (Ref. Vilhena/RO)',
     cycleText: '105 dias',
     windowText: '01/01 a 31/03 (Janela estendida)',
     summary: 'Mantém produção comercial de grãos na safrinha com menor exigência de água.'
   },
   MILHETO: {
-    badge: '2ª Safra · Cobertura do Solo',
+    badge: '2ª Safra · Cobertura do Solo (Ref. Vilhena/RO)',
     cycleText: '58 dias (Manejo na floração)',
     windowText: 'Até 30/04 (Fechamento das chuvas)',
     summary: 'Cobertura rápida de baixo custo para formar palhada, proteger o solo e reduzir nematoides.'
@@ -283,7 +304,7 @@ function renderShell() {
       </div>
     </header>
 
-    <nav class="screen-tabs" role="tablist" aria-label="Quatro passos do fluxo de decisão">
+    <nav class="screen-tabs" role="tablist" aria-label="Cinco passos do fluxo de decisão">
       ${TABS.map(
         t => `
         <button
@@ -329,16 +350,15 @@ function updateAndRender() {
 }
 
 /**
- * TELA 1: Propriedade
+ * PASSO 1: Propriedade
  * - Pré-cadastrado somente a propriedade padrão de Vilhena/RO e somente a sua classe de solo.
  * - Dados da NASA consultados ao vivo sempre que utilizar.
- * - Inclusão de nova propriedade com consulta automática na NASA POWER API + ISRIC SoilGrids (CC-BY 4.0) por latitude e longitude, exibindo sugestão de classe de solo estimada.
+ * - Inclusão de nova propriedade com consulta automática na NASA POWER API + ISRIC SoilGrids (CC-BY 4.0) por latitude e longitude.
  */
 function renderScreen1Property() {
   const p = appState.propertyProfile;
   const activeSoil = rulesPackage.soil_profiles[p.soilProfileId] || rulesPackage.soil_profiles.AD4_ARGILOSA;
   const soilFriendly = SOIL_FRIENDLY[activeSoil.id] || SOIL_FRIENDLY.AD4_ARGILOSA;
-  const mainCrops = ['SOJA', 'MILHO_2_SAFRA', 'SORGO_GRANIFERO', 'MILHETO'].map(id => rulesPackage.crops_catalog[id]);
   const allProperties = [DEFAULT_PROP, ...(appState.customProperties || [])];
 
   return `
@@ -355,7 +375,7 @@ function renderScreen1Property() {
         <button type="button" class="secondary-cta-btn" id="btn-toggle-new-prop">
           ${newPropertyFormState.open ? '✕ Fechar Cadastro de Nova Propriedade' : '+ Incluir Nova Propriedade (Lat/Lon)'}
         </button>
-        <button type="button" class="primary lg-btn" data-go-tab="1">Simular Atraso no Planejamento →</button>
+        <button type="button" class="primary lg-btn" data-go-tab="1">Avançar para 2. Culturas →</button>
       </div>
     </div>
 
@@ -380,7 +400,6 @@ function renderScreen1Property() {
         : ''
     }
 
-    <!-- PAINEL DE INCLUSÃO DE NOVA PROPRIEDADE (NASA POWER + ISRIC SOILGRIDS CC-BY 4.0) -->
     ${
       newPropertyFormState.open
         ? `
@@ -452,7 +471,6 @@ function renderScreen1Property() {
 
     <!-- ESSENCIAL: Propriedade Ativa + Somente Sua Classe de Solo + Status Ao Vivo da NASA -->
     <section class="summary-kpis-grid" aria-label="Dados essenciais da propriedade ativa">
-      <!-- Card 1: Propriedade Pré-Cadastrada / Ativa -->
       <article class="kpi-card">
         <div class="row">
           <span class="eyebrow">${p.id === DEFAULT_PROP.id ? 'PROPRIEDADE PRÉ-CADASTRADA PADRÃO' : 'PROPRIEDADE ATIVA'}</span>
@@ -466,7 +484,6 @@ function renderScreen1Property() {
         </p>
       </article>
 
-      <!-- Card 2: Somente a Classe de Solo da Propriedade Ativa -->
       <article class="kpi-card">
         <div class="row">
           <span class="eyebrow">CLASSE DE SOLO DA PROPRIEDADE</span>
@@ -483,7 +500,6 @@ function renderScreen1Property() {
         </p>
       </article>
 
-      <!-- Card 3: Consulta Ao Vivo na NASA POWER API -->
       <article class="kpi-card nasa-live-card">
         <div class="row">
           <span class="eyebrow">DADOS DA NASA (CONSULTA AO VIVO)</span>
@@ -516,58 +532,20 @@ function renderScreen1Property() {
       </article>
     </section>
 
-    <!-- ESSENCIAL: As 4 culturas do catálogo de forma direta -->
-    <section class="panel-card section-block">
-      <div class="card-head">
-        <div>
-          <span class="eyebrow">CATÁLOGO DE CULTURAS PARA A SUCESSÃO</span>
-          <h2>Culturas Avaliadas na Propriedade</h2>
-          <p class="muted">
-            O plano base avalia <strong>Soja no verão</strong> seguida de <strong>Milho 2ª safra</strong>, comparando <strong>Sorgo Granífero</strong> e <strong>Milheto</strong> quando ocorre atraso.
-          </p>
-        </div>
-      </div>
-
-      <div class="catalog-grid-4">
-        ${mainCrops
-          .map(c => {
-            const f = CROP_FRIENDLY[c.crop_id];
-            return `
-            <article class="catalog-crop-card">
-              <span class="tag">${esc(f.badge)}</span>
-              <h3>${esc(c.common_name)}</h3>
-              <div class="crop-essential-meta">
-                <div>
-                  <small>Ciclo médio</small>
-                  <strong>${esc(f.cycleText)}</strong>
-                </div>
-                <div>
-                  <small>Janela recomendada</small>
-                  <strong>${esc(f.windowText)}</strong>
-                </div>
-              </div>
-              <p class="muted">${esc(f.summary)}</p>
-            </article>`;
-          })
-          .join('')}
-      </div>
-    </section>
-
-    <!-- OPCIONAL / TÉCNICO (Recolhido por padrão) -->
     <details class="optional-drawer section-block">
       <summary>
-        <span>⚙ Detalhes Técnicos Opcionais (Laudo de solo da propriedade, regras sanitárias Idaron e endpoint da NASA)</span>
+        <span>⚙ Detalhes Técnicos Opcionais (Laudo de solo da propriedade e regras sanitárias Idaron)</span>
         <small>Clique para expandir</small>
       </summary>
       <div class="drawer-body">
         <div class="grid-two-cols">
           <div class="sub-box">
-            <h3>Dados Edáficos Registrados (${esc(p.soilEvidence.sampleCode)})</h3>
+            <h3>Dados Edáficos Registrados (${esc(p.soilEvidence?.sampleCode || 'LAB-RO-2026-018')})</h3>
             <p class="muted">
-              Profundidade ${esc(p.soilEvidence.depthCm)} · Argila: <strong>${esc(
-    p.soilEvidence.clayPercent
-  )}%</strong> · Matéria Orgânica: <strong>${esc(p.soilEvidence.organicMatterPercent)}%</strong> · Fonte: <strong>${esc(
-    p.soilEvidence.notes
+              Profundidade ${esc(p.soilEvidence?.depthCm || '0–60 cm')} · Argila: <strong>${esc(
+    p.soilEvidence?.clayPercent ?? 46
+  )}%</strong> · Matéria Orgânica: <strong>${esc(p.soilEvidence?.organicMatterPercent ?? 2.8)}%</strong> · Fonte: <strong>${esc(
+    p.soilEvidence?.notes || 'Latossolo Vermelho-Amarelo Argiloso'
   )}</strong>
             </p>
             <div class="pending-evidence-tag" style="margin-top:8px">
@@ -658,9 +636,205 @@ function renderAutoLookupResult(res) {
 }
 
 /**
- * TELA 2: Planejamento (Simular Atraso e Decisões Preservadas)
+ * PASSO 2: Catálogo de Culturas
+ * - Informa que as 4 culturas já pré-cadastradas são referências para a cidade pré-cadastrada de Vilhena/RO.
+ * - Permite cadastrar novas culturas, que passam a integrar o catálogo e a simulação.
  */
-function renderScreen2Planning() {
+function renderScreen2Crops() {
+  const defaultCrops = ['SOJA', 'MILHO_2_SAFRA', 'SORGO_GRANIFERO', 'MILHETO']
+    .map(id => rulesPackage.crops_catalog[id])
+    .filter(Boolean);
+  const customCrops = appState.customCrops || [];
+
+  return `
+    <div class="screen-header">
+      <div>
+        <span class="eyebrow">PASSO 2 · CATÁLOGO DE CULTURAS E OPÇÕES DE SUCESSÃO</span>
+        <h1>Catálogo de Culturas da Propriedade</h1>
+        <p>
+          As culturas já cadastradas abaixo têm seus ciclos, cultivares e janelas parametrizados como <strong>referência oficial para a cidade pré-cadastrada de Vilhena/RO</strong> (ZARC/MAPA, Embrapa e Idaron).
+          Você também pode <strong>cadastrar novas culturas</strong> para incluí-las na simulação e na comparação.
+        </p>
+      </div>
+      <div class="screen-header-cta">
+        <button type="button" class="secondary-cta-btn" id="btn-toggle-new-crop">
+          ${newCropFormState.open ? '✕ Fechar Cadastro de Nova Cultura' : '+ Cadastrar Nova Cultura'}
+        </button>
+        <button type="button" class="primary lg-btn" data-go-tab="2">Avançar para 3. Planejamento →</button>
+      </div>
+    </div>
+
+    <div class="notice" style="margin-bottom:16px">
+      <strong>📌 Nota sobre as Culturas Pré-Cadastradas:</strong> A <strong>Soja (1ª safra)</strong>, o <strong>Milho 2ª safra</strong>, o <strong>Sorgo Granífero</strong> e o <strong>Milheto</strong> já vêm configurados com os parâmetros oficiais de referência da região de <strong>Vilhena/RO</strong>. Caso esteja avaliando outra cultura ou outra propriedade, utilize o botão <strong>+ Cadastrar Nova Cultura</strong>.
+    </div>
+
+    ${
+      newCropFormState.open
+        ? `
+      <section class="panel-card new-property-panel section-block">
+        <div class="card-head">
+          <div>
+            <span class="eyebrow">INCLUIR NOVA OPÇÃO NO CATÁLOGO</span>
+            <h2>Cadastrar Nova Cultura para Comparação</h2>
+            <p class="muted">
+              A cultura cadastrada será automaticamente dividida em 4 fases fenológicas e testada contra os 12 anos de dados da NASA POWER da propriedade ativa.
+            </p>
+          </div>
+        </div>
+
+        <div class="new-prop-form-grid">
+          <label>
+            Nome da Cultura *
+            <input type="text" id="nc-name" placeholder="Ex.: Feijão-Caupi, Girassol, Gergelim..." value="${esc(
+              newCropFormState.commonName
+            )}">
+          </label>
+          <label>
+            Finalidade na Sucessão *
+            <select id="nc-role">
+              ${Object.values(CUSTOM_CROP_ROLES)
+                .map(
+                  r => `
+                <option value="${esc(r.value)}" ${newCropFormState.role === r.value ? 'selected' : ''}>
+                  ${esc(r.optionLabel)}
+                </option>`
+                )
+                .join('')}
+            </select>
+          </label>
+          <label>
+            Duração Média do Ciclo (dias) *
+            <input type="number" id="nc-cycle" min="40" max="160" step="1" value="${esc(newCropFormState.cycleDays)}">
+          </label>
+          <label>
+            Tolerância à Seca / Exigência de Água *
+            <select id="nc-tolerance">
+              <option value="ALTA" ${newCropFormState.droughtTolerance === 'ALTA' ? 'selected' : ''}>
+                Alta Tolerância à Seca (Rústica · Baixa exigência)
+              </option>
+              <option value="MODERADA" ${newCropFormState.droughtTolerance === 'MODERADA' ? 'selected' : ''}>
+                Tolerância Moderada (Exigência média de água)
+              </option>
+              <option value="SENSIVEL" ${newCropFormState.droughtTolerance === 'SENSIVEL' ? 'selected' : ''}>
+                Sensível a Veranicos (Alta exigência de água)
+              </option>
+            </select>
+          </label>
+        </div>
+
+        <div class="new-prop-form-grid" style="margin-top:12px">
+          <label>
+            Início da Janela Recomendada *
+            <input type="date" id="nc-start" value="${esc(newCropFormState.windowStartDate)}">
+          </label>
+          <label>
+            Data Limite da Janela Recomendada *
+            <input type="date" id="nc-end" value="${esc(newCropFormState.windowEndDate)}">
+          </label>
+          <label>
+            Família Botânica (Rotação)
+            <select id="nc-family">
+              <option value="Fabaceae (Leguminosa)" ${
+                newCropFormState.botanicalFamily === 'Fabaceae (Leguminosa)' ? 'selected' : ''
+              }>
+                Leguminosa (Fixa Nitrogênio)
+              </option>
+              <option value="Poaceae (Gramínea C4)" ${
+                newCropFormState.botanicalFamily === 'Poaceae (Gramínea C4)' ? 'selected' : ''
+              }>
+                Gramínea (Alta formação de palhada)
+              </option>
+              <option value="Outra Família (Rotação)" ${
+                newCropFormState.botanicalFamily === 'Outra Família (Rotação)' ? 'selected' : ''
+              }>
+                Outra Família (Quebra ciclo de pragas)
+              </option>
+            </select>
+          </label>
+          <label>
+            Cultivar / Variedade (Opcional)
+            <input type="text" id="nc-cultivar" placeholder="Ex.: BRS Tumucumaque / Cultivar Local" value="${esc(
+              newCropFormState.cultivarName
+            )}">
+          </label>
+        </div>
+
+        <div class="button-row" style="justify-content:flex-end;margin-top:14px">
+          <button type="button" class="primary lg-btn" id="btn-save-new-crop">
+            ✓ Salvar e Incluir Cultura no Catálogo
+          </button>
+        </div>
+      </section>`
+        : ''
+    }
+
+    <!-- Culturas de Referência de Vilhena/RO + Culturas Cadastradas pelo Usuário -->
+    <section class="panel-card section-block">
+      <div class="card-head">
+        <div>
+          <span class="eyebrow">CULTURAS ATIVAS NA SIMULAÇÃO</span>
+          <h2>Referências de Vilhena/RO ${customCrops.length ? `+ ${customCrops.length} Cultura(s) Cadastrada(s)` : ''}</h2>
+        </div>
+      </div>
+
+      <div class="catalog-grid-4">
+        ${defaultCrops
+          .map(c => {
+            const f = CROP_FRIENDLY[c.crop_id || c.id] || CROP_FRIENDLY.SOJA;
+            return `
+            <article class="catalog-crop-card">
+              <span class="tag">${esc(f.badge)}</span>
+              <h3>${esc(c.common_name)}</h3>
+              <div class="crop-essential-meta">
+                <div>
+                  <small>Ciclo médio</small>
+                  <strong>${esc(f.cycleText)}</strong>
+                </div>
+                <div>
+                  <small>Janela recomendada (Vilhena)</small>
+                  <strong>${esc(f.windowText)}</strong>
+                </div>
+              </div>
+              <p class="muted">${esc(f.summary)}</p>
+            </article>`;
+          })
+          .join('')}
+
+        ${customCrops
+          .map(cc => {
+            const roleMeta = getCustomCropRoleMeta(cc.role);
+            return `
+          <article class="catalog-crop-card custom-crop-card">
+            <div class="row">
+              <span class="tag custom-tag">★ ${esc(roleMeta.shortBadge)}</span>
+              <button type="button" class="tiny-refresh-btn" data-remove-crop="${esc(cc.crop_id)}" title="Remover cultura">✕</button>
+            </div>
+            <h3>${esc(cc.common_name)}</h3>
+            <div class="crop-essential-meta">
+              <div>
+                <small>Ciclo cadastrado</small>
+                <strong>${esc(cc.cycleDays)} dias (${esc(cc.cultivarName || 'Cultivar padrão')})</strong>
+              </div>
+              <div>
+                <small>Janela informada</small>
+                <strong>${formatBRDate(cc.windowStartDate).slice(0, 5)} a ${formatBRDate(cc.windowEndDate).slice(0, 5)}</strong>
+              </div>
+            </div>
+            <p class="muted">
+              ${esc(roleMeta.cardDescription)} · ${esc(cc.botanical_family)}.
+            </p>
+          </article>`;
+          })
+          .join('')}
+      </div>
+    </section>
+  `;
+}
+
+/**
+ * PASSO 3: Planejamento (Simular Atraso e Decisões Preservadas)
+ */
+function renderScreen3Planning() {
   const cfg = appState.planningConfig;
   const pd = cfg.preservedDecisions;
   const planoAtual = simResult.allStrategies[0];
@@ -668,7 +842,7 @@ function renderScreen2Planning() {
   return `
     <div class="screen-header">
       <div>
-        <span class="eyebrow">PASSO 2 · SIMULAÇÃO DE ATRASO E REGRAS DE DECISÃO</span>
+        <span class="eyebrow">PASSO 3 · SIMULAÇÃO DE ATRASO E REGRAS DE DECISÃO</span>
         <h1>“Se minha primeira cultura atrasar, qual é a menor mudança que posso fazer no restante do plano?”</h1>
         <p>
           Use o controle abaixo para simular o atraso no plantio da <strong>Soja de verão</strong> em <strong>${esc(
@@ -677,13 +851,13 @@ function renderScreen2Planning() {
         </p>
       </div>
       <div class="screen-header-cta">
-        <button type="button" class="primary lg-btn" data-go-tab="2">Comparar Alternativas →</button>
+        <button type="button" class="primary lg-btn" data-go-tab="3">Comparar Alternativas →</button>
       </div>
     </div>
 
     <div class="grid-two-cols">
       <article class="panel-card highlight-card">
-        <span class="eyebrow">PASSO 2A · QUANTO O PLANTIO ATRASOU?</span>
+        <span class="eyebrow">PASSO 3A · QUANTO O PLANTIO ATRASOU?</span>
         <h2>1. Simular Atraso no Plantio da Soja (1ª Safra)</h2>
         <p class="muted">
           Escolha um cenário rápido ou arraste a barra para simular o atraso.
@@ -766,7 +940,7 @@ function renderScreen2Planning() {
       </article>
 
       <article class="panel-card">
-        <span class="eyebrow">PASSO 2B · PREFERÊNCIAS DO PRODUTOR</span>
+        <span class="eyebrow">PASSO 3B · PREFERÊNCIAS DO PRODUTOR</span>
         <h2>2. O que você deseja manter e quais adaptações aceita avaliar?</h2>
         <p class="muted">
           Marque os tipos de ajuste que fazem sentido para a sua propriedade.
@@ -804,9 +978,19 @@ function renderScreen2Planning() {
               <small>Usa uma planta rápida (58 dias) de baixo custo para cobrir o solo quando o risco comercial for alto.</small>
             </div>
           </label>
+
+          ${
+            (appState.customCrops || []).length > 0
+              ? `<div class="notice">
+                  <strong>★ Culturas Cadastradas Ativas:</strong> ${(appState.customCrops || [])
+                    .map(c => esc(c.common_name))
+                    .join(', ')} também serão avaliadas automaticamente na comparação!
+                </div>`
+              : ''
+          }
         </div>
 
-        <button type="button" class="primary full next lg-btn" data-go-tab="2">
+        <button type="button" class="primary full next lg-btn" data-go-tab="3">
           Ver Comparação Lado a Lado das Alternativas →
         </button>
 
@@ -916,16 +1100,16 @@ function renderTwoYearTimelineBar(strategy) {
 }
 
 /**
- * TELA 3: Comparação Lado a Lado
+ * PASSO 4: Comparação Lado a Lado
  */
-function renderScreen3Comparison() {
+function renderScreen4Comparison() {
   return `
     <div class="screen-header">
       <div>
-        <span class="eyebrow">PASSO 3 · COMPARAÇÃO DE CAMINHOS</span>
+        <span class="eyebrow">PASSO 4 · COMPARAÇÃO DE CAMINHOS</span>
         <h1>Comparação para +${esc(simResult.delayDays)} Dias de Atraso — ${esc(appState.propertyProfile.propertyName)}</h1>
         <p>
-          Veja como o <strong>Plano Atual</strong> e as <strong>alternativas de menor mudança</strong> se comportam na janela oficial e nos <strong>12 anos históricos consultados na NASA (2013–2024)</strong> para <code>${esc(
+          Veja como o <strong>Plano Atual</strong> e as <strong>alternativas de menor mudança</strong> se comportam na janela recomendada e nos <strong>12 anos históricos consultados na NASA (2013–2024)</strong> para <code>${esc(
             appState.propertyProfile.latitude
           )}°, ${esc(appState.propertyProfile.longitude)}°</code>.
         </p>
@@ -949,7 +1133,7 @@ function renderScreen3Comparison() {
       simResult.noBetterAlternativeMessage
         ? `<div class="notice error" style="margin-bottom:16px">
             <strong>“${esc(simResult.noBetterAlternativeMessage)}”</strong>
-            <p style="margin:4px 0 0">Volte ao Passo 2 (Planejamento) para permitir ajustes de ciclo, Sorgo ou Milheto, ou reduza o atraso se ele ultrapassou a data limite da Idaron (09/01).</p>
+            <p style="margin:4px 0 0">Volte ao Passo 3 (Planejamento) para permitir ajustes de ciclo, Sorgo ou Milheto, ou reduza o atraso se ele ultrapassou a data limite da Idaron (09/01).</p>
           </div>`
         : ''
     }
@@ -960,8 +1144,15 @@ function renderScreen3Comparison() {
           const crit = s.criticalStage;
           const stTest = crit.stressTest;
           const isSelected = s.strategyId === appState.selectedStrategyId;
-          const purposeLabel =
-            crit.cropId === 'MILHETO' ? 'Cobertura e Proteção do Solo' : 'Colheita Comercial de Grãos';
+          const isCover =
+            crit.cropId === 'MILHETO' ||
+            rulesPackage.crops_catalog[crit.cropId]?.role_in_prototype === 'COVER_CROP_SOIL_PROTECTION';
+          const customRoleKey = crit.customRole || rulesPackage.crops_catalog[crit.cropId]?.custom_role;
+          const purposeLabel = customRoleKey
+            ? getCustomCropRoleMeta(customRoleKey).shortBadge
+            : isCover
+              ? 'Cobertura e Proteção do Solo'
+              : 'Colheita Comercial de Grãos';
 
           return `
           <article class="strategy-card ${isSelected ? 'selected-strategy' : ''} tone-${esc(s.statusTone)}">
@@ -974,18 +1165,20 @@ function renderScreen3Comparison() {
               </div>
               <h2>${esc(s.title)}</h2>
               <p class="what-changes-line">
-                <strong>2ª Safra resultante:</strong> ${esc(crit.shortCropName)} · Plantio em <strong>${formatBRDate(
-            crit.sowDate
-          )}</strong> (Colheita até ${formatBRDate(crit.harvestDate)})
+                <strong>${crit.index === 1 ? '1ª Safra resultante:' : 'Sucessão resultante:'}</strong> ${esc(
+            crit.shortCropName
+          )} · Plantio em <strong>${formatBRDate(crit.sowDate)}</strong> (Colheita até ${formatBRDate(
+            crit.harvestDate
+          )})
               </p>
             </div>
 
             <div class="essential-3-metrics">
               <div class="e-metric">
-                <small>Janela Oficial (ZARC)</small>
+                <small>Janela de Plantio</small>
                 <strong class="tone-text-${esc(crit.zarc.tone)}">
                   ${
-                    crit.zarc.status === 'IDEAL_20'
+                    crit.zarc.status === 'IDEAL_20' || crit.zarc.status === 'ZARC_20'
                       ? '✓ Dentro da janela ideal'
                       : crit.zarc.status === 'FORA_DE_JANELA'
                         ? '✕ Fora da janela segura'
@@ -994,7 +1187,7 @@ function renderScreen3Comparison() {
                 </strong>
               </div>
               <div class="e-metric">
-                <small>Finalidade na 2ª Safra</small>
+                <small>Finalidade na Sucessão</small>
                 <strong>${esc(purposeLabel)}</strong>
               </div>
               <div class="e-metric">
@@ -1014,7 +1207,7 @@ function renderScreen3Comparison() {
                 </p>
               </div>
 
-              <div class="year-pills-grid" role="group" aria-label="Clique em um ano para ver o detalhe na Tela 4">
+              <div class="year-pills-grid" role="group" aria-label="Clique em um ano para ver o detalhe no Passo 5">
                 ${stTest.years
                   .map(
                     y => `
@@ -1089,9 +1282,9 @@ function getMoistureStatusLabel(val) {
 }
 
 /**
- * TELA 4: Explicação e Resumo
+ * PASSO 5: Explicação e Resumo
  */
-function renderScreen4Explanation() {
+function renderScreen5Explanation() {
   const selected =
     simResult.strategies.find(s => s.strategyId === appState.selectedStrategyId) || simResult.strategies[0];
   const stageIdx = Math.min(selected.stages.length - 1, Math.max(0, Number(appState.selectedStageIndex) || 1));
@@ -1103,7 +1296,7 @@ function renderScreen4Explanation() {
   return `
     <div class="screen-header">
       <div>
-        <span class="eyebrow">PASSO 4 · EXPLICAÇÃO CLARA E RESUMO PARA O AGRÔNOMO</span>
+        <span class="eyebrow">PASSO 5 · EXPLICAÇÃO CLARA E RESUMO PARA O AGRÔNOMO</span>
         <h1>Por que esta opção é mais segura? Raio-X por Fase da Planta</h1>
         <p>
           Clique em qualquer ano entre <strong>2013 e 2024</strong> abaixo para ver como a chuva, a umidade do solo e a temperatura consultadas na <strong>NASA POWER</strong> se comportaram nas <strong>4 fases da cultura</strong>.
@@ -1333,9 +1526,10 @@ function renderActiveScreen() {
   if (!container) return;
 
   if (appState.activeTab === 0) container.innerHTML = renderScreen1Property();
-  else if (appState.activeTab === 1) container.innerHTML = renderScreen2Planning();
-  else if (appState.activeTab === 2) container.innerHTML = renderScreen3Comparison();
-  else container.innerHTML = renderScreen4Explanation();
+  else if (appState.activeTab === 1) container.innerHTML = renderScreen2Crops();
+  else if (appState.activeTab === 2) container.innerHTML = renderScreen3Planning();
+  else if (appState.activeTab === 3) container.innerHTML = renderScreen4Comparison();
+  else container.innerHTML = renderScreen5Explanation();
 
   bindScreenEvents();
 }
@@ -1468,12 +1662,14 @@ function bindShellEvents() {
 
   $('#btn-reset-demo').onclick = () => {
     appState.propertyProfile = structuredClone(DEFAULT_PROP);
+    appState.customCrops = [];
     appState.planningConfig = defaultPlanningConfig();
     appState.selectedStrategyId = 'ALTERNATIVA_COMERCIAL_SORGO';
     appState.selectedStageIndex = 1;
     appState.inspectedYear = 2023;
     newPropertyFormState.open = false;
     newPropertyFormState.lookupResult = null;
+    newCropFormState.open = false;
     persistState();
     refreshLiveNasaForActiveProperty(true);
   };
@@ -1505,13 +1701,12 @@ function bindScreenEvents() {
     };
   });
 
-  // Screen 1: Refresh live NASA button
+  // Step 1: Property & live NASA
   const btnRefreshNasa = $('#btn-refresh-live-nasa');
   if (btnRefreshNasa) {
     btnRefreshNasa.onclick = () => refreshLiveNasaForActiveProperty(true);
   }
 
-  // Screen 1: Switch between default Vilhena property and custom included properties
   $$('[data-switch-property]').forEach(btn => {
     btn.onclick = () => {
       const targetId = btn.dataset.switchProperty;
@@ -1525,7 +1720,6 @@ function bindScreenEvents() {
     };
   });
 
-  // Screen 1: Toggle new property inclusion panel
   const btnToggleNewProp = $('#btn-toggle-new-prop');
   if (btnToggleNewProp) {
     btnToggleNewProp.onclick = () => {
@@ -1534,7 +1728,6 @@ function bindScreenEvents() {
     };
   }
 
-  // Screen 1: New property inputs & GPS & automatic lookup
   const npName = $('#np-name');
   if (npName) npName.oninput = e => (newPropertyFormState.propertyName = e.target.value);
   const npLat = $('#np-lat');
@@ -1672,7 +1865,81 @@ function bindScreenEvents() {
     };
   }
 
-  // Screen 2 bindings
+  // Step 2: Crops Catalog & Register New Crop bindings
+  const btnToggleNewCrop = $('#btn-toggle-new-crop');
+  if (btnToggleNewCrop) {
+    btnToggleNewCrop.onclick = () => {
+      newCropFormState.open = !newCropFormState.open;
+      renderActiveScreen();
+    };
+  }
+  const ncName = $('#nc-name');
+  if (ncName) ncName.oninput = e => (newCropFormState.commonName = e.target.value);
+  const ncRole = $('#nc-role');
+  if (ncRole) ncRole.onchange = e => (newCropFormState.role = e.target.value);
+  const ncCycle = $('#nc-cycle');
+  if (ncCycle) ncCycle.oninput = e => (newCropFormState.cycleDays = Number(e.target.value) || 85);
+  const ncTolerance = $('#nc-tolerance');
+  if (ncTolerance) ncTolerance.onchange = e => (newCropFormState.droughtTolerance = e.target.value);
+  const ncStart = $('#nc-start');
+  if (ncStart) ncStart.onchange = e => (newCropFormState.windowStartDate = e.target.value);
+  const ncEnd = $('#nc-end');
+  if (ncEnd) ncEnd.onchange = e => (newCropFormState.windowEndDate = e.target.value);
+  const ncFamily = $('#nc-family');
+  if (ncFamily) ncFamily.onchange = e => (newCropFormState.botanicalFamily = e.target.value);
+  const ncCultivar = $('#nc-cultivar');
+  if (ncCultivar) ncCultivar.oninput = e => (newCropFormState.cultivarName = e.target.value);
+
+  const btnSaveNewCrop = $('#btn-save-new-crop');
+  if (btnSaveNewCrop) {
+    btnSaveNewCrop.onclick = () => {
+      const name = newCropFormState.commonName.trim();
+      if (!name) {
+        toast('Informe o nome da nova cultura.');
+        return;
+      }
+      const slug = name
+        .toUpperCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^A-Z0-9]+/g, '_')
+        .replace(/^_|_$/g, '');
+      const cropId = `CUSTOM_${slug}_${Date.now().toString().slice(-4)}`;
+
+      const roleMeta = getCustomCropRoleMeta(newCropFormState.role);
+      const createdCrop = {
+        crop_id: cropId,
+        common_name: name,
+        role: roleMeta.value,
+        cycleDays: Math.max(40, Math.min(160, Number(newCropFormState.cycleDays) || 85)),
+        windowStartDate: newCropFormState.windowStartDate || '2027-01-15',
+        windowEndDate: newCropFormState.windowEndDate || '2027-04-10',
+        droughtTolerance: newCropFormState.droughtTolerance || 'MODERADA',
+        botanical_family: newCropFormState.botanicalFamily || 'Fabaceae (Leguminosa)',
+        cultivarName: newCropFormState.cultivarName.trim() || 'Cultivar Cadastrada',
+        summary: roleMeta.defaultSummary(name)
+      };
+
+      appState.customCrops = [...(appState.customCrops || []), createdCrop];
+      newCropFormState.open = false;
+      newCropFormState.commonName = '';
+      newCropFormState.cultivarName = '';
+
+      updateAndRender();
+      toast(`Cultura "${createdCrop.common_name}" incluída no catálogo e na simulação!`);
+    };
+  }
+
+  $$('[data-remove-crop]').forEach(btn => {
+    btn.onclick = () => {
+      const targetId = btn.dataset.removeCrop;
+      appState.customCrops = (appState.customCrops || []).filter(c => c.crop_id !== targetId);
+      updateAndRender();
+      toast('Cultura removida do catálogo.');
+    };
+  });
+
+  // Step 3: Planning bindings
   const delaySlider = $('#plan-delay-slider');
   if (delaySlider) {
     delaySlider.onchange = e => {
@@ -1738,13 +2005,14 @@ function bindScreenEvents() {
     };
   }
 
-  // Screen 3 bindings
+  // Step 4: Comparison bindings (jump to Step 5 = index 4)
   $$('[data-inspect-strategy]').forEach(btn => {
     btn.onclick = () => {
       appState.selectedStrategyId = btn.dataset.inspectStrategy;
-      appState.selectedStageIndex = 1;
+      const strat = simResult.strategies.find(s => s.strategyId === appState.selectedStrategyId);
+      appState.selectedStageIndex = Math.max(0, (strat?.criticalStage?.index ?? 2) - 1);
       appState.inspectedYear = Number(btn.dataset.inspectYear);
-      appState.activeTab = 3;
+      appState.activeTab = 4;
       persistState();
       renderShell();
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1755,22 +2023,24 @@ function bindScreenEvents() {
   $$('[data-select-and-explain]').forEach(btn => {
     btn.onclick = () => {
       appState.selectedStrategyId = btn.dataset.selectAndExplain;
-      appState.selectedStageIndex = 1;
       const strat = simResult.strategies.find(s => s.strategyId === appState.selectedStrategyId);
+      appState.selectedStageIndex = Math.max(0, (strat?.criticalStage?.index ?? 2) - 1);
       const firstSevere = strat?.criticalStage?.stressTest?.years?.find(y => y.status === 'severo');
       if (firstSevere) appState.inspectedYear = firstSevere.year;
-      appState.activeTab = 3;
+      appState.activeTab = 4;
       persistState();
       renderShell();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     };
   });
 
-  // Screen 4 bindings
+  // Step 5: Explanation bindings
   const selExplainStrat = $('#sel-explain-strategy');
   if (selExplainStrat) {
     selExplainStrat.onchange = e => {
       appState.selectedStrategyId = e.target.value;
+      const strat = simResult.strategies.find(s => s.strategyId === appState.selectedStrategyId);
+      appState.selectedStageIndex = Math.max(0, (strat?.criticalStage?.index ?? 2) - 1);
       persistState();
       renderActiveScreen();
     };
@@ -1807,7 +2077,7 @@ function bindScreenEvents() {
 (async function init() {
   try {
     const saved = await read();
-    if (saved && saved.version === 4 && saved.propertyProfile && saved.planningConfig) {
+    if (saved && saved.version === 5 && saved.propertyProfile && saved.planningConfig) {
       appState = {
         ...appState,
         ...saved
@@ -1819,6 +2089,5 @@ function bindScreenEvents() {
     dbReady = false;
   }
   renderShell();
-  // Always query NASA POWER live on startup for the active property
   refreshLiveNasaForActiveProperty(false);
 })();

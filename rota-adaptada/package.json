@@ -1,5 +1,5 @@
 {
-  "name": "rota-adaptada",
+  "name": "rota-adaptada-novo",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
@@ -13,5 +13,8 @@
   },
   "devDependencies": {
     "vite": "6.4.5"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true
   }
 }

@@ -99,7 +99,7 @@ export function generateVilhenaReportHTML(simResult, selectedStrategyId = null, 
         <tr>
           <th>Estratégia</th>
           <th>Mudanças vs. Original</th>
-          <th>2ª Safra Ano 1 (Etapa Crítica)</th>
+          <th>Etapa Crítica Avaliada</th>
           <th>Enquadramento ZARC / Idaron</th>
           <th>Teste de Estresse NASA (2013–2024)</th>
           <th>Solo Protegido vs. Exposto (730d)</th>

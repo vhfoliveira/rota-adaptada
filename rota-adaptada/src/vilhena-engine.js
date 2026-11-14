@@ -905,7 +905,9 @@ function buildStrategyEvaluation({
   stagesInput,
   propertyProfile,
   planningConfig,
-  baselineStages
+  baselineStages,
+  customTradeOffSummary = null,
+  criticalStageIndex = 1
 }) {
   const soilProfileId = propertyProfile.soilProfileId;
   const stages = [];
@@ -941,10 +943,22 @@ function buildStrategyEvaluation({
       seasonType: st.seasonType,
       cropId: st.cropId,
       cropName: crop.common_name,
-      shortCropName: st.cropId === 'SOJA' ? 'Soja' : st.cropId === 'MILHO_2_SAFRA' ? 'Milho 2ª Safra' : st.cropId === 'MILHO_1_SAFRA' ? 'Milho 1ª Safra' : st.cropId === 'SORGO_GRANIFERO' ? 'Sorgo Granífero' : 'Milheto Cobertura',
+      shortCropName:
+        st.cropId === 'SOJA'
+          ? 'Soja'
+          : st.cropId === 'MILHO_2_SAFRA'
+            ? 'Milho 2ª Safra'
+            : st.cropId === 'MILHO_1_SAFRA'
+              ? 'Milho 1ª Safra'
+              : st.cropId === 'SORGO_GRANIFERO'
+                ? 'Sorgo Granífero'
+                : st.cropId === 'MILHETO'
+                  ? 'Milheto Cobertura'
+                  : crop.common_name,
       scientificName: crop.scientific_name,
       botanicalFamily: crop.botanical_family,
       roleInPrototype: crop.role_in_prototype,
+      customRole: crop.custom_role || null,
       groupKey: st.groupKey,
       groupId: group.group_id,
       gmrCriterion: group.gmr_criterion,
@@ -967,13 +981,14 @@ function buildStrategyEvaluation({
   // Compute 2-year (730-day) Soil Protection vs Bare-Field Days
   const horizonDays = 730;
   const liveCropDays = stages.reduce((acc, s) => acc + s.cycleDays, 0);
-  const coverCropStagesCount = stages.filter(s => s.cropId === 'MILHETO').length;
   const mulchBonusDaysPerCover = rulesPackage.comparison_engine_rules.soil_exposure_metrics.mulch_protection_factor_after_cover_crop_days || 90;
   // Sorghum and Corn+Brachiaria also leave high C/N straw (~35 days residual protection), Soy leaves low C/N straw (~10 days)
   const strawBonusDays = stages.reduce((acc, s) => {
     if (s.cropId === 'MILHETO') return acc + mulchBonusDaysPerCover;
     if (s.cropId === 'SORGO_GRANIFERO') return acc + 45;
     if (s.cropId.startsWith('MILHO')) return acc + 30;
+    const customRole = rulesPackage.crops_catalog[s.cropId]?.custom_role;
+    if (customRole) return acc + getCustomCropRoleMeta(customRole).strawBonusDays;
     return acc + 10;
   }, 0);
 
@@ -992,8 +1007,8 @@ function buildStrategyEvaluation({
     cropSequenceIds.length === recurrentPattern.length &&
     cropSequenceIds.every((id, idx) => id === recurrentPattern[idx]);
 
-  // Focus on Stage 2 (Year 1 Safrinha - the critical stage impacted by the Year 1 summer delay)
-  const criticalStage = stages[1];
+  // Focus on critical stage (by default Stage 2, or Stage 1 if a custom main-season crop is evaluated)
+  const criticalStage = stages[criticalStageIndex] || stages[1];
   const anyZarcOut = stages.some(s => s.zarc.status === 'FORA_DE_JANELA');
   const blockedBySanitary = allSanitaryViolations.length > 0;
 
@@ -1017,15 +1032,22 @@ function buildStrategyEvaluation({
   }
 
   // Trade-off & 5 mandatory Space Apps explanation fields
-  const hasCoverCrop = cropSequenceIds.includes('MILHETO');
-  const tradeOffSummary = hasCoverCrop
-    ? 'Substitui uma etapa comercial de grãos (safrinha de alto risco) por cobertura rápida (58 dias): abre mão de receita imediata na 2ª safra do Ano 1 para evitar perda financeira fora de janela, reduzir solo exposto em ' +
-      `${mulchBonusDaysPerCover} dias e suprimir nematoides para a soja seguinte.`
-    : strategyId === 'ALTERNATIVA_COMERCIAL_SORGO'
-      ? 'Mantém finalidade comercial produtora de grãos na 2ª safra trocando Milho por Sorgo Granífero: exige ajuste de comercialização/colheita, mas garante janela ZARC 20% até 31/03 e menor exigência hídrica (ISNA ≥ 0,45).'
-      : strategyId === 'AJUSTE_CALENDARIO_CICLO'
-        ? 'Preserva a sucessão Soja → Milho comercial ajustando o ciclo para cultivares precoces (Grupo I) e intervalo operacional enxuto: requer disponibilidade de sementes precoces e agilidade de máquinas na colheita.'
-        : 'Mantém 100% das culturas e ciclos originais mesmo após o atraso: não altera compra de insumos, mas transfere todo o efeito dominó para o florescimento da 2ª safra.';
+  const hasCoverCrop = cropSequenceIds.some(
+    id =>
+      id === 'MILHETO' ||
+      rulesPackage.crops_catalog[id]?.role_in_prototype === 'COVER_CROP_SOIL_PROTECTION' ||
+      rulesPackage.crops_catalog[id]?.role_in_prototype === 'PHYTOSANITARY_CYCLING_MANAGEMENT'
+  );
+  const tradeOffSummary =
+    customTradeOffSummary ||
+    (hasCoverCrop
+      ? 'Substitui uma etapa comercial de grãos (safrinha de alto risco) por cobertura rápida: abre mão de receita imediata na 2ª safra do Ano 1 para evitar perda financeira fora de janela, reduzir solo exposto em ' +
+        `${mulchBonusDaysPerCover} dias e proteger o solo para a safra seguinte.`
+      : strategyId === 'ALTERNATIVA_COMERCIAL_SORGO'
+        ? 'Mantém finalidade comercial produtora de grãos na 2ª safra trocando Milho por Sorgo Granífero: exige ajuste de comercialização/colheita, mas garante janela ZARC 20% até 31/03 e menor exigência hídrica (ISNA ≥ 0,45).'
+        : strategyId === 'AJUSTE_CALENDARIO_CICLO'
+          ? 'Preserva a sucessão Soja → Milho comercial ajustando o ciclo para cultivares precoces (Grupo I) e intervalo operacional enxuto: requer disponibilidade de sementes precoces e agilidade de máquinas na colheita.'
+          : 'Mantém 100% das culturas e ciclos originais mesmo após o atraso: não altera compra de insumos, mas transfere todo o efeito dominó para o florescimento da 2ª safra.');
 
   const explanation = {
     why_suggested: `${questionAnswered} ${tradeOffSummary}`,
@@ -1089,10 +1111,194 @@ function buildStrategyEvaluation({
   };
 }
 
+export const CUSTOM_CROP_ROLES = {
+  SAFRA_PRINCIPAL: {
+    value: 'SAFRA_PRINCIPAL',
+    optionLabel: 'Cultura Comercial Principal (1ª Safra / Safra Principal)',
+    shortBadge: 'Safra Principal Comercial',
+    cardDescription: 'Cultura comercial principal da propriedade',
+    roleInPrototype: 'COMMERCIAL_MAIN',
+    isCover: false,
+    isMainSeason: true,
+    coverBiomassPotential: 'Moderada a Alta',
+    strawBonusDays: 25,
+    defaultSummary: name =>
+      `Cultura comercial principal (${name}) cadastrada pelo usuário para compor a safra principal da propriedade.`
+  },
+  ALTERNATIVA_COMERCIAL: {
+    value: 'ALTERNATIVA_COMERCIAL',
+    optionLabel: 'Sucessão Comercial (Produção de Grãos, Sementes ou Fibra)',
+    shortBadge: 'Colheita Comercial na Sucessão',
+    cardDescription: 'Sucessão comercial para colheita de grãos, fibra ou sementes',
+    roleInPrototype: 'COMMERCIAL_ALTERNATIVE',
+    isCover: false,
+    isMainSeason: false,
+    coverBiomassPotential: 'Moderada a Alta',
+    strawBonusDays: 35,
+    defaultSummary: name =>
+      `Cultura de sucessão comercial (${name}) cadastrada pelo usuário para diversificação produtiva e comercialização.`
+  },
+  ROTACAO_CULTURAS: {
+    value: 'ROTACAO_CULTURAS',
+    optionLabel: 'Rotação de Culturas e Diversificação (Quebra de Ciclo Biológico)',
+    shortBadge: 'Rotação Comercial e Biológica',
+    cardDescription: 'Rotação de culturas para diversificação e quebra de ciclo de pragas/doenças',
+    roleInPrototype: 'COMMERCIAL_ROTATION',
+    isCover: false,
+    isMainSeason: false,
+    coverBiomassPotential: 'Alta (Rotação e diversificação)',
+    strawBonusDays: 40,
+    defaultSummary: name =>
+      `Cultura de rotação (${name}) cadastrada pelo usuário para quebrar ciclos biológicos e diversificar o sistema.`
+  },
+  COBERTURA_SOLO: {
+    value: 'COBERTURA_SOLO',
+    optionLabel: 'Cobertura do Solo / Formação de Palhada e Adubação Verde',
+    shortBadge: 'Cobertura e Proteção do Solo',
+    cardDescription: 'Cobertura do solo, formação de palhada e adubação verde',
+    roleInPrototype: 'COVER_CROP_SOIL_PROTECTION',
+    isCover: true,
+    isMainSeason: false,
+    coverBiomassPotential: 'Alta (Cobertura viva e palhada)',
+    strawBonusDays: 90,
+    defaultSummary: name =>
+      `Cultura de cobertura cadastrada pelo usuário (${name}) para proteção do solo, formação de palhada e conservação de umidade.`
+  },
+  FORRAGEIRA_ILP: {
+    value: 'FORRAGEIRA_ILP',
+    optionLabel: 'Forrageira / Duplo Propósito (Integração Lavoura-Pecuária - ILP)',
+    shortBadge: 'Forrageira / Integração (ILP)',
+    cardDescription: 'Forrageira ou duplo propósito para Integração Lavoura-Pecuária (ILP)',
+    roleInPrototype: 'FORAGE_DUAL_PURPOSE_ILP',
+    isCover: true,
+    isMainSeason: false,
+    coverBiomassPotential: 'Muito Alta (Raízes profundas e cobertura)',
+    strawBonusDays: 75,
+    defaultSummary: name =>
+      `Cultura forrageira / duplo propósito (${name}) cadastrada para integração lavoura-pecuária e estruturação física do solo.`
+  },
+  RECUPERACAO_SANITARIA: {
+    value: 'RECUPERACAO_SANITARIA',
+    optionLabel: 'Manejo Fitossanitário e Ciclagem (Supressão de Nematoides / Pragas)',
+    shortBadge: 'Manejo Fitossanitário e Ciclagem',
+    cardDescription: 'Manejo fitossanitário, supressão de nematoides e ciclagem de nutrientes',
+    roleInPrototype: 'PHYTOSANITARY_CYCLING_MANAGEMENT',
+    isCover: true,
+    isMainSeason: false,
+    coverBiomassPotential: 'Alta (Ciclagem de nutrientes e sanidade)',
+    strawBonusDays: 80,
+    defaultSummary: name =>
+      `Cultura de manejo fitossanitário (${name}) cadastrada para ciclagem de nutrientes e redução da pressão de nematoides/pragas.`
+  }
+};
+
+export function getCustomCropRoleMeta(roleKey) {
+  return CUSTOM_CROP_ROLES[roleKey] || CUSTOM_CROP_ROLES.ALTERNATIVA_COMERCIAL;
+}
+
+/**
+ * Registers user-created custom crops into rulesPackage.crops_catalog so the deterministic engine
+ * can evaluate their planting window, 4 phenological phases, and 12-year NASA POWER stress test.
+ */
+export function registerCustomCropsInCatalog(customCrops = []) {
+  // Remove previous dynamic custom crops first
+  for (const key of Object.keys(rulesPackage.crops_catalog)) {
+    if (key.startsWith('CUSTOM_')) {
+      delete rulesPackage.crops_catalog[key];
+    }
+  }
+
+  for (const cc of customCrops) {
+    if (!cc || !cc.crop_id) continue;
+    const totalDays = Math.max(40, Math.min(180, Number(cc.cycleDays) || 90));
+    const f1 = Math.max(10, Math.round(totalDays * 0.18));
+    const f2 = Math.max(15, Math.round(totalDays * 0.32));
+    const f3 = Math.max(15, Math.round(totalDays * 0.32));
+    const f4 = Math.max(8, totalDays - f1 - f2 - f3);
+
+    const startDec = dateToDecendio(cc.windowStartDate || '2027-01-01').decendio;
+    const endDec = dateToDecendio(cc.windowEndDate || '2027-03-31').decendio;
+    const decList = [];
+    if (startDec <= endDec) {
+      for (let d = startDec; d <= endDec; d++) decList.push(d);
+    } else {
+      for (let d = startDec; d <= 36; d++) decList.push(d);
+      for (let d = 1; d <= endDec; d++) decList.push(d);
+    }
+    const nextDec = (endDec % 36) + 1;
+
+    const isRustic = cc.droughtTolerance === 'ALTA';
+    const isSensitive = cc.droughtTolerance === 'SENSIVEL';
+    const roleMeta = getCustomCropRoleMeta(cc.role);
+
+    rulesPackage.crops_catalog[cc.crop_id] = {
+      crop_id: cc.crop_id,
+      is_custom: true,
+      custom_role: roleMeta.value,
+      common_name: cc.common_name,
+      scientific_name: cc.scientific_name || 'Cultura cadastrada pelo usuário',
+      botanical_family: cc.botanical_family || 'Fabaceae (Leguminosa)',
+      role_in_prototype: roleMeta.roleInPrototype,
+      legal_reference: 'Parâmetros cadastrados pelo usuário para simulação local',
+      agronomic_functions: {
+        nitrogen_fixation: String(cc.botanical_family || '').includes('Fabaceae'),
+        cover_biomass_potential: roleMeta.coverBiomassPotential,
+        pest_and_disease_notes: 'Verificar compatibilidade fitossanitária local com o engenheiro agrônomo.',
+        soil_health_summary: cc.summary || roleMeta.defaultSummary(cc.common_name)
+      },
+      zarc_windows_vilhena: {
+        synthesized_low_risk_20pct_dates: `${formatBRDate(cc.windowStartDate || '2027-01-01').slice(0, 5)} a ${formatBRDate(
+          cc.windowEndDate || '2027-03-31'
+        ).slice(0, 5)}`,
+        decendios_by_soil: {
+          AD3_MEDIA: { risk_20pct: decList, risk_30pct: [nextDec], risk_40pct: [] },
+          AD4_ARGILOSA: { risk_20pct: decList, risk_30pct: [nextDec], risk_40pct: [] },
+          AD5_MUITO_ARGILOSA: { risk_20pct: [...decList, nextDec], risk_30pct: [], risk_40pct: [] }
+        }
+      },
+      cultivar_groups: {
+        GRUPO_PADRAO: {
+          group_id: 'GRUPO_I',
+          gmr_criterion: `Ciclo cadastrado de ${totalDays} dias`,
+          cycle_days_default: totalDays,
+          cycle_days_range: [totalDays - 5, totalDays + 5],
+          phases_days: {
+            F1_estabelecimento: f1,
+            F2_vegetativo: f2,
+            F3_floracao_enchimento: f3,
+            F4_maturacao: f4
+          },
+          recommended_cultivars_ro: [{ name: cc.cultivarName || 'Cultivar Padrão', maintainer: 'Usuário', group: 'I' }]
+        }
+      },
+      climate_thresholds_nasa: {
+        water_cycle_requirement_mm: { min: isRustic ? 250 : 400, max: 700 },
+        zarc_isna_thresholds: { F1: 0.5, F3: isRustic ? 0.4 : 0.5 },
+        alert_triggers: {
+          f1_establishment_min_rain_15d_mm: isRustic ? 25.0 : 40.0,
+          f1_max_consecutive_dry_days: isRustic ? 12 : 8,
+          f3_reproductive_min_rain_30d_mm: isRustic ? 65.0 : isSensitive ? 130.0 : 95.0,
+          f3_max_consecutive_dry_days: isRustic ? 14 : isSensitive ? 7 : 10,
+          f4_harvest_excess_rain_10d_mm: 130.0,
+          temp_max_heat_stress_c: 39.0,
+          temp_max_warning_f3_c: 36.0,
+          temp_min_growth_arrest_c: 10.0,
+          gwetroot_critical_f3: isRustic ? 0.36 : isSensitive ? 0.48 : 0.42
+        }
+      }
+    };
+  }
+}
+
 /**
  * Main deterministic simulation entry point.
  */
-export function simulateAdaptation(propertyProfile = defaultPropertyProfile(), planningConfig = defaultPlanningConfig()) {
+export function simulateAdaptation(
+  propertyProfile = defaultPropertyProfile(),
+  planningConfig = defaultPlanningConfig(),
+  customCrops = []
+) {
+  registerCustomCropsInCatalog(customCrops);
   const delayDays = Math.max(0, Math.min(90, Number(planningConfig.delayDays) || 0));
   const opInterval = Math.max(5, Math.min(30, Number(planningConfig.operationalIntervalDays) || 7));
 
@@ -1351,12 +1557,124 @@ export function simulateAdaptation(propertyProfile = defaultPropertyProfile(), p
     baselineStages
   });
 
+  // Evaluate any custom crops registered by the user in Step 2 (Catálogo de Culturas)
+  const customStrategies = (customCrops || [])
+    .filter(cc => cc && cc.crop_id && rulesPackage.crops_catalog[cc.crop_id])
+    .map((cc, idx) => {
+      const roleMeta = getCustomCropRoleMeta(cc.role);
+      if (roleMeta.isMainSeason) {
+        const customCycle = Math.max(40, Math.min(180, Number(cc.cycleDays) || 90));
+        const customY1Harv = addDaysUTC(delayedSoySow, customCycle - 1);
+        const customSaf1Sow = addDaysUTC(customY1Harv, opInterval + 1);
+        return buildStrategyEvaluation({
+          strategyId: `ALTERNATIVA_CUSTOM_${cc.crop_id}`,
+          title: `${5 + idx}. ${roleMeta.shortBadge} (${cc.common_name})`,
+          shortTitle: cc.common_name,
+          questionAnswered: `Como a cultura principal cadastrada (${cc.common_name}, ciclo de ${cc.cycleDays} dias) se comporta no plantio e impacta a sucessão da propriedade?`,
+          modificationsCount: 1,
+          changedDescriptions: [
+            `Adoção de ${cc.common_name} (${cc.cycleDays} dias · ${roleMeta.shortBadge}) na 1ª safra, liberando a área para a sucessão em ${formatBRDate(customSaf1Sow)}.`
+          ],
+          customTradeOffSummary: cc.summary || roleMeta.defaultSummary(cc.common_name),
+          criticalStageIndex: 0,
+          stagesInput: [
+            {
+              stageLabel: `Ano 1 · 1ª Safra (${roleMeta.shortBadge})`,
+              seasonType: 'verao_1',
+              cropId: cc.crop_id,
+              groupKey: 'GRUPO_PADRAO',
+              cultivarName: cc.cultivarName || `${cc.common_name} (${cc.cycleDays}d)`,
+              sowDate: delayedSoySow
+            },
+            {
+              stageLabel: 'Ano 1 · Sucessão',
+              seasonType: 'safrinha_1',
+              cropId: planningConfig.year1SafrinhaCropId || 'MILHO_2_SAFRA',
+              groupKey: planningConfig.year1SafrinhaGroupKey || 'GRUPO_II_MEDIO',
+              cultivarName: planningConfig.year1SafrinhaCultivar || 'AG 8088 PRO2',
+              sowDate: customSaf1Sow
+            },
+            {
+              stageLabel: 'Ano 2 · 1ª Safra (Verão)',
+              seasonType: 'verao_2',
+              cropId: planningConfig.year2SummerCropId || 'SOJA',
+              groupKey: planningConfig.year2SummerGroupKey || 'GRUPO_II_MEDIO',
+              cultivarName: planningConfig.year2SummerCultivar || 'BRSMT Pintado',
+              sowDate: baseY2SoySow
+            },
+            {
+              stageLabel: 'Ano 2 · Sucessão',
+              seasonType: 'safrinha_2',
+              cropId: planningConfig.year2SafrinhaCropId || 'MILHO_2_SAFRA',
+              groupKey: 'GRUPO_I_PRECOCE',
+              cultivarName: planningConfig.year2SafrinhaCultivar || 'BRS 1055',
+              sowDate: baseSaf2Sow
+            }
+          ],
+          propertyProfile,
+          planningConfig,
+          baselineStages
+        });
+      }
+
+      return buildStrategyEvaluation({
+        strategyId: `ALTERNATIVA_CUSTOM_${cc.crop_id}`,
+        title: `${5 + idx}. ${roleMeta.shortBadge} (${cc.common_name})`,
+        shortTitle: cc.common_name,
+        questionAnswered: `Como a cultura cadastrada pelo usuário (${cc.common_name}, ciclo de ${cc.cycleDays} dias · ${roleMeta.shortBadge}) se comporta no planejamento após o atraso?`,
+        modificationsCount: 1,
+        changedDescriptions: [
+          `Inclusão da cultura cadastrada ${cc.common_name} (${cc.cycleDays} dias) com finalidade de ${roleMeta.shortBadge.toLowerCase()}.`
+        ],
+        customTradeOffSummary: cc.summary || roleMeta.defaultSummary(cc.common_name),
+        criticalStageIndex: 1,
+        stagesInput: [
+          {
+            stageLabel: 'Ano 1 · 1ª Safra (Verão)',
+            seasonType: 'verao_1',
+            cropId: planningConfig.year1SummerCropId || 'SOJA',
+            groupKey: planningConfig.year1SummerGroupKey || 'GRUPO_II_MEDIO',
+            cultivarName: planningConfig.year1SummerCultivar || 'BRS 8481',
+            sowDate: delayedSoySow
+          },
+          {
+            stageLabel: `Ano 1 · Sucessão (${roleMeta.shortBadge})`,
+            seasonType: 'safrinha_1',
+            cropId: cc.crop_id,
+            groupKey: 'GRUPO_PADRAO',
+            cultivarName: cc.cultivarName || `${cc.common_name} (${cc.cycleDays}d)`,
+            sowDate: s1Saf1Sow
+          },
+          {
+            stageLabel: 'Ano 2 · 1ª Safra (Verão)',
+            seasonType: 'verao_2',
+            cropId: planningConfig.year2SummerCropId || 'SOJA',
+            groupKey: planningConfig.year2SummerGroupKey || 'GRUPO_II_MEDIO',
+            cultivarName: planningConfig.year2SummerCultivar || 'BRSMT Pintado',
+            sowDate: baseY2SoySow
+          },
+          {
+            stageLabel: 'Ano 2 · Sucessão',
+            seasonType: 'safrinha_2',
+            cropId: planningConfig.year2SafrinhaCropId || 'MILHO_2_SAFRA',
+            groupKey: 'GRUPO_I_PRECOCE',
+            cultivarName: planningConfig.year2SafrinhaCultivar || 'BRS 1055',
+            sowDate: baseSaf2Sow
+          }
+        ],
+        propertyProfile,
+        planningConfig,
+        baselineStages
+      });
+    });
+
   // Apply producer's preserved decisions filter
   const pd = planningConfig.preservedDecisions || {};
   const candidates = [strategyPlanoAtual];
   if (pd.allowCycleAdjustment !== false) candidates.push(strategyAjusteCiclo);
   if (pd.allowCommercialSubstitution !== false) candidates.push(strategySorgo);
   if (pd.allowCoverCropTransition !== false) candidates.push(strategyMilheto);
+  candidates.push(...customStrategies);
 
   // Check if any alternative is valid and better than Plano Atual
   const validAlternatives = candidates
@@ -1386,7 +1704,7 @@ export function simulateAdaptation(propertyProfile = defaultPropertyProfile(), p
     baselineSafrinhaDate: baseSaf1Sow,
     delayedSafrinhaDate: s1Saf1Sow,
     strategies: candidates,
-    allStrategies: [strategyPlanoAtual, strategyAjusteCiclo, strategySorgo, strategyMilheto],
+    allStrategies: [strategyPlanoAtual, strategyAjusteCiclo, strategySorgo, strategyMilheto, ...customStrategies],
     validAlternativesCount: validAlternatives.length,
     noBetterAlternativeMessage
   };

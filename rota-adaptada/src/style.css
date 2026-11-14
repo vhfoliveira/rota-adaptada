@@ -280,11 +280,11 @@ code {
   padding: 8px 14px;
 }
 
-/* 4-Screen Tabs Navigation */
+/* 5-Screen Tabs Navigation */
 .screen-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
   padding: 18px 24px 0;
   max-width: 1380px;
   margin: 0 auto;
@@ -1537,6 +1537,17 @@ code {
   background: rgba(137, 216, 181, 0.16);
   border-color: rgba(137, 216, 181, 0.45);
   color: var(--mint);
+}
+
+.custom-crop-card {
+  border-top: 3px solid var(--gold);
+  background: #fffdf8;
+}
+
+.custom-tag {
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  border: 1px solid var(--warn-border);
 }
 
 /* Responsive Breakpoints */
