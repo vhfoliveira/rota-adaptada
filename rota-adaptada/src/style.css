@@ -1550,6 +1550,190 @@ code {
   border: 1px solid var(--warn-border);
 }
 
+/* Planning Cards, Succession Flow & Ordered Succession Builder */
+.plannings-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 14px;
+}
+
+.planning-registered-card {
+  background: var(--paper-soft);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  padding: 15px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.planning-registered-card.active-planning-card {
+  background: #f2faf5;
+  border: 2px solid var(--leaf);
+  box-shadow: 0 6px 18px rgba(31, 92, 63, 0.1);
+}
+
+.planning-registered-card h3 {
+  margin: 0;
+  font-size: 1.02rem;
+  color: var(--forest);
+}
+
+.planning-prop-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  padding: 8px 10px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.planning-succession-chain {
+  padding: 10px 12px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.succession-pills-flow {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.succ-flow-item {
+  flex: 1 1 135px;
+  background: var(--paper-soft);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.succ-step-badge {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #e1efe7;
+  color: var(--forest);
+  margin-bottom: 2px;
+}
+
+.succ-flow-item strong {
+  font-size: 0.88rem;
+  color: var(--ink);
+}
+
+.succ-flow-item small {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.succ-role-tag {
+  margin-top: 2px;
+  font-weight: 700;
+  color: var(--leaf) !important;
+}
+
+.succ-flow-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--leaf);
+  padding: 0 2px;
+}
+
+.succession-builder-box {
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: var(--paper-soft);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+
+.succession-builder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.succession-builder-row {
+  display: grid;
+  grid-template-columns: 1.25fr 2fr auto;
+  gap: 12px;
+  align-items: center;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--leaf);
+  border-radius: 8px;
+  padding: 11px 14px;
+}
+
+.sb-order-col {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sb-order-num {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--forest);
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sb-order-col strong {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--forest);
+}
+
+.sb-schedule-preview {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.sb-inputs-col {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  gap: 10px;
+}
+
+.sb-actions-col {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.preserved-checks-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 /* Responsive Breakpoints */
 @media (max-width: 1180px) {
   .catalog-grid-4,
@@ -1572,6 +1756,10 @@ code {
   .references-grid,
   .clean-explain-bar,
   .new-prop-form-grid,
+  .plannings-cards-grid,
+  .succession-builder-row,
+  .sb-inputs-col,
+  .preserved-checks-grid,
   .two,
   .form-row-inline {
     grid-template-columns: 1fr;

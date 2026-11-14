@@ -345,10 +345,14 @@ export function defaultPropertyProfile() {
 }
 
 /**
- * Default 2-year planning configuration (Screen 2).
+ * Default 2-year planning configuration (Screen 3).
  */
 export function defaultPlanningConfig() {
   return {
+    id: 'plan-vilhena-padrao-01',
+    planningName: 'Planejamento Pré-Cadastrado Vilhena/RO (Soja → Milho 2ª Safra)',
+    propertyId: 'prop-vilhena-parecis-01',
+    isPreRegistered: true,
     safraLabel: 'Biênio 2026/2027 – 2027/2028',
     baseSowingDate: '2026-11-01',
     delayDays: 20,
@@ -366,6 +370,44 @@ export function defaultPlanningConfig() {
     year2SafrinhaGroupKey: 'GRUPO_I_PRECOCE',
     year2SafrinhaCultivar: 'BRS 1055',
     year2SummerPlannedDate: '2027-10-20',
+    successionStages: [
+      {
+        order: 1,
+        stageLabel: '1ª Etapa · Safra Principal (Ano 1)',
+        seasonType: 'verao_1',
+        cropId: 'SOJA',
+        groupKey: 'GRUPO_II_MEDIO',
+        cultivarName: 'BRS 8481',
+        plannedSowDate: null
+      },
+      {
+        order: 2,
+        stageLabel: '2ª Etapa · 1ª Sucessão (Ano 1)',
+        seasonType: 'safrinha_1',
+        cropId: 'MILHO_2_SAFRA',
+        groupKey: 'GRUPO_II_MEDIO',
+        cultivarName: 'AG 8088 PRO2',
+        plannedSowDate: null
+      },
+      {
+        order: 3,
+        stageLabel: '3ª Etapa · 2ª Sucessão (Ano 2)',
+        seasonType: 'verao_2',
+        cropId: 'SOJA',
+        groupKey: 'GRUPO_II_MEDIO',
+        cultivarName: 'BRSMT Pintado',
+        plannedSowDate: '2027-10-20'
+      },
+      {
+        order: 4,
+        stageLabel: '4ª Etapa · 3ª Sucessão (Ano 2)',
+        seasonType: 'safrinha_2',
+        cropId: 'MILHO_2_SAFRA',
+        groupKey: 'GRUPO_I_PRECOCE',
+        cultivarName: 'BRS 1055',
+        plannedSowDate: null
+      }
+    ],
     preservedDecisions: {
       keepFirstCropSoy: true,
       maxChangesAllowed: 2,
@@ -1291,6 +1333,122 @@ export function registerCustomCropsInCatalog(customCrops = []) {
 }
 
 /**
+ * Returns the ordered list of succession stages for a planning config, supporting both
+ * explicit `successionStages` arrays (any length >= 2) and legacy 4-stage fields.
+ */
+export function getPlanningStagesList(planningConfig = defaultPlanningConfig()) {
+  const raw =
+    Array.isArray(planningConfig?.successionStages) && planningConfig.successionStages.length >= 2
+      ? planningConfig.successionStages
+      : [
+          {
+            order: 1,
+            stageLabel: '1ª Etapa · Safra Principal (Ano 1)',
+            seasonType: 'verao_1',
+            cropId: planningConfig?.year1SummerCropId || 'SOJA',
+            groupKey: planningConfig?.year1SummerGroupKey || 'GRUPO_II_MEDIO',
+            cultivarName: planningConfig?.year1SummerCultivar || 'BRS 8481',
+            plannedSowDate: null
+          },
+          {
+            order: 2,
+            stageLabel: '2ª Etapa · 1ª Sucessão (Ano 1)',
+            seasonType: 'safrinha_1',
+            cropId: planningConfig?.year1SafrinhaCropId || 'MILHO_2_SAFRA',
+            groupKey: planningConfig?.year1SafrinhaGroupKey || 'GRUPO_II_MEDIO',
+            cultivarName: planningConfig?.year1SafrinhaCultivar || 'AG 8088 PRO2',
+            plannedSowDate: null
+          },
+          {
+            order: 3,
+            stageLabel: '3ª Etapa · 2ª Sucessão (Ano 2)',
+            seasonType: 'verao_2',
+            cropId: planningConfig?.year2SummerCropId || 'SOJA',
+            groupKey: planningConfig?.year2SummerGroupKey || 'GRUPO_II_MEDIO',
+            cultivarName: planningConfig?.year2SummerCultivar || 'BRSMT Pintado',
+            plannedSowDate: planningConfig?.year2SummerPlannedDate || '2027-10-20'
+          },
+          {
+            order: 4,
+            stageLabel: '4ª Etapa · 3ª Sucessão (Ano 2)',
+            seasonType: 'safrinha_2',
+            cropId: planningConfig?.year2SafrinhaCropId || 'MILHO_2_SAFRA',
+            groupKey: planningConfig?.year2SafrinhaGroupKey || 'GRUPO_I_PRECOCE',
+            cultivarName: planningConfig?.year2SafrinhaCultivar || 'BRS 1055',
+            plannedSowDate: null
+          }
+        ];
+
+  return raw.map((st, idx) => {
+    const crop = rulesPackage.crops_catalog[st.cropId] || rulesPackage.crops_catalog.SOJA;
+    const groupKeys = Object.keys(crop.cultivar_groups || {});
+    const resolvedGroupKey = crop.cultivar_groups?.[st.groupKey] ? st.groupKey : groupKeys[0];
+    const groupObj = crop.cultivar_groups?.[resolvedGroupKey];
+    const defaultCultivar = groupObj?.recommended_cultivars_ro?.[0]?.name || groupObj?.group_id || 'Cultivar Padrão';
+    const orderNum = idx + 1;
+    const defaultLabel =
+      idx === 0 ? '1ª Etapa · Safra Inicial' : `${orderNum}ª Etapa · ${idx}ª Sucessão`;
+
+    return {
+      order: orderNum,
+      stageLabel: st.stageLabel || defaultLabel,
+      seasonType: st.seasonType || (idx % 2 === 0 ? `verao_${Math.floor(idx / 2) + 1}` : `safrinha_${Math.floor(idx / 2) + 1}`),
+      cropId: crop.crop_id,
+      groupKey: resolvedGroupKey,
+      cultivarName: st.cultivarName || defaultCultivar,
+      plannedSowDate: st.plannedSowDate || null
+    };
+  });
+}
+
+/**
+ * Resolves exact sowing and harvest dates in sequence order given an initial sowing date and operational interval.
+ */
+export function resolveSuccessionSchedule(stageDefs, initialSowDate, opInterval = 7, firstGapOverride = null) {
+  const resolved = [];
+  let prevHarvest = null;
+
+  for (let i = 0; i < stageDefs.length; i++) {
+    const st = stageDefs[i];
+    const crop = rulesPackage.crops_catalog[st.cropId] || rulesPackage.crops_catalog.SOJA;
+    const groupKeys = Object.keys(crop.cultivar_groups || {});
+    const groupKey = crop.cultivar_groups?.[st.groupKey] ? st.groupKey : groupKeys[0];
+    const group = crop.cultivar_groups[groupKey];
+    const cycleDays = group?.cycle_days_default || 100;
+
+    let sowDate = initialSowDate;
+    if (i > 0 && prevHarvest) {
+      const gap = i === 1 && firstGapOverride !== null ? firstGapOverride : opInterval;
+      const earliestAfterPrev = addDaysUTC(prevHarvest, gap + 1);
+      if (st.plannedSowDate && parseUTCDate(earliestAfterPrev) < parseUTCDate(st.plannedSowDate)) {
+        sowDate = st.plannedSowDate;
+      } else {
+        sowDate = earliestAfterPrev;
+      }
+    }
+
+    const harvestDate = addDaysUTC(sowDate, cycleDays - 1);
+    prevHarvest = harvestDate;
+
+    resolved.push({
+      order: i + 1,
+      stageLabel: st.stageLabel || (i === 0 ? '1ª Etapa · Safra Inicial' : `${i + 1}ª Etapa · ${i}ª Sucessão`),
+      seasonType: st.seasonType || (i % 2 === 0 ? `verao_${Math.floor(i / 2) + 1}` : `safrinha_${Math.floor(i / 2) + 1}`),
+      cropId: crop.crop_id,
+      cropName: crop.common_name,
+      groupKey,
+      cultivarName: st.cultivarName || group?.recommended_cultivars_ro?.[0]?.name || group?.group_id || 'Padrão',
+      sowDate,
+      harvestDate,
+      cycleDays,
+      plannedSowDate: st.plannedSowDate || null
+    });
+  }
+
+  return resolved;
+}
+
+/**
  * Main deterministic simulation entry point.
  */
 export function simulateAdaptation(
@@ -1302,60 +1460,19 @@ export function simulateAdaptation(
   const delayDays = Math.max(0, Math.min(90, Number(planningConfig.delayDays) || 0));
   const opInterval = Math.max(5, Math.min(30, Number(planningConfig.operationalIntervalDays) || 7));
 
-  // 0. Original Undelayed Baseline Schedule (to compute exact date shifts)
-  const baseSoyCrop = rulesPackage.crops_catalog[planningConfig.year1SummerCropId || 'SOJA'];
-  const baseSoyGroup = baseSoyCrop.cultivar_groups[planningConfig.year1SummerGroupKey || 'GRUPO_II_MEDIO'];
+  const planStages = getPlanningStagesList(planningConfig);
   const baseSoySow = planningConfig.baseSowingDate || '2026-11-01';
-  const baseSoyHarv = addDaysUTC(baseSoySow, baseSoyGroup.cycle_days_default - 1);
-  const baseSaf1Sow = addDaysUTC(baseSoyHarv, opInterval + 1);
-
-  const baseY2SoySow = planningConfig.year2SummerPlannedDate || '2027-10-20';
-  const baseY2SoyGroup = rulesPackage.crops_catalog[planningConfig.year2SummerCropId || 'SOJA'].cultivar_groups[planningConfig.year2SummerGroupKey || 'GRUPO_II_MEDIO'];
-  const baseY2SoyHarv = addDaysUTC(baseY2SoySow, baseY2SoyGroup.cycle_days_default - 1);
-  const baseSaf2Sow = addDaysUTC(baseY2SoyHarv, opInterval + 1);
-
-  const baselineStages = [
-    {
-      stageLabel: 'Ano 1 · 1ª Safra (Verão)',
-      seasonType: 'verao_1',
-      cropId: planningConfig.year1SummerCropId || 'SOJA',
-      groupKey: planningConfig.year1SummerGroupKey || 'GRUPO_II_MEDIO',
-      sowDate: baseSoySow
-    },
-    {
-      stageLabel: 'Ano 1 · 2ª Safra (Safrinha)',
-      seasonType: 'safrinha_1',
-      cropId: planningConfig.year1SafrinhaCropId || 'MILHO_2_SAFRA',
-      groupKey: planningConfig.year1SafrinhaGroupKey || 'GRUPO_II_MEDIO',
-      sowDate: baseSaf1Sow
-    },
-    {
-      stageLabel: 'Ano 2 · 1ª Safra (Verão)',
-      seasonType: 'verao_2',
-      cropId: planningConfig.year2SummerCropId || 'SOJA',
-      groupKey: planningConfig.year2SummerGroupKey || 'GRUPO_II_MEDIO',
-      sowDate: baseY2SoySow
-    },
-    {
-      stageLabel: 'Ano 2 · 2ª Safra (Safrinha)',
-      seasonType: 'safrinha_2',
-      cropId: planningConfig.year2SafrinhaCropId || 'MILHO_2_SAFRA',
-      groupKey: planningConfig.year2SafrinhaGroupKey || 'GRUPO_I_PRECOCE',
-      sowDate: baseSaf2Sow
-    }
-  ];
-
-  // Delayed Year 1 Summer sowing date
   const delayedSoySow = addDaysUTC(baseSoySow, delayDays);
 
+  // 0. Original Undelayed Baseline Schedule (to compute exact date shifts across all ordered stages)
+  const baselineStages = resolveSuccessionSchedule(planStages, baseSoySow, opInterval);
+  const baseSaf1Sow = baselineStages[1]?.sowDate || baselineStages[0].sowDate;
+
   // STRATEGY 1: PLANO ATUAL (Keep exact planned sequence and groups despite delay)
-  const s1SoyHarv = addDaysUTC(delayedSoySow, baseSoyGroup.cycle_days_default - 1);
-  const s1Saf1Sow = addDaysUTC(s1SoyHarv, opInterval + 1);
-  const s1Saf1Group = rulesPackage.crops_catalog[planningConfig.year1SafrinhaCropId || 'MILHO_2_SAFRA'].cultivar_groups[planningConfig.year1SafrinhaGroupKey || 'GRUPO_II_MEDIO'];
-  const s1Saf1Harv = addDaysUTC(s1Saf1Sow, s1Saf1Group.cycle_days_default - 1);
-  const s1Y2SoySow = parseUTCDate(s1Saf1Harv) >= parseUTCDate(baseY2SoySow) ? addDaysUTC(s1Saf1Harv, opInterval + 1) : baseY2SoySow;
-  const s1Y2SoyHarv = addDaysUTC(s1Y2SoySow, baseY2SoyGroup.cycle_days_default - 1);
-  const s1Saf2Sow = addDaysUTC(s1Y2SoyHarv, opInterval + 1);
+  const s1Stages = resolveSuccessionSchedule(planStages, delayedSoySow, opInterval);
+  const s1Saf1Sow = s1Stages[1]?.sowDate || s1Stages[0].sowDate;
+  const firstStageCropName = rulesPackage.crops_catalog[planStages[0].cropId]?.common_name || planStages[0].cropId;
+  const secondStageCropName = rulesPackage.crops_catalog[planStages[1]?.cropId]?.common_name || 'Sucessão';
 
   const strategyPlanoAtual = buildStrategyEvaluation({
     strategyId: 'PLANO_ATUAL',
@@ -1363,195 +1480,100 @@ export function simulateAdaptation(
     shortTitle: 'Plano Atual (Com Atraso)',
     questionAnswered: 'Quais alertas de chuva, temperatura, umidade do solo e janela ZARC aparecem se a sequência original for mantida apesar do atraso?',
     modificationsCount: 0,
-    changedDescriptions: ['Nenhuma cultura ou grupo alterado (propaga o atraso de +' + delayDays + ' dias por efeito dominó).'],
-    stagesInput: [
-      {
-        stageLabel: 'Ano 1 · 1ª Safra (Verão)',
-        seasonType: 'verao_1',
-        cropId: planningConfig.year1SummerCropId || 'SOJA',
-        groupKey: planningConfig.year1SummerGroupKey || 'GRUPO_II_MEDIO',
-        cultivarName: planningConfig.year1SummerCultivar || 'BRS 8481',
-        sowDate: delayedSoySow
-      },
-      {
-        stageLabel: 'Ano 1 · 2ª Safra (Safrinha)',
-        seasonType: 'safrinha_1',
-        cropId: planningConfig.year1SafrinhaCropId || 'MILHO_2_SAFRA',
-        groupKey: planningConfig.year1SafrinhaGroupKey || 'GRUPO_II_MEDIO',
-        cultivarName: planningConfig.year1SafrinhaCultivar || 'AG 8088 PRO2',
-        sowDate: s1Saf1Sow
-      },
-      {
-        stageLabel: 'Ano 2 · 1ª Safra (Verão)',
-        seasonType: 'verao_2',
-        cropId: planningConfig.year2SummerCropId || 'SOJA',
-        groupKey: planningConfig.year2SummerGroupKey || 'GRUPO_II_MEDIO',
-        cultivarName: planningConfig.year2SummerCultivar || 'BRSMT Pintado',
-        sowDate: s1Y2SoySow
-      },
-      {
-        stageLabel: 'Ano 2 · 2ª Safra (Safrinha)',
-        seasonType: 'safrinha_2',
-        cropId: planningConfig.year2SafrinhaCropId || 'MILHO_2_SAFRA',
-        groupKey: planningConfig.year2SafrinhaGroupKey || 'GRUPO_I_PRECOCE',
-        cultivarName: planningConfig.year2SafrinhaCultivar || 'BRS 1055',
-        sowDate: s1Saf2Sow
-      }
-    ],
+    changedDescriptions: ['Nenhuma cultura ou grupo alterado (propaga o atraso de +' + delayDays + ' dias por efeito dominó na sucessão).'],
+    stagesInput: s1Stages,
     propertyProfile,
     planningConfig,
     baselineStages
   });
 
   // STRATEGY 2: AJUSTE DE CALENDÁRIO / CICLO (Early Maturation Group I + fast operational turnaround 5d)
-  const earlySoyGroup = rulesPackage.crops_catalog.SOJA.cultivar_groups.GRUPO_I_PRECOCE;
   const fastInterval = Math.max(5, opInterval - 2);
-  const s2SoyHarv = addDaysUTC(delayedSoySow, earlySoyGroup.cycle_days_default - 1);
-  const s2Saf1Sow = addDaysUTC(s2SoyHarv, fastInterval + 1);
+  const s2Defs = planStages.map((st, idx) => {
+    const crop = rulesPackage.crops_catalog[st.cropId] || rulesPackage.crops_catalog.SOJA;
+    if ((idx === 0 || idx === 1 || idx === 3) && crop.cultivar_groups?.GRUPO_I_PRECOCE) {
+      const earlyGroup = crop.cultivar_groups.GRUPO_I_PRECOCE;
+      const earlyCultivar = earlyGroup.recommended_cultivars_ro?.[0]?.name || 'Precoce G-I';
+      return {
+        ...st,
+        groupKey: 'GRUPO_I_PRECOCE',
+        cultivarName: `${earlyCultivar} (Precoce G-I)`
+      };
+    }
+    return { ...st };
+  });
+  const s2Stages = resolveSuccessionSchedule(s2Defs, delayedSoySow, opInterval, fastInterval);
+  const s2Saf1Sow = s2Stages[1]?.sowDate || s2Stages[0].sowDate;
 
   const strategyAjusteCiclo = buildStrategyEvaluation({
     strategyId: 'AJUSTE_CALENDARIO_CICLO',
     title: '2. Ajuste de Ciclo / Janela (Cultivares Precoces Grupo I)',
     shortTitle: 'Ajuste de Ciclo (Grupo I)',
-    questionAnswered: 'Há uma mudança de ciclo (troca para cultivar precoce Grupo I) compatível com as janelas e restrições sem trocar o Milho?',
+    questionAnswered: `Há uma mudança de ciclo (troca para cultivar precoce Grupo I) compatível com as janelas e restrições mantendo a sucessão planejada?`,
     modificationsCount: 1,
     changedDescriptions: [
-      'Troca para cultivares precoces Grupo I (Soja BRS 7582 de 105d + Milho BRS 1055 de 100d) e janela operacional enxuta (5d), antecipando a safrinha em ' +
-        diffDaysUTC(s2Saf1Sow, s1Saf1Sow) +
+      `Troca para cultivares precoces Grupo I e janela operacional enxuta (${fastInterval}d), antecipando a 1ª sucessão em ` +
+        Math.max(0, diffDaysUTC(s2Saf1Sow, s1Saf1Sow)) +
         ' dias.'
     ],
-    stagesInput: [
-      {
-        stageLabel: 'Ano 1 · 1ª Safra (Verão)',
-        seasonType: 'verao_1',
-        cropId: 'SOJA',
-        groupKey: 'GRUPO_I_PRECOCE',
-        cultivarName: 'BRS 7582 (Precoce G-I)',
-        sowDate: delayedSoySow
-      },
-      {
-        stageLabel: 'Ano 1 · 2ª Safra (Safrinha)',
-        seasonType: 'safrinha_1',
-        cropId: 'MILHO_2_SAFRA',
-        groupKey: 'GRUPO_I_PRECOCE',
-        cultivarName: 'BRS 1055 (Precoce G-I)',
-        sowDate: s2Saf1Sow
-      },
-      {
-        stageLabel: 'Ano 2 · 1ª Safra (Verão)',
-        seasonType: 'verao_2',
-        cropId: planningConfig.year2SummerCropId || 'SOJA',
-        groupKey: planningConfig.year2SummerGroupKey || 'GRUPO_II_MEDIO',
-        cultivarName: planningConfig.year2SummerCultivar || 'BRSMT Pintado',
-        sowDate: baseY2SoySow
-      },
-      {
-        stageLabel: 'Ano 2 · 2ª Safra (Safrinha)',
-        seasonType: 'safrinha_2',
-        cropId: planningConfig.year2SafrinhaCropId || 'MILHO_2_SAFRA',
-        groupKey: 'GRUPO_I_PRECOCE',
-        cultivarName: '2A401PW (Precoce G-I)',
-        sowDate: baseSaf2Sow
-      }
-    ],
+    stagesInput: s2Stages,
     propertyProfile,
     planningConfig,
     baselineStages
   });
 
-  // STRATEGY 3: ALTERNATIVA COMERCIAL (SORGO GRANÍFERO na 2ª Safra do Ano 1)
+  // STRATEGY 3: ALTERNATIVA COMERCIAL (SORGO GRANÍFERO na 1ª Sucessão)
+  const s3Defs = planStages.map((st, idx) =>
+    idx === 1
+      ? {
+          ...st,
+          cropId: 'SORGO_GRANIFERO',
+          groupKey: 'GRUPO_I_PRECOCE',
+          cultivarName: 'BRS 373 / 84G02'
+        }
+      : { ...st }
+  );
+  const s3Stages = resolveSuccessionSchedule(s3Defs, delayedSoySow, opInterval);
+
   const strategySorgo = buildStrategyEvaluation({
     strategyId: 'ALTERNATIVA_COMERCIAL_SORGO',
-    title: '3. Alternativa Comercial (Sorgo Granífero 2ª Safra)',
+    title: '3. Alternativa Comercial na Sucessão (Sorgo Granífero)',
     shortTitle: 'Alternativa Comercial (Sorgo)',
     questionAnswered: 'Outra espécie comercial do catálogo apresenta janela ZARC mais ampla (até 31/03) e menor exposição ao estresse hídrico histórico?',
     modificationsCount: 1,
     changedDescriptions: [
-      'Substituição apenas da 2ª safra comercial do Ano 1 (Milho → Sorgo Granífero BRS 373 / 84G02, Grupo I de 100d), mantendo a Soja original.'
+      `Substituição apenas da 1ª sucessão (${secondStageCropName} → Sorgo Granífero BRS 373 / 84G02, Grupo I de 100d), mantendo ${firstStageCropName} inicial.`
     ],
-    stagesInput: [
-      {
-        stageLabel: 'Ano 1 · 1ª Safra (Verão)',
-        seasonType: 'verao_1',
-        cropId: planningConfig.year1SummerCropId || 'SOJA',
-        groupKey: planningConfig.year1SummerGroupKey || 'GRUPO_II_MEDIO',
-        cultivarName: planningConfig.year1SummerCultivar || 'BRS 8481',
-        sowDate: delayedSoySow
-      },
-      {
-        stageLabel: 'Ano 1 · 2ª Safra (Safrinha)',
-        seasonType: 'safrinha_1',
-        cropId: 'SORGO_GRANIFERO',
-        groupKey: 'GRUPO_I_PRECOCE',
-        cultivarName: 'BRS 373 / 84G02',
-        sowDate: s1Saf1Sow
-      },
-      {
-        stageLabel: 'Ano 2 · 1ª Safra (Verão)',
-        seasonType: 'verao_2',
-        cropId: planningConfig.year2SummerCropId || 'SOJA',
-        groupKey: planningConfig.year2SummerGroupKey || 'GRUPO_II_MEDIO',
-        cultivarName: planningConfig.year2SummerCultivar || 'BRSMT Pintado',
-        sowDate: baseY2SoySow
-      },
-      {
-        stageLabel: 'Ano 2 · 2ª Safra (Safrinha)',
-        seasonType: 'safrinha_2',
-        cropId: planningConfig.year2SafrinhaCropId || 'MILHO_2_SAFRA',
-        groupKey: 'GRUPO_I_PRECOCE',
-        cultivarName: planningConfig.year2SafrinhaCultivar || 'BRS 1055',
-        sowDate: baseSaf2Sow
-      }
-    ],
+    stagesInput: s3Stages,
     propertyProfile,
     planningConfig,
     baselineStages
   });
 
-  // STRATEGY 4: ALTERNATIVA DE COBERTURA (MILHETO 58 dias na 2ª Safra do Ano 1)
+  // STRATEGY 4: ALTERNATIVA DE COBERTURA (MILHETO 58 dias na 1ª Sucessão)
+  const s4Defs = planStages.map((st, idx) =>
+    idx === 1
+      ? {
+          ...st,
+          stageLabel: '2ª Etapa · 1ª Sucessão (Cobertura)',
+          cropId: 'MILHETO',
+          groupKey: 'MANEJO_COBERTURA_FLORESCIMENTO',
+          cultivarName: 'BRS 1501 / BRS 1502 (58d)'
+        }
+      : { ...st }
+  );
+  const s4Stages = resolveSuccessionSchedule(s4Defs, delayedSoySow, opInterval);
+
   const strategyMilheto = buildStrategyEvaluation({
     strategyId: 'ALTERNATIVA_COBERTURA_MILHETO',
     title: '4. Alternativa de Cobertura (Milheto 58 dias)',
     shortTitle: 'Cobertura Viva (Milheto)',
-    questionAnswered: 'Faz sentido substituir uma safrinha comercial de alto risco por uma etapa rápida (58 dias) destinada à cobertura viva e palhada, considerando o compromisso produtivo envolvido?',
+    questionAnswered: 'Faz sentido substituir uma sucessão comercial de alto risco por uma etapa rápida (58 dias) destinada à cobertura viva e palhada, considerando o compromisso produtivo envolvido?',
     modificationsCount: 1,
     changedDescriptions: [
-      'Transição da 2ª safra do Ano 1 para Milheto de cobertura (BRS 1501 / BRS 1502, manejo pleno florescimento aos 58 dias), protegendo o solo até a safra seguinte.'
+      'Transição da 1ª sucessão para Milheto de cobertura (BRS 1501 / BRS 1502, manejo pleno florescimento aos 58 dias), protegendo o solo para a etapa seguinte.'
     ],
-    stagesInput: [
-      {
-        stageLabel: 'Ano 1 · 1ª Safra (Verão)',
-        seasonType: 'verao_1',
-        cropId: planningConfig.year1SummerCropId || 'SOJA',
-        groupKey: planningConfig.year1SummerGroupKey || 'GRUPO_II_MEDIO',
-        cultivarName: planningConfig.year1SummerCultivar || 'BRS 8481',
-        sowDate: delayedSoySow
-      },
-      {
-        stageLabel: 'Ano 1 · 2ª Safra (Cobertura)',
-        seasonType: 'safrinha_1',
-        cropId: 'MILHETO',
-        groupKey: 'MANEJO_COBERTURA_FLORESCIMENTO',
-        cultivarName: 'BRS 1501 / BRS 1502 (58d)',
-        sowDate: s1Saf1Sow
-      },
-      {
-        stageLabel: 'Ano 2 · 1ª Safra (Verão)',
-        seasonType: 'verao_2',
-        cropId: planningConfig.year2SummerCropId || 'SOJA',
-        groupKey: planningConfig.year2SummerGroupKey || 'GRUPO_II_MEDIO',
-        cultivarName: planningConfig.year2SummerCultivar || 'BRSMT Pintado',
-        sowDate: baseY2SoySow
-      },
-      {
-        stageLabel: 'Ano 2 · 2ª Safra (Safrinha)',
-        seasonType: 'safrinha_2',
-        cropId: planningConfig.year2SafrinhaCropId || 'MILHO_2_SAFRA',
-        groupKey: 'GRUPO_I_PRECOCE',
-        cultivarName: planningConfig.year2SafrinhaCultivar || 'BRS 1055',
-        sowDate: baseSaf2Sow
-      }
-    ],
+    stagesInput: s4Stages,
     propertyProfile,
     planningConfig,
     baselineStages
@@ -1563,9 +1585,20 @@ export function simulateAdaptation(
     .map((cc, idx) => {
       const roleMeta = getCustomCropRoleMeta(cc.role);
       if (roleMeta.isMainSeason) {
-        const customCycle = Math.max(40, Math.min(180, Number(cc.cycleDays) || 90));
-        const customY1Harv = addDaysUTC(delayedSoySow, customCycle - 1);
-        const customSaf1Sow = addDaysUTC(customY1Harv, opInterval + 1);
+        const customMainDefs = planStages.map((st, sIdx) =>
+          sIdx === 0
+            ? {
+                ...st,
+                stageLabel: `1ª Etapa · Safra Principal (${roleMeta.shortBadge})`,
+                cropId: cc.crop_id,
+                groupKey: 'GRUPO_PADRAO',
+                cultivarName: cc.cultivarName || `${cc.common_name} (${cc.cycleDays}d)`
+              }
+            : { ...st }
+        );
+        const customMainStages = resolveSuccessionSchedule(customMainDefs, delayedSoySow, opInterval);
+        const customSaf1Sow = customMainStages[1]?.sowDate || customMainStages[0].sowDate;
+
         return buildStrategyEvaluation({
           strategyId: `ALTERNATIVA_CUSTOM_${cc.crop_id}`,
           title: `${5 + idx}. ${roleMeta.shortBadge} (${cc.common_name})`,
@@ -1573,49 +1606,29 @@ export function simulateAdaptation(
           questionAnswered: `Como a cultura principal cadastrada (${cc.common_name}, ciclo de ${cc.cycleDays} dias) se comporta no plantio e impacta a sucessão da propriedade?`,
           modificationsCount: 1,
           changedDescriptions: [
-            `Adoção de ${cc.common_name} (${cc.cycleDays} dias · ${roleMeta.shortBadge}) na 1ª safra, liberando a área para a sucessão em ${formatBRDate(customSaf1Sow)}.`
+            `Adoção de ${cc.common_name} (${cc.cycleDays} dias · ${roleMeta.shortBadge}) na 1ª etapa, liberando a área para a sucessão em ${formatBRDate(customSaf1Sow)}.`
           ],
           customTradeOffSummary: cc.summary || roleMeta.defaultSummary(cc.common_name),
           criticalStageIndex: 0,
-          stagesInput: [
-            {
-              stageLabel: `Ano 1 · 1ª Safra (${roleMeta.shortBadge})`,
-              seasonType: 'verao_1',
-              cropId: cc.crop_id,
-              groupKey: 'GRUPO_PADRAO',
-              cultivarName: cc.cultivarName || `${cc.common_name} (${cc.cycleDays}d)`,
-              sowDate: delayedSoySow
-            },
-            {
-              stageLabel: 'Ano 1 · Sucessão',
-              seasonType: 'safrinha_1',
-              cropId: planningConfig.year1SafrinhaCropId || 'MILHO_2_SAFRA',
-              groupKey: planningConfig.year1SafrinhaGroupKey || 'GRUPO_II_MEDIO',
-              cultivarName: planningConfig.year1SafrinhaCultivar || 'AG 8088 PRO2',
-              sowDate: customSaf1Sow
-            },
-            {
-              stageLabel: 'Ano 2 · 1ª Safra (Verão)',
-              seasonType: 'verao_2',
-              cropId: planningConfig.year2SummerCropId || 'SOJA',
-              groupKey: planningConfig.year2SummerGroupKey || 'GRUPO_II_MEDIO',
-              cultivarName: planningConfig.year2SummerCultivar || 'BRSMT Pintado',
-              sowDate: baseY2SoySow
-            },
-            {
-              stageLabel: 'Ano 2 · Sucessão',
-              seasonType: 'safrinha_2',
-              cropId: planningConfig.year2SafrinhaCropId || 'MILHO_2_SAFRA',
-              groupKey: 'GRUPO_I_PRECOCE',
-              cultivarName: planningConfig.year2SafrinhaCultivar || 'BRS 1055',
-              sowDate: baseSaf2Sow
-            }
-          ],
+          stagesInput: customMainStages,
           propertyProfile,
           planningConfig,
           baselineStages
         });
       }
+
+      const customSuccDefs = planStages.map((st, sIdx) =>
+        sIdx === 1
+          ? {
+              ...st,
+              stageLabel: `2ª Etapa · 1ª Sucessão (${roleMeta.shortBadge})`,
+              cropId: cc.crop_id,
+              groupKey: 'GRUPO_PADRAO',
+              cultivarName: cc.cultivarName || `${cc.common_name} (${cc.cycleDays}d)`
+            }
+          : { ...st }
+      );
+      const customSuccStages = resolveSuccessionSchedule(customSuccDefs, delayedSoySow, opInterval);
 
       return buildStrategyEvaluation({
         strategyId: `ALTERNATIVA_CUSTOM_${cc.crop_id}`,
@@ -1624,44 +1637,11 @@ export function simulateAdaptation(
         questionAnswered: `Como a cultura cadastrada pelo usuário (${cc.common_name}, ciclo de ${cc.cycleDays} dias · ${roleMeta.shortBadge}) se comporta no planejamento após o atraso?`,
         modificationsCount: 1,
         changedDescriptions: [
-          `Inclusão da cultura cadastrada ${cc.common_name} (${cc.cycleDays} dias) com finalidade de ${roleMeta.shortBadge.toLowerCase()}.`
+          `Inclusão da cultura cadastrada ${cc.common_name} (${cc.cycleDays} dias) na sucessão com finalidade de ${roleMeta.shortBadge.toLowerCase()}.`
         ],
         customTradeOffSummary: cc.summary || roleMeta.defaultSummary(cc.common_name),
         criticalStageIndex: 1,
-        stagesInput: [
-          {
-            stageLabel: 'Ano 1 · 1ª Safra (Verão)',
-            seasonType: 'verao_1',
-            cropId: planningConfig.year1SummerCropId || 'SOJA',
-            groupKey: planningConfig.year1SummerGroupKey || 'GRUPO_II_MEDIO',
-            cultivarName: planningConfig.year1SummerCultivar || 'BRS 8481',
-            sowDate: delayedSoySow
-          },
-          {
-            stageLabel: `Ano 1 · Sucessão (${roleMeta.shortBadge})`,
-            seasonType: 'safrinha_1',
-            cropId: cc.crop_id,
-            groupKey: 'GRUPO_PADRAO',
-            cultivarName: cc.cultivarName || `${cc.common_name} (${cc.cycleDays}d)`,
-            sowDate: s1Saf1Sow
-          },
-          {
-            stageLabel: 'Ano 2 · 1ª Safra (Verão)',
-            seasonType: 'verao_2',
-            cropId: planningConfig.year2SummerCropId || 'SOJA',
-            groupKey: planningConfig.year2SummerGroupKey || 'GRUPO_II_MEDIO',
-            cultivarName: planningConfig.year2SummerCultivar || 'BRSMT Pintado',
-            sowDate: baseY2SoySow
-          },
-          {
-            stageLabel: 'Ano 2 · Sucessão',
-            seasonType: 'safrinha_2',
-            cropId: planningConfig.year2SafrinhaCropId || 'MILHO_2_SAFRA',
-            groupKey: 'GRUPO_I_PRECOCE',
-            cultivarName: planningConfig.year2SafrinhaCultivar || 'BRS 1055',
-            sowDate: baseSaf2Sow
-          }
-        ],
+        stagesInput: customSuccStages,
         propertyProfile,
         planningConfig,
         baselineStages

@@ -6,6 +6,9 @@ import {
   fetchSoilGridsAndSuggestClass,
   defaultPropertyProfile,
   defaultPlanningConfig,
+  getPlanningStagesList,
+  resolveSuccessionSchedule,
+  registerCustomCropsInCatalog,
   simulateAdaptation,
   CUSTOM_CROP_ROLES,
   getCustomCropRoleMeta,
@@ -25,14 +28,16 @@ const num = (n, digits = 1) =>
     : '—';
 
 const DEFAULT_PROP = defaultPropertyProfile();
+const DEFAULT_PLAN = defaultPlanningConfig();
 
 let appState = {
-  version: 5,
+  version: 6,
   activeTab: 0,
   propertyProfile: structuredClone(DEFAULT_PROP),
   customProperties: [],
   customCrops: [],
-  planningConfig: defaultPlanningConfig(),
+  planningConfig: structuredClone(DEFAULT_PLAN),
+  customPlannings: [],
   selectedStrategyId: 'ALTERNATIVA_COMERCIAL_SORGO',
   selectedStageIndex: 1,
   inspectedYear: 2023
@@ -77,10 +82,61 @@ let newCropFormState = {
   summary: ''
 };
 
+let newPlanningFormState = {
+  open: false,
+  planningName: '',
+  propertyId: DEFAULT_PROP.id,
+  baseSowingDate: '2026-11-01',
+  operationalIntervalDays: 7,
+  stages: [
+    { cropId: 'SOJA', groupKey: 'GRUPO_II_MEDIO', cultivarName: 'BRS 8481', plannedSowDate: null },
+    { cropId: 'MILHO_2_SAFRA', groupKey: 'GRUPO_II_MEDIO', cultivarName: 'AG 8088 PRO2', plannedSowDate: null },
+    { cropId: 'SOJA', groupKey: 'GRUPO_II_MEDIO', cultivarName: 'BRSMT Pintado', plannedSowDate: '2027-10-20' },
+    { cropId: 'MILHO_2_SAFRA', groupKey: 'GRUPO_I_PRECOCE', cultivarName: 'BRS 1055', plannedSowDate: null }
+  ]
+};
+
 let simResult = simulateAdaptation(appState.propertyProfile, appState.planningConfig, appState.customCrops);
 let dbReady = false;
 
+function syncLegacyPlanningFields(planCfg) {
+  if (!planCfg) return planCfg;
+  registerCustomCropsInCatalog(appState.customCrops || []);
+  const stages = getPlanningStagesList(planCfg);
+  planCfg.successionStages = stages;
+  if (stages[0]) {
+    planCfg.year1SummerCropId = stages[0].cropId;
+    planCfg.year1SummerGroupKey = stages[0].groupKey;
+    planCfg.year1SummerCultivar = stages[0].cultivarName;
+  }
+  if (stages[1]) {
+    planCfg.year1SafrinhaCropId = stages[1].cropId;
+    planCfg.year1SafrinhaGroupKey = stages[1].groupKey;
+    planCfg.year1SafrinhaCultivar = stages[1].cultivarName;
+  }
+  if (stages[2]) {
+    planCfg.year2SummerCropId = stages[2].cropId;
+    planCfg.year2SummerGroupKey = stages[2].groupKey;
+    planCfg.year2SummerCultivar = stages[2].cultivarName;
+    if (stages[2].plannedSowDate) planCfg.year2SummerPlannedDate = stages[2].plannedSowDate;
+  }
+  if (stages[3]) {
+    planCfg.year2SafrinhaCropId = stages[3].cropId;
+    planCfg.year2SafrinhaGroupKey = stages[3].groupKey;
+    planCfg.year2SafrinhaCultivar = stages[3].cultivarName;
+  }
+  return planCfg;
+}
+
 function recomputeSimulation() {
+  syncLegacyPlanningFields(appState.planningConfig);
+  // Keep customPlannings synced if active planning is one of them
+  if (appState.planningConfig?.id && Array.isArray(appState.customPlannings)) {
+    const idx = appState.customPlannings.findIndex(p => p.id === appState.planningConfig.id);
+    if (idx >= 0) {
+      appState.customPlannings[idx] = structuredClone(appState.planningConfig);
+    }
+  }
   simResult = simulateAdaptation(appState.propertyProfile, appState.planningConfig, appState.customCrops || []);
   const exists = simResult.strategies.some(s => s.strategyId === appState.selectedStrategyId);
   if (!exists) {
@@ -187,13 +243,13 @@ const TABS = [
     index: 2,
     step: 'PASSO 3',
     title: '3. Planejamento',
-    subtitle: 'Simular Atraso e O Que Manter'
+    subtitle: 'Planejamentos, Sucessões e Atraso'
   },
   {
     index: 3,
     step: 'PASSO 4',
     title: '4. Comparação',
-    subtitle: 'Plano Atual vs. Alternativas'
+    subtitle: 'Preferências e Alternativas'
   },
   {
     index: 4,
@@ -224,29 +280,113 @@ const SOIL_FRIENDLY = {
 const CROP_FRIENDLY = {
   SOJA: {
     badge: '1ª Safra · Cultura Principal (Ref. Vilhena/RO)',
+    shortPurpose: 'Safra Principal Comercial',
     cycleText: '105 a 118 dias',
     windowText: '01/10 a 10/01 (Limite Idaron: 09/01)',
     summary: 'Cultura comercial principal do verão em Vilhena/RO. Seu atraso empurra a entrada da 2ª safra.'
   },
   MILHO_2_SAFRA: {
     badge: '2ª Safra · Sucessão Padrão (Ref. Vilhena/RO)',
+    shortPurpose: 'Sucessão Comercial Padrão',
     cycleText: '100 a 120 dias',
     windowText: '01/01 a 20/03 (Janela recomendada)',
     summary: 'Sucessão comercial padrão em Vilhena/RO; perde segurança quando plantado após 20 de março.'
   },
+  MILHO_1_SAFRA: {
+    badge: '1ª Safra · Rotação de Verão (Ref. Vilhena/RO)',
+    shortPurpose: 'Rotação Comercial de Verão',
+    cycleText: '105 dias',
+    windowText: '11/11 a 31/12 (Janela recomendada)',
+    summary: 'Alternativa comercial de verão para rotação de culturas e quebra do ciclo de pragas da soja.'
+  },
   SORGO_GRANIFERO: {
     badge: '2ª Safra · Alternativa Comercial (Ref. Vilhena/RO)',
-    cycleText: '105 dias',
+    shortPurpose: 'Sucessão Comercial Resiliente',
+    cycleText: '100 a 105 dias',
     windowText: '01/01 a 31/03 (Janela estendida)',
     summary: 'Mantém produção comercial de grãos na safrinha com menor exigência de água.'
   },
   MILHETO: {
     badge: '2ª Safra · Cobertura do Solo (Ref. Vilhena/RO)',
+    shortPurpose: 'Cobertura e Proteção do Solo',
     cycleText: '58 dias (Manejo na floração)',
     windowText: 'Até 30/04 (Fechamento das chuvas)',
     summary: 'Cobertura rápida de baixo custo para formar palhada, proteger o solo e reduzir nematoides.'
   }
 };
+
+function getAvailableCropsList() {
+  registerCustomCropsInCatalog(appState.customCrops || []);
+  const preIds = ['SOJA', 'MILHO_2_SAFRA', 'MILHO_1_SAFRA', 'SORGO_GRANIFERO', 'MILHETO'];
+  const list = [];
+  for (const id of preIds) {
+    const c = rulesPackage.crops_catalog[id];
+    if (!c) continue;
+    const f = CROP_FRIENDLY[id];
+    list.push({
+      cropId: id,
+      commonName: c.common_name,
+      shortName:
+        id === 'SOJA'
+          ? 'Soja (1ª Safra)'
+          : id === 'MILHO_2_SAFRA'
+            ? 'Milho 2ª Safra'
+            : id === 'MILHO_1_SAFRA'
+              ? 'Milho 1ª Safra (Rotação)'
+              : id === 'SORGO_GRANIFERO'
+                ? 'Sorgo Granífero'
+                : 'Milheto (Cobertura)',
+      purposeBadge: f?.shortPurpose || 'Cultura Pré-Cadastrada',
+      isCustom: false,
+      groups: Object.entries(c.cultivar_groups || {}).map(([gKey, gObj]) => ({
+        groupKey: gKey,
+        cycleDays: gObj.cycle_days_default,
+        cultivarName: gObj.recommended_cultivars_ro?.[0]?.name || gObj.group_id,
+        label: `${gObj.recommended_cultivars_ro?.[0]?.name || gObj.group_id} — ${gObj.cycle_days_default} dias (${gObj.gmr_criterion || gObj.group_id})`
+      }))
+    });
+  }
+
+  for (const cc of appState.customCrops || []) {
+    const roleMeta = getCustomCropRoleMeta(cc.role);
+    list.push({
+      cropId: cc.crop_id,
+      commonName: cc.common_name,
+      shortName: `${cc.common_name} (Cadastrada)`,
+      purposeBadge: roleMeta.shortBadge,
+      isCustom: true,
+      groups: [
+        {
+          groupKey: 'GRUPO_PADRAO',
+          cycleDays: cc.cycleDays,
+          cultivarName: cc.cultivarName || 'Cultivar Cadastrada',
+          label: `${cc.cultivarName || 'Cultivar Cadastrada'} — ${cc.cycleDays} dias (${roleMeta.shortBadge})`
+        }
+      ]
+    });
+  }
+
+  return list;
+}
+
+function getCropShortDisplay(cropId) {
+  registerCustomCropsInCatalog(appState.customCrops || []);
+  if (cropId === 'SOJA') return 'Soja';
+  if (cropId === 'MILHO_2_SAFRA') return 'Milho 2ª Safra';
+  if (cropId === 'MILHO_1_SAFRA') return 'Milho 1ª Safra';
+  if (cropId === 'SORGO_GRANIFERO') return 'Sorgo Granífero';
+  if (cropId === 'MILHETO') return 'Milheto';
+  return rulesPackage.crops_catalog[cropId]?.common_name || cropId;
+}
+
+function getCropPurposeDisplay(cropId) {
+  registerCustomCropsInCatalog(appState.customCrops || []);
+  const c = rulesPackage.crops_catalog[cropId];
+  if (c?.custom_role) {
+    return getCustomCropRoleMeta(c.custom_role).shortBadge;
+  }
+  return CROP_FRIENDLY[cropId]?.shortPurpose || 'Cultura do Planejamento';
+}
 
 const PHASE_SIMPLE_NAMES = {
   F1_estabelecimento: 'Fase 1 · Emergência e Início',
@@ -832,35 +972,370 @@ function renderScreen2Crops() {
 }
 
 /**
- * PASSO 3: Planejamento (Simular Atraso e Decisões Preservadas)
+ * PASSO 3: Planejamento (Planejamento Pré-Cadastrado, Inclusão de Novo Planejamento com Ordem de Sucessões e Simulação de Atraso)
  */
 function renderScreen3Planning() {
   const cfg = appState.planningConfig;
-  const pd = cfg.preservedDecisions;
   const planoAtual = simResult.allStrategies[0];
+  const allProps = [DEFAULT_PROP, ...(appState.customProperties || [])];
+  const availableCrops = getAvailableCropsList();
+  const preCrops = availableCrops.filter(c => !c.isCustom);
+  const usrCrops = availableCrops.filter(c => c.isCustom);
+  const allPlannings = [DEFAULT_PLAN, ...(appState.customPlannings || [])];
+
+  // Preview resolved dates for the New Planning form
+  const previewDraftStages = resolveSuccessionSchedule(
+    newPlanningFormState.stages,
+    newPlanningFormState.baseSowingDate || '2026-11-01',
+    Number(newPlanningFormState.operationalIntervalDays) || 7
+  );
+
+  const firstStage = planoAtual.stages[0];
+  const secondStage = planoAtual.stages[1] || planoAtual.stages[0];
 
   return `
     <div class="screen-header">
       <div>
-        <span class="eyebrow">PASSO 3 · SIMULAÇÃO DE ATRASO E REGRAS DE DECISÃO</span>
-        <h1>“Se minha primeira cultura atrasar, qual é a menor mudança que posso fazer no restante do plano?”</h1>
+        <span class="eyebrow">PASSO 3 · PLANEJAMENTO DE CULTURAS, ORDEM DAS SUCESSÕES E ATRASO</span>
+        <h1>Planejamento de Safra e Cadeia de Sucessões — ${esc(cfg.planningName || 'Planejamento Ativo')}</h1>
         <p>
-          Use o controle abaixo para simular o atraso no plantio da <strong>Soja de verão</strong> em <strong>${esc(
-            appState.propertyProfile.propertyName
-          )}</strong> e marque quais ajustes você aceita avaliar.
+          Utilize o <strong>planejamento pré-cadastrado</strong> (com a propriedade e as culturas de referência de Vilhena/RO) ou clique em <strong>+ Incluir Novo Planejamento</strong> para montar uma nova sequência de sucessões usando qualquer propriedade e cultura disponível.
         </p>
       </div>
       <div class="screen-header-cta">
-        <button type="button" class="primary lg-btn" data-go-tab="3">Comparar Alternativas →</button>
+        <button type="button" class="secondary-cta-btn" id="btn-toggle-new-planning">
+          ${newPlanningFormState.open ? '✕ Fechar Novo Planejamento' : '+ Incluir Novo Planejamento'}
+        </button>
+        <button type="button" class="primary lg-btn" data-go-tab="3">Avançar para 4. Comparação →</button>
       </div>
     </div>
 
+    ${
+      newPlanningFormState.open
+        ? `
+      <section class="panel-card new-property-panel section-block">
+        <div class="card-head">
+          <div>
+            <span class="eyebrow">CADASTRAR NOVO PLANEJAMENTO · PROPRIEDADE + ORDEM DAS SUCESSÕES</span>
+            <h2>Incluir Novo Planejamento de Culturas e Sucessões</h2>
+            <p class="muted">
+              Selecione uma propriedade disponível, defina a data do 1º plantio e monte a <strong>ordem cronológica das sucessões</strong> usando as culturas pré-cadastradas ou as novas culturas que você cadastrou no Passo 2.
+            </p>
+          </div>
+        </div>
+
+        <div class="new-prop-form-grid">
+          <label>
+            Nome do Planejamento *
+            <input type="text" id="nplan-name" placeholder="Ex.: Planejamento Safra 2026/2028 — Talhão Novo" value="${esc(
+              newPlanningFormState.planningName
+            )}">
+          </label>
+          <label>
+            Propriedade Disponível *
+            <select id="nplan-prop">
+              ${allProps
+                .map(
+                  pr => `
+                <option value="${esc(pr.id)}" ${pr.id === newPlanningFormState.propertyId ? 'selected' : ''}>
+                  ${pr.id === DEFAULT_PROP.id ? '[Pré-Cadastrada] ' : '[Cadastrada] '}${esc(pr.propertyName)} (${esc(
+                    pr.municipality
+                  )}/${esc(pr.state)}) — ${esc(SOIL_FRIENDLY[pr.soilProfileId]?.shortTitle || pr.soilProfileId)}
+                </option>`
+                )
+                .join('')}
+            </select>
+          </label>
+          <label>
+            Data Inicial do 1º Plantio (Sem atraso) *
+            <input type="date" id="nplan-base-date" value="${esc(newPlanningFormState.baseSowingDate)}">
+          </label>
+          <label>
+            Intervalo Operacional entre Sucessões (dias) *
+            <input type="number" id="nplan-interval" min="5" max="30" step="1" value="${esc(
+              newPlanningFormState.operationalIntervalDays
+            )}">
+          </label>
+        </div>
+
+        <div class="succession-builder-box">
+          <div class="row" style="margin-bottom:10px">
+            <div>
+              <span class="eyebrow">ORDEM DAS SUCESSÕES (${previewDraftStages.length} ETAPAS DEFINIDAS)</span>
+              <h3 style="margin:2px 0 0">Sequência Ordenada de Culturas no Planejamento</h3>
+              <p class="muted">A colheita de cada etapa determina automaticamente a janela de entrada da próxima sucessão na ordem abaixo.</p>
+            </div>
+            <div class="button-row" style="margin-top:0">
+              <button type="button" class="quiet-btn" data-nplan-preset="padrao">Modelo: Soja ➔ Milho (4 etapas)</button>
+              <button type="button" class="quiet-btn" data-nplan-preset="rotacao">Modelo: Diversificado c/ Cobertura</button>
+              <button type="button" class="quiet-btn" data-nplan-preset="curto">Modelo: 2 Etapas (1ª Safra ➔ Sucessão)</button>
+              <button type="button" class="secondary-cta-btn" id="btn-nplan-add-stage" style="padding:7px 13px;font-size:0.82rem">
+                + Adicionar Etapa na Sucessão
+              </button>
+            </div>
+          </div>
+
+          <div class="succession-builder-list">
+            ${previewDraftStages
+              .map((st, idx) => {
+                const selectedCropMeta =
+                  availableCrops.find(c => c.cropId === st.cropId) || availableCrops[0];
+                const prevCropName = idx > 0 ? getCropShortDisplay(previewDraftStages[idx - 1].cropId) : null;
+                const orderTitle =
+                  idx === 0
+                    ? '1º na Ordem · Cultura Inicial (1ª Safra)'
+                    : `${idx + 1}º na Ordem · ${idx}ª Sucessão (após ${prevCropName})`;
+
+                return `
+                <div class="succession-builder-row">
+                  <div class="sb-order-col">
+                    <span class="sb-order-num">${idx + 1}º</span>
+                    <div>
+                      <strong>${esc(orderTitle)}</strong>
+                      <small class="sb-schedule-preview">
+                        📅 Plantio: <b>${formatBRDate(st.sowDate)}</b> ➔ Colheita: <b>${formatBRDate(
+                  st.harvestDate
+                )}</b> (${esc(st.cycleDays)} dias)
+                      </small>
+                    </div>
+                  </div>
+
+                  <div class="sb-inputs-col">
+                    <label>
+                      Cultura (${idx === 0 ? 'Safra Inicial' : `${idx}ª Sucessão`})
+                      <select data-nplan-stage-crop="${idx}">
+                        <optgroup label="Culturas Pré-Cadastradas (Ref. Vilhena/RO)">
+                          ${preCrops
+                            .map(
+                              c => `
+                            <option value="${esc(c.cropId)}" ${c.cropId === st.cropId ? 'selected' : ''}>
+                              ${esc(c.shortName)} — [${esc(c.purposeBadge)}]
+                            </option>`
+                            )
+                            .join('')}
+                        </optgroup>
+                        ${
+                          usrCrops.length > 0
+                            ? `<optgroup label="Culturas Cadastradas pelo Usuário">
+                                ${usrCrops
+                                  .map(
+                                    c => `
+                                  <option value="${esc(c.cropId)}" ${c.cropId === st.cropId ? 'selected' : ''}>
+                                    ★ ${esc(c.shortName)} — [${esc(c.purposeBadge)}]
+                                  </option>`
+                                  )
+                                  .join('')}
+                              </optgroup>`
+                            : ''
+                        }
+                      </select>
+                    </label>
+
+                    <label>
+                      Ciclo / Cultivar na Etapa
+                      <select data-nplan-stage-group="${idx}">
+                        ${selectedCropMeta.groups
+                          .map(
+                            g => `
+                          <option value="${esc(g.groupKey)}" ${g.groupKey === st.groupKey ? 'selected' : ''}>
+                            ${esc(g.label)}
+                          </option>`
+                          )
+                          .join('')}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div class="sb-actions-col" aria-label="Reordenar ou remover etapa">
+                    <button
+                      type="button"
+                      class="tiny-refresh-btn"
+                      data-nplan-move-up="${idx}"
+                      ${idx === 0 ? 'disabled' : ''}
+                      title="Mover para antes na ordem de sucessão"
+                    >↑ Subir</button>
+                    <button
+                      type="button"
+                      class="tiny-refresh-btn"
+                      data-nplan-move-down="${idx}"
+                      ${idx === previewDraftStages.length - 1 ? 'disabled' : ''}
+                      title="Mover para depois na ordem de sucessão"
+                    >↓ Descer</button>
+                    <button
+                      type="button"
+                      class="tiny-refresh-btn"
+                      data-nplan-remove-stage="${idx}"
+                      ${previewDraftStages.length <= 2 ? 'disabled' : ''}
+                      title="Remover etapa da sucessão"
+                    >✕</button>
+                  </div>
+                </div>`;
+              })
+              .join('')}
+          </div>
+        </div>
+
+        <div class="button-row" style="justify-content:flex-end;margin-top:14px">
+          <button type="button" class="primary lg-btn" id="btn-save-new-planning">
+            ✓ Salvar e Ativar Este Planejamento (${previewDraftStages.length} etapas na sucessão) →
+          </button>
+        </div>
+      </section>`
+        : ''
+    }
+
+    <!-- Planejamentos Cadastrados (Pré-Cadastrado + Cadastrados pelo Usuário) -->
+    <section class="panel-card section-block" style="margin-bottom:18px">
+      <div class="card-head">
+        <div>
+          <span class="eyebrow">PLANEJAMENTOS DISPONÍVEIS (${allPlannings.length})</span>
+          <h2>Planejamento Pré-Cadastrado e Planejamentos do Usuário</h2>
+          <p class="muted">
+            Cada planejamento informa a <strong>propriedade vinculada</strong> e a <strong>ordem exata das culturas e sucessões</strong> que pertencem a ele. Clique em qualquer planejamento para ativá-lo na simulação.
+          </p>
+        </div>
+      </div>
+
+      <div class="plannings-cards-grid">
+        ${allPlannings
+          .map(plan => {
+            const isPlanActive = plan.id === cfg.id;
+            const linkedProp = allProps.find(pr => pr.id === plan.propertyId) || DEFAULT_PROP;
+            const linkedSoil = SOIL_FRIENDLY[linkedProp.soilProfileId] || SOIL_FRIENDLY.AD4_ARGILOSA;
+            const stagesList = getPlanningStagesList(plan);
+            const resolvedPlanStages = resolveSuccessionSchedule(
+              stagesList,
+              plan.baseSowingDate || '2026-11-01',
+              Number(plan.operationalIntervalDays) || 7
+            );
+
+            return `
+            <article class="planning-registered-card ${isPlanActive ? 'active-planning-card' : ''}">
+              <div class="row">
+                <span class="tag ${plan.isPreRegistered ? '' : 'custom-tag'}">
+                  ${
+                    plan.isPreRegistered
+                      ? '📌 Planejamento Pré-Cadastrado (Ref. Vilhena/RO)'
+                      : '★ Planejamento Cadastrado pelo Usuário'
+                  }
+                </span>
+                <div class="row" style="gap:6px">
+                  ${
+                    isPlanActive
+                      ? `<span class="status-badge success">✓ Ativo na Simulação</span>`
+                      : `<button type="button" class="tiny-refresh-btn" data-switch-planning="${esc(plan.id)}">Ativar Planejamento</button>`
+                  }
+                  ${
+                    !plan.isPreRegistered
+                      ? `<button type="button" class="tiny-refresh-btn" data-remove-planning="${esc(
+                          plan.id
+                        )}" title="Excluir planejamento">✕</button>`
+                      : ''
+                  }
+                </div>
+              </div>
+
+              <h3>${esc(plan.planningName || 'Planejamento de Safra')}</h3>
+
+              <div class="planning-prop-meta">
+                <span>📍 <strong>Propriedade:</strong> ${esc(linkedProp.propertyName)} (${esc(
+              linkedProp.municipality
+            )}/${esc(linkedProp.state)})</span>
+                <span>🌱 <strong>Solo:</strong> ${esc(linkedSoil.shortTitle)}</span>
+                <span>🗓 <strong>Início 1ª Etapa:</strong> ${formatBRDate(
+                  plan.baseSowingDate
+                )} (Intervalo: ${esc(plan.operationalIntervalDays)}d)</span>
+              </div>
+
+              <div class="planning-succession-chain" aria-label="Culturas e sucessões deste planejamento">
+                <small class="eyebrow" style="margin-bottom:6px">CULTURAS E ORDEM DAS SUCESSÕES DESTE PLANEJAMENTO:</small>
+                <div class="succession-pills-flow">
+                  ${resolvedPlanStages
+                    .map(
+                      (st, sIdx) => `
+                    <div class="succ-flow-item">
+                      <span class="succ-step-badge">${sIdx === 0 ? '1ª Safra Inicial' : `${sIdx}ª Sucessão`}</span>
+                      <strong>${sIdx + 1}º ${esc(getCropShortDisplay(st.cropId))}</strong>
+                      <small>${esc(st.cultivarName)} · ${esc(st.cycleDays)}d</small>
+                      <small class="succ-role-tag">${esc(getCropPurposeDisplay(st.cropId))}</small>
+                    </div>
+                    ${sIdx < resolvedPlanStages.length - 1 ? '<span class="succ-flow-arrow">➔</span>' : ''}`
+                    )
+                    .join('')}
+                </div>
+              </div>
+            </article>`;
+          })
+          .join('')}
+      </div>
+    </section>
+
     <div class="grid-two-cols">
-      <article class="panel-card highlight-card">
-        <span class="eyebrow">PASSO 3A · QUANTO O PLANTIO ATRASOU?</span>
-        <h2>1. Simular Atraso no Plantio da Soja (1ª Safra)</h2>
+      <article class="panel-card">
+        <span class="eyebrow">DETALHAMENTO DO PLANEJAMENTO ATIVO</span>
+        <h2>1. Culturas e Sucessões Pertencentes ao Planejamento</h2>
         <p class="muted">
-          Escolha um cenário rápido ou arraste a barra para simular o atraso.
+          Propriedade vinculada: <strong>${esc(appState.propertyProfile.propertyName)} (${esc(
+    appState.propertyProfile.municipality
+  )}/${esc(appState.propertyProfile.state)})</strong> · Sequência com <strong>${
+    planoAtual.stages.length
+  } etapas</strong> ordenadas.
+        </p>
+
+        <div class="stages-mini-table" style="margin-top:12px">
+          ${planoAtual.stages
+            .map(
+              (st, idx) => `
+            <div class="stage-mini-row">
+              <div class="stage-mini-left">
+                <span class="stage-num">${idx + 1}º</span>
+                <div>
+                  <strong>${idx === 0 ? '1ª Etapa (Cultura Inicial)' : `${idx + 1}ª Etapa (${idx}ª Sucessão)`}: ${esc(
+                st.shortCropName
+              )}</strong>
+                  <small>
+                    Finalidade: <b>${esc(getCropPurposeDisplay(st.cropId))}</b> · Cultivar ${esc(
+                st.cultivarName
+              )} (${st.cycleDays} dias)
+                  </small>
+                  <small style="display:block;margin-top:2px">
+                    Semeadura c/ atraso (+${esc(cfg.delayDays)}d): <b>${formatBRDate(
+                st.sowDate
+              )}</b> → Colheita: <b>${formatBRDate(st.harvestDate)}</b>
+                  </small>
+                </div>
+              </div>
+              <span class="status-badge ${esc(st.zarc.tone)}">${esc(st.zarc.badgeLabel)}</span>
+            </div>`
+            )
+            .join('')}
+        </div>
+
+        <details class="optional-drawer" style="margin-top:16px">
+          <summary>
+            <span>⚙ Ajuste Rápido do Planejamento Ativo (Data original e intervalo de máquinas)</span>
+            <small>Expandir</small>
+          </summary>
+          <div class="drawer-body">
+            <div class="two">
+              <label>
+                Data Original Planejada da 1ª Etapa (Sem atraso)
+                <input type="date" id="plan-base-date" value="${esc(cfg.baseSowingDate)}">
+              </label>
+              <label>
+                Dias entre Colheita e Plantio da Sucessão
+                <input type="number" id="plan-op-interval" value="${esc(cfg.operationalIntervalDays)}" min="5" max="25" step="1">
+              </label>
+            </div>
+          </div>
+        </details>
+      </article>
+
+      <article class="panel-card highlight-card">
+        <span class="eyebrow">SIMULAÇÃO DE ATRASO E EFEITO DOMINÓ NA SUCESSÃO</span>
+        <h2>2. Simular Atraso na 1ª Cultura (${esc(firstStage.shortCropName)})</h2>
+        <p class="muted">
+          Escolha um cenário rápido ou arraste a barra para ver como o atraso na 1ª cultura desloca as sucessões seguintes.
         </p>
 
         <div class="preset-chips-row" role="group" aria-label="Cenários rápidos de atraso">
@@ -882,7 +1357,7 @@ function renderScreen3Planning() {
 
         <div class="delay-control-box">
           <div class="row">
-            <strong>Atraso aplicado na semeadura da Soja:</strong>
+            <strong>Atraso aplicado na semeadura de ${esc(firstStage.shortCropName)}:</strong>
             <output class="delay-badge-lg">+${esc(cfg.delayDays)} dias</output>
           </div>
           <input type="range" id="plan-delay-slider" min="0" max="80" step="1" value="${esc(cfg.delayDays)}">
@@ -896,21 +1371,21 @@ function renderScreen3Planning() {
         </div>
 
         <div class="domino-effect-card">
-          <h3>Como esse atraso empurra o calendário (Efeito Dominó)</h3>
+          <h3>Como esse atraso empurra a ordem das sucessões (Efeito Dominó)</h3>
           <div class="domino-chain">
             <div class="domino-node">
-              <small>1ª SAFRA (SOJA VERÃO)</small>
+              <small>1º NA ORDEM · ${esc(firstStage.shortCropName.toUpperCase())}</small>
               <strong>Plantio: ${formatBRDate(simResult.baselineSowingDate)} → ${formatBRDate(simResult.delayedSowingDate)}</strong>
-              <span>Colheita termina em <b>${formatBRDate(planoAtual.stages[0].harvestDate)}</b></span>
+              <span>Colheita termina em <b>${formatBRDate(firstStage.harvestDate)}</b></span>
             </div>
             <div class="domino-arrow">➔</div>
             <div class="domino-node critical">
-              <small>2ª SAFRA (MILHO SAFRINHA)</small>
+              <small>2º NA ORDEM · 1ª SUCESSÃO (${esc(secondStage.shortCropName.toUpperCase())})</small>
               <strong>Plantio empurrado para ${formatBRDate(simResult.delayedSafrinhaDate)}</strong>
               <span class="status-badge ${esc(planoAtual.criticalStage.zarc.tone)}">
                 ${
                   planoAtual.criticalStage.zarc.status === 'FORA_DE_JANELA'
-                    ? 'Fora da janela recomendada (após 20/03)'
+                    ? 'Fora da janela recomendada'
                     : planoAtual.criticalStage.zarc.badgeLabel
                 }
               </span>
@@ -925,117 +1400,22 @@ function renderScreen3Planning() {
               : planoAtual.criticalStage.zarc.status === 'FORA_DE_JANELA'
                 ? `<div class="notice error"><strong>⚠ O que isso significa na prática:</strong> Com +${esc(
                     cfg.delayDays
-                  )} dias de atraso, a soja só libera a área em ${formatBRDate(
-                    planoAtual.stages[0].harvestDate
-                  )}. O Milho 2ª safra entraria em <strong>${formatBRDate(
+                  )} dias de atraso, a 1ª etapa (${esc(firstStage.shortCropName)}) só libera a área em ${formatBRDate(
+                    firstStage.harvestDate
+                  )}. A sucessão (${esc(secondStage.shortCropName)}) entraria em <strong>${formatBRDate(
                     simResult.delayedSafrinhaDate
-                  )}</strong>, quando a janela segura de chuvas já fechou (limite 20/03).</div>`
+                  )}</strong>, quando a janela segura já fechou.</div>`
                 : `<div class="notice">Com +${esc(
                     cfg.delayDays
-                  )} dias de atraso, a 2ª safra inicia em ${formatBRDate(
+                  )} dias de atraso, a 1ª sucessão (${esc(secondStage.shortCropName)}) inicia em ${formatBRDate(
                     simResult.delayedSafrinhaDate
                   )}, ainda dentro da janela recomendada.</div>`
           }
         </div>
-      </article>
-
-      <article class="panel-card">
-        <span class="eyebrow">PASSO 3B · PREFERÊNCIAS DO PRODUTOR</span>
-        <h2>2. O que você deseja manter e quais adaptações aceita avaliar?</h2>
-        <p class="muted">
-          Marque os tipos de ajuste que fazem sentido para a sua propriedade.
-        </p>
-
-        <div class="preserved-checks">
-          <label class="check-card">
-            <input type="checkbox" id="chk-keep-soy" ${pd.keepFirstCropSoy ? 'checked' : ''} disabled>
-            <div>
-              <strong>Manter a Soja como 1ª Safra de Verão (Decisão Principal)</strong>
-              <small>Preserva a cultura comercial principal do verão na propriedade.</small>
-            </div>
-          </label>
-
-          <label class="check-card">
-            <input type="checkbox" id="chk-allow-cycle" ${pd.allowCycleAdjustment !== false ? 'checked' : ''}>
-            <div>
-              <strong>Opção A: Trocar para variedades mais precoces (Ciclo mais curto)</strong>
-              <small>Mantém Soja e Milho, mas usa variedades de ciclo curto (105 e 100 dias) para antecipar a colheita.</small>
-            </div>
-          </label>
-
-          <label class="check-card">
-            <input type="checkbox" id="chk-allow-sorgo" ${pd.allowCommercialSubstitution !== false ? 'checked' : ''}>
-            <div>
-              <strong>Opção B: Trocar o Milho 2ª Safra por Sorgo Granífero (Venda de Grãos)</strong>
-              <small>Mantém colheita comercial de grãos na safrinha com janela até 31 de março e maior tolerância à seca.</small>
-            </div>
-          </label>
-
-          <label class="check-card">
-            <input type="checkbox" id="chk-allow-milheto" ${pd.allowCoverCropTransition !== false ? 'checked' : ''}>
-            <div>
-              <strong>Opção C: Plantar Milheto de Cobertura (Proteção do Solo e Palhada)</strong>
-              <small>Usa uma planta rápida (58 dias) de baixo custo para cobrir o solo quando o risco comercial for alto.</small>
-            </div>
-          </label>
-
-          ${
-            (appState.customCrops || []).length > 0
-              ? `<div class="notice">
-                  <strong>★ Culturas Cadastradas Ativas:</strong> ${(appState.customCrops || [])
-                    .map(c => esc(c.common_name))
-                    .join(', ')} também serão avaliadas automaticamente na comparação!
-                </div>`
-              : ''
-          }
-        </div>
 
         <button type="button" class="primary full next lg-btn" data-go-tab="3">
-          Ver Comparação Lado a Lado das Alternativas →
+          Definir Preferências do Produtor e Comparar Alternativas →
         </button>
-
-        <details class="optional-drawer" style="margin-top:16px">
-          <summary>
-            <span>⚙ Ajustes Opcionais (Data original do plantio, intervalo de máquinas e 2º ano)</span>
-            <small>Expandir</small>
-          </summary>
-          <div class="drawer-body">
-            <div class="two">
-              <label>
-                Data Original Planejada da Soja (Sem atraso)
-                <input type="date" id="plan-base-date" value="${esc(cfg.baseSowingDate)}" min="2026-09-11" max="2027-01-20">
-              </label>
-              <label>
-                Dias entre Colheita da Soja e Plantio da Safrinha
-                <input type="number" id="plan-op-interval" value="${esc(cfg.operationalIntervalDays)}" min="5" max="25" step="1">
-              </label>
-            </div>
-            <div class="two">
-              <label>
-                Ciclo da Soja no Plano Original
-                <select id="sel-y1-soy-group">
-                  <option value="GRUPO_II_MEDIO" ${cfg.year1SummerGroupKey === 'GRUPO_II_MEDIO' ? 'selected' : ''}>
-                    Ciclo Médio — 118 dias (Padrão)
-                  </option>
-                  <option value="GRUPO_I_PRECOCE" ${cfg.year1SummerGroupKey === 'GRUPO_I_PRECOCE' ? 'selected' : ''}>
-                    Ciclo Precoce — 105 dias
-                  </option>
-                </select>
-              </label>
-              <label>
-                Cultura de Verão no 2º Ano (Safra 2027/2028)
-                <select id="sel-y2-summer-crop">
-                  <option value="SOJA" ${cfg.year2SummerCropId === 'SOJA' ? 'selected' : ''}>
-                    Soja 1ª Safra (118 dias)
-                  </option>
-                  <option value="MILHO_1_SAFRA" ${cfg.year2SummerCropId === 'MILHO_1_SAFRA' ? 'selected' : ''}>
-                    Milho Verão (Rotação de culturas · 105 dias)
-                  </option>
-                </select>
-              </label>
-            </div>
-          </div>
-        </details>
       </article>
     </div>
   `;
@@ -1068,7 +1448,7 @@ function renderTwoYearTimelineBar(strategy) {
   return `
     <div class="timeline-2y-box">
       <div class="timeline-2y-header">
-        <span>Cronograma Visual de 2 Anos (Out/2026 – Out/2028)</span>
+        <span>Cronograma Visual (${strategy.stages.length} etapas na sucessão)</span>
         <span>Solo Coberto: <strong>${strategy.soilMetrics.protectedDays} dias</strong> | Solo Exposto: <strong>${strategy.soilMetrics.bareSoilDays} dias</strong></span>
       </div>
       <div class="timeline-2y-track">
@@ -1100,16 +1480,23 @@ function renderTwoYearTimelineBar(strategy) {
 }
 
 /**
- * PASSO 4: Comparação Lado a Lado
+ * PASSO 4: Preferências do Produtor + Comparação Lado a Lado
  */
 function renderScreen4Comparison() {
+  const cfg = appState.planningConfig;
+  const pd = cfg.preservedDecisions || {};
+  const planoAtual = simResult.allStrategies[0];
+  const firstCropName = planoAtual.stages[0]?.shortCropName || '1ª Cultura';
+  const secondCropName = planoAtual.stages[1]?.shortCropName || 'Sucessão';
+
   return `
     <div class="screen-header">
       <div>
-        <span class="eyebrow">PASSO 4 · COMPARAÇÃO DE CAMINHOS</span>
+        <span class="eyebrow">PASSO 4 · PREFERÊNCIAS DO PRODUTOR E COMPARAÇÃO DE CAMINHOS</span>
         <h1>Comparação para +${esc(simResult.delayDays)} Dias de Atraso — ${esc(appState.propertyProfile.propertyName)}</h1>
         <p>
-          Veja como o <strong>Plano Atual</strong> e as <strong>alternativas de menor mudança</strong> se comportam na janela recomendada e nos <strong>12 anos históricos consultados na NASA (2013–2024)</strong> para <code>${esc(
+          Planejamento ativo: <strong>${esc(cfg.planningName || 'Planejamento Padrão')}</strong> ·
+          Defina abaixo <strong>o que você deseja manter</strong> e compare o <strong>Plano Atual</strong> com as <strong>alternativas de menor mudança</strong> nos <strong>12 anos históricos da NASA (2013–2024)</strong> para <code>${esc(
             appState.propertyProfile.latitude
           )}°, ${esc(appState.propertyProfile.longitude)}°</code>.
         </p>
@@ -1129,11 +1516,68 @@ function renderScreen4Comparison() {
       </div>
     </div>
 
+    <!-- PREFERÊNCIAS DO PRODUTOR (Movido da tela de Planejamento para a tela de Comparação) -->
+    <section class="panel-card section-block" style="margin-top:0;margin-bottom:18px">
+      <div class="card-head" style="margin-bottom:10px">
+        <div>
+          <span class="eyebrow">PREFERÊNCIAS DO PRODUTOR · REGRAS DE DECISÃO</span>
+          <h2>O que você deseja manter e quais adaptações aceita avaliar na comparação?</h2>
+          <p class="muted">
+            Marque ou desmarque os tipos de ajuste que fazem sentido para a sua propriedade para filtrar as opções comparadas abaixo.
+          </p>
+        </div>
+      </div>
+
+      <div class="preserved-checks-grid">
+        <label class="check-card">
+          <input type="checkbox" id="chk-keep-soy" ${pd.keepFirstCropSoy ? 'checked' : ''} disabled>
+          <div>
+            <strong>Manter ${esc(firstCropName)} como 1ª Cultura Inicial (Decisão Principal)</strong>
+            <small>Preserva a cultura principal de abertura do planejamento ativo na propriedade.</small>
+          </div>
+        </label>
+
+        <label class="check-card">
+          <input type="checkbox" id="chk-allow-cycle" ${pd.allowCycleAdjustment !== false ? 'checked' : ''}>
+          <div>
+            <strong>Opção A: Trocar para variedades mais precoces (Ciclo mais curto)</strong>
+            <small>Mantém a sequência original (${esc(firstCropName)} ➔ ${esc(secondCropName)}), mas usa cultivares de ciclo curto para antecipar a colheita.</small>
+          </div>
+        </label>
+
+        <label class="check-card">
+          <input type="checkbox" id="chk-allow-sorgo" ${pd.allowCommercialSubstitution !== false ? 'checked' : ''}>
+          <div>
+            <strong>Opção B: Substituir ${esc(secondCropName)} por Sorgo Granífero (Alternativa Comercial)</strong>
+            <small>Mantém colheita comercial de grãos na sucessão com janela até 31 de março e maior tolerância à seca.</small>
+          </div>
+        </label>
+
+        <label class="check-card">
+          <input type="checkbox" id="chk-allow-milheto" ${pd.allowCoverCropTransition !== false ? 'checked' : ''}>
+          <div>
+            <strong>Opção C: Plantar Milheto de Cobertura (Proteção do Solo e Palhada)</strong>
+            <small>Usa uma planta rápida (58 dias) de baixo custo para cobrir o solo quando o risco comercial for alto.</small>
+          </div>
+        </label>
+      </div>
+
+      ${
+        (appState.customCrops || []).length > 0
+          ? `<div class="notice" style="margin-top:10px">
+              <strong>★ Culturas Cadastradas Ativas na Comparação:</strong> ${(appState.customCrops || [])
+                .map(c => `${esc(c.common_name)} (${esc(getCustomCropRoleMeta(c.role).shortBadge)})`)
+                .join(', ')} também estão incluídas nos cartões comparativos abaixo.
+            </div>`
+          : ''
+      }
+    </section>
+
     ${
       simResult.noBetterAlternativeMessage
         ? `<div class="notice error" style="margin-bottom:16px">
             <strong>“${esc(simResult.noBetterAlternativeMessage)}”</strong>
-            <p style="margin:4px 0 0">Volte ao Passo 3 (Planejamento) para permitir ajustes de ciclo, Sorgo ou Milheto, ou reduza o atraso se ele ultrapassou a data limite da Idaron (09/01).</p>
+            <p style="margin:4px 0 0">Marque as opções A, B ou C acima em Preferências do Produtor, ou volte ao Passo 3 (Planejamento) para reduzir o atraso se ele ultrapassou a data limite da Idaron (09/01).</p>
           </div>`
         : ''
     }
@@ -1479,9 +1923,9 @@ function renderScreen5Explanation() {
       <div class="drawer-body">
         <div class="grid-two-cols">
           <div class="sub-box">
-            <h3>Alternar Etapa do Biênio em Inspeção</h3>
+            <h3>Alternar Etapa da Sucessão em Inspeção</h3>
             <label>
-              Escolha qual das 4 etapas do plano de 2 anos deseja inspecionar acima:
+              Escolha qual das ${selected.stages.length} etapas do planejamento deseja inspecionar acima:
               <select id="sel-explain-stage">
                 ${selected.stages
                   .map(
@@ -1662,7 +2106,9 @@ function bindShellEvents() {
 
   $('#btn-reset-demo').onclick = () => {
     appState.propertyProfile = structuredClone(DEFAULT_PROP);
+    appState.customProperties = [];
     appState.customCrops = [];
+    appState.customPlannings = [];
     appState.planningConfig = defaultPlanningConfig();
     appState.selectedStrategyId = 'ALTERNATIVA_COMERCIAL_SORGO';
     appState.selectedStageIndex = 1;
@@ -1670,6 +2116,7 @@ function bindShellEvents() {
     newPropertyFormState.open = false;
     newPropertyFormState.lookupResult = null;
     newCropFormState.open = false;
+    newPlanningFormState.open = false;
     persistState();
     refreshLiveNasaForActiveProperty(true);
   };
@@ -1939,11 +2386,255 @@ function bindScreenEvents() {
     };
   });
 
-  // Step 3: Planning bindings
+  // Step 3: Planning & New Planning Builder bindings
+  const btnToggleNewPlanning = $('#btn-toggle-new-planning');
+  if (btnToggleNewPlanning) {
+    btnToggleNewPlanning.onclick = () => {
+      newPlanningFormState.open = !newPlanningFormState.open;
+      if (newPlanningFormState.open) {
+        newPlanningFormState.propertyId = appState.propertyProfile.id || DEFAULT_PROP.id;
+      }
+      renderActiveScreen();
+    };
+  }
+
+  const nplanName = $('#nplan-name');
+  if (nplanName) nplanName.oninput = e => (newPlanningFormState.planningName = e.target.value);
+  const nplanProp = $('#nplan-prop');
+  if (nplanProp) {
+    nplanProp.onchange = e => {
+      newPlanningFormState.propertyId = e.target.value;
+      renderActiveScreen();
+    };
+  }
+  const nplanBaseDate = $('#nplan-base-date');
+  if (nplanBaseDate) {
+    nplanBaseDate.onchange = e => {
+      if (e.target.value) {
+        newPlanningFormState.baseSowingDate = e.target.value;
+        renderActiveScreen();
+      }
+    };
+  }
+  const nplanInterval = $('#nplan-interval');
+  if (nplanInterval) {
+    nplanInterval.onchange = e => {
+      newPlanningFormState.operationalIntervalDays = Math.max(5, Math.min(30, Number(e.target.value) || 7));
+      renderActiveScreen();
+    };
+  }
+
+  $$('[data-nplan-preset]').forEach(btn => {
+    btn.onclick = () => {
+      const preset = btn.dataset.nplanPreset;
+      if (preset === 'padrao') {
+        newPlanningFormState.stages = [
+          { cropId: 'SOJA_1_SAFRA', groupKey: 'GRUPO_II_MEDIO', cultivarName: 'BRS 8481' },
+          { cropId: 'MILHO_2_SAFRA', groupKey: 'HIBRIDO_MEDIO', cultivarName: 'BRS 3046' },
+          { cropId: 'SOJA_1_SAFRA', groupKey: 'GRUPO_II_MEDIO', cultivarName: 'BRSMT Pintado' },
+          { cropId: 'MILHO_2_SAFRA', groupKey: 'HIBRIDO_MEDIO', cultivarName: 'BRS 3046' }
+        ];
+      } else if (preset === 'rotacao') {
+        newPlanningFormState.stages = [
+          { cropId: 'SOJA_1_SAFRA', groupKey: 'GRUPO_I_PRECOCE', cultivarName: 'BRS 7582' },
+          { cropId: 'SORGO_2_SAFRA', groupKey: 'GRANIFERO_PRECOCE', cultivarName: 'BRS 373' },
+          { cropId: 'MILHO_1_SAFRA', groupKey: 'GRUPO_I_PRECOCE', cultivarName: '20A55PWU' },
+          { cropId: 'MILHETO_COBERTURA', groupKey: 'COBERTURA_CURTA', cultivarName: 'BRS 1501' }
+        ];
+      } else if (preset === 'curto') {
+        newPlanningFormState.stages = [
+          { cropId: 'SOJA_1_SAFRA', groupKey: 'GRUPO_II_MEDIO', cultivarName: 'BRS 8481' },
+          { cropId: 'MILHO_2_SAFRA', groupKey: 'HIBRIDO_MEDIO', cultivarName: 'BRS 3046' }
+        ];
+      }
+      renderActiveScreen();
+      toast('Modelo de sequência de sucessões carregado.');
+    };
+  });
+
+  const btnAddStage = $('#btn-nplan-add-stage');
+  if (btnAddStage) {
+    btnAddStage.onclick = () => {
+      const nextIdx = newPlanningFormState.stages.length;
+      const isEven = nextIdx % 2 === 0;
+      newPlanningFormState.stages.push(
+        isEven
+          ? { cropId: 'SOJA_1_SAFRA', groupKey: 'GRUPO_II_MEDIO', cultivarName: 'BRS 8481' }
+          : { cropId: 'MILHO_2_SAFRA', groupKey: 'HIBRIDO_MEDIO', cultivarName: 'BRS 3046' }
+      );
+      renderActiveScreen();
+    };
+  }
+
+  $$('[data-nplan-stage-crop]').forEach(sel => {
+    sel.onchange = e => {
+      const idx = Number(sel.dataset.nplanStageCrop);
+      const newCropId = e.target.value;
+      const avail = getAvailableCropsList();
+      const foundCrop = avail.find(c => c.cropId === newCropId) || avail[0];
+      const firstGroup = foundCrop.groups[0] || {
+        groupKey: 'GRUPO_UNICO',
+        cultivarName: 'Cultivar Padrão'
+      };
+      newPlanningFormState.stages[idx] = {
+        cropId: newCropId,
+        groupKey: firstGroup.groupKey,
+        cultivarName: firstGroup.cultivarName
+      };
+      renderActiveScreen();
+    };
+  });
+
+  $$('[data-nplan-stage-group]').forEach(sel => {
+    sel.onchange = e => {
+      const idx = Number(sel.dataset.nplanStageGroup);
+      const newGroupKey = e.target.value;
+      const currentStage = newPlanningFormState.stages[idx];
+      const avail = getAvailableCropsList();
+      const foundCrop = avail.find(c => c.cropId === currentStage.cropId) || avail[0];
+      const foundGroup = foundCrop.groups.find(g => g.groupKey === newGroupKey) || foundCrop.groups[0];
+      newPlanningFormState.stages[idx] = {
+        ...currentStage,
+        groupKey: foundGroup.groupKey,
+        cultivarName: foundGroup.cultivarName
+      };
+      renderActiveScreen();
+    };
+  });
+
+  $$('[data-nplan-move-up]').forEach(btn => {
+    btn.onclick = () => {
+      const idx = Number(btn.dataset.nplanMoveUp);
+      if (idx > 0) {
+        const arr = [...newPlanningFormState.stages];
+        const tmp = arr[idx - 1];
+        arr[idx - 1] = arr[idx];
+        arr[idx] = tmp;
+        newPlanningFormState.stages = arr;
+        renderActiveScreen();
+      }
+    };
+  });
+
+  $$('[data-nplan-move-down]').forEach(btn => {
+    btn.onclick = () => {
+      const idx = Number(btn.dataset.nplanMoveDown);
+      if (idx < newPlanningFormState.stages.length - 1) {
+        const arr = [...newPlanningFormState.stages];
+        const tmp = arr[idx + 1];
+        arr[idx + 1] = arr[idx];
+        arr[idx] = tmp;
+        newPlanningFormState.stages = arr;
+        renderActiveScreen();
+      }
+    };
+  });
+
+  $$('[data-nplan-remove-stage]').forEach(btn => {
+    btn.onclick = () => {
+      const idx = Number(btn.dataset.nplanRemoveStage);
+      if (newPlanningFormState.stages.length > 2) {
+        newPlanningFormState.stages = newPlanningFormState.stages.filter((_, i) => i !== idx);
+        renderActiveScreen();
+      }
+    };
+  });
+
+  const btnSaveNewPlanning = $('#btn-save-new-planning');
+  if (btnSaveNewPlanning) {
+    btnSaveNewPlanning.onclick = () => {
+      const allProps = [DEFAULT_PROP, ...(appState.customProperties || [])];
+      const targetProp =
+        allProps.find(pr => pr.id === newPlanningFormState.propertyId) || appState.propertyProfile || DEFAULT_PROP;
+      const chainText = newPlanningFormState.stages
+        .map(st => getCropShortDisplay(st.cropId))
+        .join(' → ');
+      const planName =
+        newPlanningFormState.planningName.trim() ||
+        `Planejamento ${targetProp.propertyName} (${chainText})`;
+
+      const createdPlan = syncLegacyPlanningFields({
+        ...defaultPlanningConfig(),
+        id: `plan-custom-${Date.now()}`,
+        planningName: planName,
+        propertyId: targetProp.id,
+        isPreRegistered: false,
+        baseSowingDate: newPlanningFormState.baseSowingDate || '2026-11-01',
+        delayDays: appState.planningConfig.delayDays ?? 20,
+        operationalIntervalDays: Math.max(5, Math.min(30, Number(newPlanningFormState.operationalIntervalDays) || 7)),
+        successionStages: structuredClone(newPlanningFormState.stages),
+        preservedDecisions: structuredClone(appState.planningConfig.preservedDecisions)
+      });
+
+      const propChanged = appState.propertyProfile.id !== targetProp.id;
+      appState.customPlannings = [...(appState.customPlannings || []), createdPlan];
+      appState.planningConfig = structuredClone(createdPlan);
+      appState.propertyProfile = structuredClone(targetProp);
+      newPlanningFormState.open = false;
+      newPlanningFormState.planningName = '';
+
+      if (propChanged) {
+        persistState();
+        refreshLiveNasaForActiveProperty(true);
+      } else {
+        updateAndRender();
+      }
+      toast(`Planejamento "${createdPlan.planningName}" salvo e ativado!`);
+    };
+  }
+
+  $$('[data-switch-planning]').forEach(btn => {
+    btn.onclick = () => {
+      const targetPlanId = btn.dataset.switchPlanning;
+      const allPlannings = [DEFAULT_PLAN, ...(appState.customPlannings || [])];
+      const foundPlan = allPlannings.find(p => p.id === targetPlanId);
+      if (foundPlan) {
+        const allProps = [DEFAULT_PROP, ...(appState.customProperties || [])];
+        const linkedProp = allProps.find(pr => pr.id === foundPlan.propertyId) || DEFAULT_PROP;
+        const propChanged = appState.propertyProfile.id !== linkedProp.id;
+        const keepDelay = appState.planningConfig.delayDays ?? foundPlan.delayDays ?? 20;
+        const keepPrefs = structuredClone(appState.planningConfig.preservedDecisions);
+
+        appState.planningConfig = syncLegacyPlanningFields({
+          ...structuredClone(foundPlan),
+          delayDays: keepDelay,
+          preservedDecisions: keepPrefs
+        });
+        appState.propertyProfile = structuredClone(linkedProp);
+
+        if (propChanged) {
+          persistState();
+          refreshLiveNasaForActiveProperty(true);
+        } else {
+          updateAndRender();
+        }
+        toast(`Planejamento "${foundPlan.planningName}" ativado.`);
+      }
+    };
+  });
+
+  $$('[data-remove-planning]').forEach(btn => {
+    btn.onclick = () => {
+      const targetPlanId = btn.dataset.removePlanning;
+      appState.customPlannings = (appState.customPlannings || []).filter(p => p.id !== targetPlanId);
+      if (appState.planningConfig.id === targetPlanId) {
+        appState.planningConfig = structuredClone(DEFAULT_PLAN);
+        appState.propertyProfile = structuredClone(DEFAULT_PROP);
+      }
+      updateAndRender();
+      toast('Planejamento removido.');
+    };
+  });
+
   const delaySlider = $('#plan-delay-slider');
   if (delaySlider) {
     delaySlider.onchange = e => {
       appState.planningConfig.delayDays = Number(e.target.value);
+      if (!appState.planningConfig.isPreRegistered) {
+        appState.customPlannings = (appState.customPlannings || []).map(p =>
+          p.id === appState.planningConfig.id ? structuredClone(appState.planningConfig) : p
+        );
+      }
       updateAndRender();
     };
   }
@@ -1973,6 +2664,11 @@ function bindScreenEvents() {
     baseDateInput.onchange = e => {
       if (e.target.value) {
         appState.planningConfig.baseSowingDate = e.target.value;
+        if (!appState.planningConfig.isPreRegistered) {
+          appState.customPlannings = (appState.customPlannings || []).map(p =>
+            p.id === appState.planningConfig.id ? structuredClone(appState.planningConfig) : p
+          );
+        }
         updateAndRender();
       }
     };
@@ -1981,6 +2677,11 @@ function bindScreenEvents() {
   if (opIntervalInput) {
     opIntervalInput.onchange = e => {
       appState.planningConfig.operationalIntervalDays = Math.max(5, Math.min(25, Number(e.target.value) || 7));
+      if (!appState.planningConfig.isPreRegistered) {
+        appState.customPlannings = (appState.customPlannings || []).map(p =>
+          p.id === appState.planningConfig.id ? structuredClone(appState.planningConfig) : p
+        );
+      }
       updateAndRender();
     };
   }
@@ -1990,6 +2691,10 @@ function bindScreenEvents() {
       appState.planningConfig.year1SummerGroupKey = e.target.value;
       appState.planningConfig.year1SummerCultivar =
         e.target.value === 'GRUPO_I_PRECOCE' ? 'BRS 7582' : 'BRS 8481';
+      if (Array.isArray(appState.planningConfig.successionStages) && appState.planningConfig.successionStages[0]) {
+        appState.planningConfig.successionStages[0].groupKey = e.target.value;
+        appState.planningConfig.successionStages[0].cultivarName = appState.planningConfig.year1SummerCultivar;
+      }
       updateAndRender();
     };
   }
@@ -2001,6 +2706,11 @@ function bindScreenEvents() {
         e.target.value === 'MILHO_1_SAFRA' ? 'GRUPO_I_PRECOCE' : 'GRUPO_II_MEDIO';
       appState.planningConfig.year2SummerCultivar =
         e.target.value === 'MILHO_1_SAFRA' ? '20A55PWU' : 'BRSMT Pintado';
+      if (Array.isArray(appState.planningConfig.successionStages) && appState.planningConfig.successionStages[2]) {
+        appState.planningConfig.successionStages[2].cropId = e.target.value;
+        appState.planningConfig.successionStages[2].groupKey = appState.planningConfig.year2SummerGroupKey;
+        appState.planningConfig.successionStages[2].cultivarName = appState.planningConfig.year2SummerCultivar;
+      }
       updateAndRender();
     };
   }
@@ -2077,10 +2787,16 @@ function bindScreenEvents() {
 (async function init() {
   try {
     const saved = await read();
-    if (saved && saved.version === 5 && saved.propertyProfile && saved.planningConfig) {
+    if (saved && (saved.version === 5 || saved.version === 6) && saved.propertyProfile && saved.planningConfig) {
       appState = {
         ...appState,
-        ...saved
+        ...saved,
+        version: 6,
+        customPlannings: saved.customPlannings || [],
+        planningConfig: syncLegacyPlanningFields({
+          ...defaultPlanningConfig(),
+          ...saved.planningConfig
+        })
       };
       recomputeSimulation();
     }
