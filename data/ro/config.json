@@ -1,0 +1,112 @@
+{
+  "schema_version": "0.1.0",
+  "state": {
+    "code": "RO",
+    "name": "Rondônia"
+  },
+  "reference_date": "2026-11-07",
+  "pilots": [
+    {
+      "municipality": "Vilhena",
+      "role": "primary_pilot",
+      "status": "pending_property_profile",
+      "coordinates": null
+    },
+    {
+      "municipality": "Ariquemes",
+      "role": "future_validation_profile",
+      "status": "deferred",
+      "coordinates": null
+    }
+  ],
+  "property_evidence_model": {
+    "required_before_analysis": [
+      "property_name",
+      "municipality",
+      "productive_area_ha",
+      "production_system",
+      "field_count"
+    ],
+    "soil_evidence_fields": [
+      "property_id",
+      "field_id",
+      "evidence_type",
+      "sampling_date",
+      "sampling_depth",
+      "source_or_laboratory",
+      "texture_or_class",
+      "ph",
+      "clay_percent",
+      "organic_matter_percent",
+      "document_reference",
+      "validation_status"
+    ],
+    "missing_evidence_effect": "pending"
+  },
+  "official_rules": [
+    {
+      "id": "ro-soy-sanitary-void-2026",
+      "type": "sanitary_void",
+      "crop": "soybean",
+      "scope": "statewide",
+      "start": "2026-06-10",
+      "end": "2026-09-10",
+      "effect": "living_soybean_plants_prohibited",
+      "status": "official",
+      "source": "https://rondonia.ro.gov.br/inicio-do-vazio-sanitario-da-soja-comeca-nesta-quarta-feira-10-em-rondonia/"
+    },
+    {
+      "id": "ro-soy-sowing-calendar-2026-2027",
+      "type": "sowing_calendar",
+      "crop": "soybean",
+      "scope": "statewide",
+      "start": "2026-09-11",
+      "end": "2027-01-09",
+      "effect": "sowing_allowed_subject_to_other_rules",
+      "status": "official",
+      "source": "https://rondonia.ro.gov.br/wp-content/uploads/2026/06/SEI_71685192_Instrucao_Normativa_4.pdf"
+    }
+  ],
+  "nasa_inputs": [
+    {
+      "parameter": "IMERG_PRECTOT",
+      "purpose": "daily_precipitation",
+      "resolution_note": "approximately_10_km",
+      "status": "planned"
+    },
+    {
+      "parameter": "T2M_MAX",
+      "purpose": "daily_maximum_temperature",
+      "resolution_note": "source_resolution_must_be_displayed",
+      "status": "planned"
+    },
+    {
+      "parameter": "T2M_MIN",
+      "purpose": "daily_minimum_temperature",
+      "resolution_note": "source_resolution_must_be_displayed",
+      "status": "planned"
+    },
+    {
+      "parameter": "SMAP_soil_moisture",
+      "purpose": "regional_soil_moisture_context",
+      "resolution_note": "approximately_9_km_not_field_scale",
+      "status": "feasibility_review"
+    }
+  ],
+  "crop_catalog": [
+    { "id": "soybean", "role": "commercial", "validation": "pending" },
+    { "id": "maize_second_crop", "role": "commercial", "validation": "pending" },
+    { "id": "sorghum", "role": "commercial_candidate", "validation": "pending" },
+    { "id": "millet", "role": "cover_candidate", "validation": "pending" },
+    { "id": "crotalaria", "role": "cover_candidate", "validation": "pending" },
+    { "id": "brachiaria", "role": "cover_candidate", "validation": "pending" }
+  ],
+  "decision_policy": {
+    "missing_required_rule": "pending",
+    "official_rule_violation": "invalid",
+    "agronomist_rule_violation": "invalid",
+    "unvalidated_candidate": "exploration_only",
+    "allow_yield_prediction": false,
+    "allow_automatic_recommendation": false
+  }
+}

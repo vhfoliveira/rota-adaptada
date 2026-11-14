@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.openai/
+.agents/
+.codex/
+.aws/
+backups/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
