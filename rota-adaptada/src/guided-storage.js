@@ -1,3 +1,4 @@
+import {removeSavedPlanning,removePlanningDrafts} from './planning-deletion.js';
 import {appendGuidedAlternative,appendGuidedPlan} from './guided-planning.js';
 const DATABASE='rota-adaptada-laboratorio-v1';
 const STORE='workspace';
@@ -114,5 +115,28 @@ export function saveGuidedAlternative(draft,property,strategy,_legacy){
   return update('state',current=>{
     const merged=appendGuidedAlternative(current,input.draft,input.property,input.strategy);
     return {value:merged.state,result:merged.plan};
+  });
+}
+
+/** Commit deletion and related draft cleanup together, reading the latest state. */
+export async function deleteSavedPlanning(planId){
+  const db=await openDatabase();
+  return new Promise((resolve,reject)=>{
+    const transaction=db.transaction(STORE,'readwrite'),store=transaction.objectStore(STORE);
+    const keys=['state',DRAFTS,DEMO_DRAFTS],values={};let remaining=keys.length,result,failed;
+    for(const key of keys){
+      const request=store.get(key);
+      request.onsuccess=()=>{
+        values[key]=request.result;
+        if(--remaining)return;
+        try{
+          result=removeSavedPlanning(values.state,planId);
+          store.put(result,'state');
+          for(const draftKey of [DRAFTS,DEMO_DRAFTS])store.put(removePlanningDrafts(values[draftKey],planId),draftKey);
+        }catch(error){failed=error;transaction.abort();}
+      };
+    }
+    transaction.oncomplete=()=>resolve(result);
+    transaction.onerror=transaction.onabort=()=>reject(failed||transaction.error||Error('Não foi possível excluir o planejamento.'));
   });
 }

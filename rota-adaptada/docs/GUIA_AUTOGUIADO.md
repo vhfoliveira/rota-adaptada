@@ -1,6 +1,6 @@
 # Experiência autoguiada
 
-A raiz destaca **Criar meu planejamento**, seguida de **Ajustar um planejamento existente**. **Ainda não sei o que plantar** preserva a descoberta de culturas. `?modo=campo` abre a consulta guiada e retoma seu rascunho; `?modo=planejamento` abre o painel avançado, que continua separado do guia. Celular e computador usam as mesmas jornadas. `?demo=planejamento` inicia ou oferece retomar a demonstração explícita de Vilhena.
+A raiz abre a visão geral Órbita, com indicadores locais, planos e retomadas. As ações incluem **Criar meu planejamento** e **Ajustar um planejamento existente**. **Ainda não sei o que plantar** preserva a descoberta de culturas. `?modo=campo` abre a consulta guiada e retoma seu rascunho; `?modo=planejamento` abre o painel avançado, que continua separado do guia. Celular e computador usam as mesmas jornadas. `?demo=planejamento` inicia ou oferece retomar a demonstração explícita de Vilhena.
 
 `index.html` carrega `src/bootstrap.js`: o guia usa `src/guided.js` e o painel avançado usa `src/main.js`. A PWA instalada abre a raiz. O guia permite retornar ao início, retomar cada objetivo e abrir o painel avançado; o painel oferece o retorno à experiência guiada.
 
@@ -12,7 +12,7 @@ A raiz destaca **Criar meu planejamento**, seguida de **Ajustar um planejamento 
 | Ajustar um planejamento existente | Plano salvo → atraso e permissões → revisão → comparação e salvamento da alternativa. |
 | Descobrir o que plantar | Localização → data e condições → revisão → opções → resumo. |
 
-A criação tem quatro etapas e começa sem cultura, ciclo, data ou intervalo
+A criação manual tem quatro etapas e começa sem cultura, ciclo, data ou intervalo
 preenchidos automaticamente. O nome é opcional. A prévia de calendário aparece
 quando os dados necessários estão completos; solo desconhecido não impede
 montar a sequência. A adaptação mostra quatro etapas de progresso e permite
@@ -22,6 +22,19 @@ O original é salvo sem atraso. **Simular atraso** abre uma adaptação separada
 **Editar uma cópia** mantém o original e gera outro identificador. **Ver este
 plano em detalhes** usa `?modo=planejamento&plano=<id>`. **Baixar resumo** cria um
 HTML imprimível; não substitui o salvamento do plano no dispositivo.
+
+## Sugestões de planejamento
+
+Na criação, **Sugerir planejamento** solicita o horizonte em dias e oferece até
+três sequências com ciclos completos que caibam no período. Usa perfis oficiais
+do catálogo municipal e suas janelas, por ordem de catálogo, sem classificação
+comparativa por clima ou produtividade. Se o intervalo estiver vazio, a proposta
+usa 7 dias; sem manejo informado, explicita a hipótese de sequeiro.
+
+O primeiro cultivo exige condições publicadas para sua data. Etapas posteriores
+fora dos anos cobertos podem usar projeções sazonais identificadas, que exigem
+validação da nova safra. Esperas entre cultivos e dias finais sem cultivo ficam
+visíveis. O usuário precisa escolher uma proposta e revisar suas hipóteses.
 
 ## Inventário de apresentação
 
@@ -118,13 +131,3 @@ tempo, erros e compreensão, sem obrigá-los a percorrer o guia.
 ## Publicação
 
 Executar os testes e o build; conferir celular/computador e instalação PWA. Homologar o roteiro humano acima antes da publicação geral. A publicação no ServerOS usa `./deploy/serveros.sh`, com backup, healthcheck e rollback existentes. Não apagar rascunhos para atualizar: o aviso de nova versão exige ação explícita e checkpoint bem-sucedido. O painel avançado solicita salvar/fechar editores antes de atualizar. Caches anteriores ficam disponíveis para abas que ainda estejam concluindo o preenchimento.
-
-## Histórico de conferência técnica — 14/11/2026, antes da nova criação
-
-- Consulta completa em viewport de 390 px: demonstração explícita, revisão, opções ZARC, seleção de cultura e download HTML com condições e fontes.
-- Ajuda por toque e Escape: foco devolvido ao botão de origem, data preservada; painel inferior observado no celular.
-- Adaptação em 1280 px: localização manual, cultura/ciclo obrigatório, sequência com dois cultivos, atraso de 12 dias, comparação parcial sem solo confirmado, salvamento e plano aberto no painel avançado com datas preservadas.
-- Rascunhos de consulta e adaptação reapareceram após recarregar a página.
-- Mapa do pacote de produção renderizado; deslocamento pelas setas e seleção explícita do centro confirmados. Corrigidos carregamento do worker e ordem de criação do marcador encontrados durante QA.
-- Testes automatizados cobrem falhas independentes de fontes, descarte de resposta cancelada, reutilização de dados do mesmo ponto, condições ZARC completas, validação de localização, paridade com o motor, preservação/concorrência de armazenamento e ativação segura de atualizações.
-- Capturas em `screenshots/guided/`. Estes testes técnicos não substituem a validação com os cinco participantes e não certificam recomendações agronômicas.

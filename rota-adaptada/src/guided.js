@@ -1,3 +1,4 @@
+import {removePlanningDrafts} from './planning-deletion.js';
 import './planning-change.css';
 import changeIndicatorStyles from './planning-change.css?inline';
 import {planningChange} from './planning-change.js';
@@ -11,7 +12,7 @@ import {workspaceSidebar,workspaceTopbar,bindWorkspaceShell,icon} from './orbit-
 import {renderDashboard,renderPlanLibrary} from './orbit-dashboard.js';
 import {helpButton,mountContextHelp} from './context-help.js';
 import {mountLocationPicker} from './guided-location.js';
-import {readDrafts,saveDraft,readLegacyState,saveGuidedAlternative,saveGuidedPlan} from './guided-storage.js';
+import {readDrafts,saveDraft,readLegacyState,deleteSavedPlanning,saveGuidedAlternative,saveGuidedPlan} from './guided-storage.js';
 import {listPlanningChoices,extractGuidedPlan,buildGuidedPlanning,simulateGuidedPlanning,buildGuidedOriginalPlanning,simulateGuidedOriginalPlanning} from './guided-planning.js';
 import {createPlanningDemoDraft,DEMO_SOURCE_DEPENDENCIES} from './guided-demo.js';
 import {queryGuidedSources,emptySources} from './guided-discovery.js';
@@ -85,6 +86,18 @@ function home(){
   const plans=listPlanningChoices(legacy);
   frame((homeView==='library'?renderPlanLibrary:renderDashboard)({plans,resumes}),true);
   app.querySelectorAll('[data-adapt-plan]').forEach(button=>button.onclick=()=>loadPlanForAdaptation(button.dataset.adaptPlan,true));
+  app.querySelectorAll('[data-delete-plan]').forEach(button=>button.onclick=async()=>{
+    const id=button.dataset.deletePlan,plan=plans.find(p=>p.id===id);
+    if(!plan||!confirm(`Excluir o planejamento "${plan.name}" deste dispositivo? Os preenchimentos vinculados também serão removidos. Outros planos e a propriedade serão mantidos. Esta ação não pode ser desfeita.`))return;
+    const epoch=navigationEpoch;button.disabled=true;
+    try{
+      await saveChain;
+      legacy=await deleteSavedPlanning(id);
+      drafts=removePlanningDrafts(drafts,id);demoDrafts=removePlanningDrafts(demoDrafts,id);
+      storageError='';
+      if(epoch===navigationEpoch){home();const status=document.getElementById('plan-filter-status')||document.getElementById('guide-storage');status.textContent='Planejamento excluído deste dispositivo.';status.hidden=false;}
+    }catch(error){storageError=error.message||'Não foi possível excluir o planejamento. Tente novamente.';button.disabled=false;storageStatus();}
+  });
   const search=document.getElementById('plan-search');let planFilter='all';
   const filterPlans=()=>{
     const normalize=value=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();

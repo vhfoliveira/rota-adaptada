@@ -2,16 +2,11 @@
 
 O app consulta arquivos no próprio site. GPS → geocodificação do município → correspondência exata de nome/UF no índice IBGE do MAPA → arquivo municipal → safra, data (decêndio), solo e manejo → opções de culturas. Não consulta o MAPA a cada produtor e não usa a antiga lista estadual de cultivares como indicação municipal.
 
-## Fonte oficial e compatibilidade com o desafio
+## Fonte oficial
 
-- MAPA, **ZARC — Tábua de Risco**: https://dados.agricultura.gov.br/dataset/tabua-de-risco-zoneamento-agricola-de-risco-climatico
-- Licença declarada: **Creative Commons Attribution**, identificador CKAN `cc-by`. O portal não especifica a versão. Preservar a atribuição e o link de licença https://opendefinition.org/licenses/cc-by/.
-- Recurso importado: safra **2026/2027**, atualizado na fonte em 13/11/2026. O arquivo oficial foi baixado pelo navegador do portal, pois a conexão direta do ambiente de desenvolvimento falhou.
-- Dicionário oficial: https://dados.agricultura.gov.br/dataset/6d3d141c-885e-41a4-ab7f-dc8ff323b96f/resource/bebb0ebb-bc75-460c-b900-a7a1ebd87bee/download/dicionario-de-dados-tabua-de-risco-2026.pdf
-- **NASA POWER foi confirmado na aba Resources do Field Shift** em 14/11/2026: https://www.spaceappschallenge.org/2026/challenges/adapting-farms-with-nasa-data/
-- Os termos admitem materiais externos, exigindo disponibilidade, licença e citação: https://www.spaceappschallenge.org/legal/
-
-ZARC é fonte complementar, não um recurso apresentado como aprovado pela NASA. NASA POWER continua alimentando a análise climática. A licença e as referências devem acompanhar a submissão; a elegibilidade final depende também dos demais requisitos do evento.
+- MAPA, [ZARC — Tábua de Risco](https://dados.agricultura.gov.br/dataset/tabua-de-risco-zoneamento-agricola-de-risco-climatico).
+- Licença declarada no manifesto: Creative Commons Attribution (`cc-by`), sem versão especificada. Preservar atribuição e [link da licença](https://opendefinition.org/licenses/cc-by/).
+- A cópia incluída corresponde à safra 2026/2027 e à atualização da fonte de 13/11/2026.
 
 ## Base incluída e rastreabilidade
 
@@ -25,7 +20,9 @@ Não inclui neste primeiro pacote culturas perenes, olerícolas ou sem safra. A 
 
 Sem classe de solo confirmada, o app mostra opções condicionais em todos os solos publicados, preservando as condições de ciclo, irrigação, clima, nível de manejo e portaria em detalhes. É possível refinar solo e irrigação, opcionalmente. AD1–AD6 não são inferidas como confirmação oficial a partir da textura do SoilGrids. Tipos 1/2/3 não são convertidos em AD automaticamente.
 
-Valor zero significa ausência de indicação naquele registro/período, nunca risco zero. Grupos de cultivar não são convertidos em duração em dias. Percentuais não são probabilidades gerais de sucesso. Ausência de registros é diferenciada de falha de consulta ou safra não coberta.
+Valor zero significa ausência de indicação naquele registro/período, nunca risco zero. A tábua de risco não fornece duração em dias. O registro de parâmetros
+oficiais acrescenta referências documentadas ou hipóteses por teto de faixa;
+veja [parâmetros oficiais](PARAMETROS_OFICIAIS.md). Percentuais não são probabilidades gerais de sucesso. Ausência de registros é diferenciada de falha de consulta ou safra não coberta.
 
 Geocodificação não depende do SoilGrids. Mesmo sem solo, o app pode mostrar o catálogo municipal e um resumo mensal real da NASA (chuva e temperatura). O cálculo de estresse que exige capacidade de água do solo permanece condicionado à obtenção dessa informação. A comparação NASA no modo campo só usa correspondências explícitas de culturas encontradas no ZARC; culturas sem parâmetros no motor permanecem visíveis na lista oficial.
 
@@ -35,7 +32,7 @@ O `compose.yaml` inclui o serviço `zarc-updater`, construído por `deploy/Docke
 
 O volume `zarc-data` é gravável apenas pelo atualizador e montado para leitura no nginx. `/zarc/` prefere a base do volume e usa a cópia oficial embutida no site enquanto não houver atualização. O navegador solicita apenas recursos da mesma origem; não precisa de CORS do MAPA. A consulta não é armazenada pelo service worker como resposta permanente.
 
-Ativação no ambiente Docker: `docker compose up -d --build`. Para o ambiente ServerOS, usar o procedimento existente com `compose.serveros.yaml`. **Esta alteração não publica o site nem inicia serviços remotos por si só.** Inspecionar `docker compose logs zarc-updater` e `/zarc/update-status.json` após implantação. Versões anteriores são preservadas para não quebrar consultas já abertas; monitorar o volume e remover versões antigas apenas em manutenção controlada.
+Ativação no ambiente Docker: `docker compose up -d --build`. Para o ambiente ServerOS, usar o procedimento existente com `compose.serveros.yaml`. Inspecionar `docker compose logs zarc-updater` e `/zarc/update-status.json` após implantação. Versões anteriores são preservadas para não quebrar consultas já abertas; monitorar o volume e remover versões antigas apenas em manutenção controlada.
 
 Hospedagem puramente estática não executa esse serviço: nela, agendar o atualizador no servidor/CI e republicar os arquivos. Atualização manual local: `node scripts/update-zarc.mjs` na pasta da aplicação. Importação de download oficial obtido pelo navegador: `python3 scripts/import-zarc-risk.py /caminho/arquivo-oficial.csv --download URL_OFICIAL --source-updated DATA`.
 

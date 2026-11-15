@@ -402,3 +402,14 @@ test('simulation separates commercial and cover permissions and protects selecte
  assert.equal(buildGuidedPlanning(recovered).preservedDecisions.keepFirstCropSoy,false);
  assert.deepEqual(recovered.lockedStages,[1]);
 });
+
+test('plan deletion and draft cleanup commit atomically and preserve data on write failure',async t=>{
+ const previous=globalThis.indexedDB;t.after(()=>{globalThis.indexedDB=previous;});
+ const seed={state:{planningConfig:{id:'test'},customPlannings:[{id:'test'},{id:'real'}],customProperties:[{id:'farm'}]},'guided-drafts-v1':{planning:{savedPlanId:'test'},keep:{planId:'real'}},'guided-demo-drafts-v1':{adaptation:{sourcePlanId:'test'}}};
+ for(const failWrites of [true,false]){
+  const db=memoryDatabase(seed,{failWrites});globalThis.indexedDB=db.indexedDB;
+  const api=await import(`../src/guided-storage.js?delete-atomic-${failWrites}`);
+  if(failWrites){await assert.rejects(api.deleteSavedPlanning('test'),/sem espaço/);assert.deepEqual(Object.fromEntries(db.records),seed);}
+  else {const result=await api.deleteSavedPlanning('test');assert.equal(result.planningConfig.id,'');assert.deepEqual(result.customPlannings,[{id:'real'}]);assert.deepEqual(db.records.get('guided-drafts-v1'),{keep:{planId:'real'}});assert.deepEqual(db.records.get('guided-demo-drafts-v1'),{});}
+ }
+});

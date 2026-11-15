@@ -464,7 +464,7 @@ code {
   border: 1px solid var(--line);
 }
 
-/* Screen 1 Soil & Crops */
+/* Property and soil */
 .soil-cards-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -631,7 +631,7 @@ code {
   gap: 4px;
 }
 
-/* Screen 2 Planning & Domino */
+/* Planning and succession timeline */
 .preset-chips-row {
   display: flex;
   gap: 7px;
@@ -784,7 +784,7 @@ code {
   font-weight: 450;
 }
 
-/* Screen 3 Comparison Cards */
+/* Comparison cards */
 .inline-delay-switcher {
   display: flex;
   align-items: center;
@@ -978,7 +978,7 @@ code {
   margin-top: auto;
 }
 
-/* 2-Year Timeline inside optional drawer */
+/* Succession timeline inside optional drawer */
 .timeline-2y-box {
   background: var(--paper-soft);
   border: 1px solid var(--line);
@@ -1089,7 +1089,7 @@ code {
   font-size: 0.75rem;
 }
 
-/* Screen 4 Explanation & Phenological Phases */
+/* Explanation and phenological phases */
 .clean-explain-bar {
   display: grid;
   grid-template-columns: 1.3fr 1fr;

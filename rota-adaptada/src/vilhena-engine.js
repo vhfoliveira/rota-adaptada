@@ -33,7 +33,7 @@ export function createScenarioContext(property, supplied = {}) {
 }
 
 /**
- * Queries the official NASA POWER API live for a given latitude and longitude (2013 to current date).
+ * Queries NASA POWER for the requested point and date range.
  */
 export async function fetchLiveNasaPower(lat, lon, { startDate = defaultNasaDataset.metadata.period.start_date, endDate = new Date().toISOString().slice(0, 10) } = {}) {
   validDate(startDate); validDate(endDate);
@@ -588,7 +588,7 @@ const PHASE_LABELS = {
 };
 
 /**
- * Runs the Year-by-Year Historical Stress Test (2013-2024) for a specific crop stage.
+ * Evaluates a crop stage over the years available in the supplied historical series.
  */
 export function runHistoricalStressTest(cropId, groupKey, sowDateStr, soilProfileId = defaultPropertyProfile().soilProfileId, context = createScenarioContext({...defaultPropertyProfile(), soilProfileId})) {
   validDate(sowDateStr);
@@ -883,7 +883,7 @@ export function runHistoricalStressTest(cropId, groupKey, sowDateStr, soilProfil
 }
 
 /**
- * Builds the crop succession evaluation and 12-year NASA POWER stress test for a given strategy.
+ * Builds the succession evaluation using the available historical series for a strategy.
  */
 function buildStrategyEvaluation({
   strategyId,
@@ -971,7 +971,7 @@ function buildStrategyEvaluation({
   const cropSequenceIds = stages.map(s => s.cropId);
   const uniqueSpeciesCount = new Set(cropSequenceIds).size;
 
-  // Focus on critical stage (Stage 2 by default, or Stage 1 if a custom main-season crop is evaluated)
+  // Use the requested critical stage, falling back to the second or first available stage.
   const criticalStage = stages[criticalStageIndex] || stages[1] || stages[0];
   const anyZarcOut = stages.some(s => ['FORA_DE_JANELA','FORA_JANELA_INFORMADA'].includes(s.zarc.status));
   const incomplete = stages.some(s => s.zarc.status === 'PENDENTE' || !s.stressTest.evaluatedYears);
@@ -1124,8 +1124,7 @@ export function getCycleGroupLabel(groupKey, groupObj) {
 
 /**
  * Registers user-created custom crops and custom cycles into rulesPackage.crops_catalog
- * so the deterministic engine can evaluate their planting window, 4 phenological phases,
- * and 12-year NASA POWER stress test.
+ * for calendar evaluation; climate assessment requires compatible parameters and data.
  */
 export function registerCustomCropsInCatalog(customCrops = [], customCycles = []) {
   for (const key of Object.keys(rulesPackage.crops_catalog)) {
@@ -1200,8 +1199,8 @@ export function registerCustomCropsInCatalog(customCrops = [], customCycles = []
 }
 
 /**
- * Returns the ordered list of succession stages for a planning config, supporting both
- * explicit `successionStages` arrays (any length >= 2) and legacy 4-stage fields.
+ * Returns the ordered list of succession stages from
+ * a nonempty `successionStages` array with registered crops and cycles.
  */
 export function getPlanningStagesList(planningConfig = defaultPlanningConfig()) {
   const raw = planningConfig?.successionStages;
@@ -1236,7 +1235,7 @@ export function getPlanningStagesList(planningConfig = defaultPlanningConfig()) 
 }
 
 /**
- * Resolves exact sowing and harvest dates in sequence order given an initial sowing date and operational interval.
+ * Resolves sowing and reference cycle-end dates from cycle durations and operational intervals.
  */
 export function resolveSuccessionSchedule(stageDefs, initialSowDate, opInterval = 7, firstGapOverride = null) {
   validDate(initialSowDate); days(opInterval, 'Intervalo');

@@ -7,7 +7,8 @@ de um perfil com dados do produtor. A entrada é `index.html` → `src/bootstrap
 
 | Entrada | Comportamento esperado |
 | --- | --- |
-| `/` | Criar planejamento como entrada principal; ajustar plano salvo e descobrir culturas como alternativas |
+| `/` | Visão geral Órbita, com ações, indicadores locais e retomadas |
+| `?visao=planos` | Biblioteca de planejamentos com busca e filtros |
 | `?demo=planejamento` | Exemplo explícito de criação em Vilhena; rascunho separado dos dados reais |
 | `?modo=campo` | Abre/retoma a consulta guiada de culturas |
 | `?modo=planejamento` | Painel avançado separado, com cinco áreas de navegação |
@@ -16,7 +17,7 @@ de um perfil com dados do produtor. A entrada é `index.html` → `src/bootstrap
 | Arquivo/caminho ausente no Nginx | HTTP 404, sem retornar HTML da aplicação |
 
 O painel avançado continua ativo, inclusive para abrir planos salvos no guia.
-Não há outra entrada móvel, observatório ou laboratório de simulação.
+Celular e computador usam a mesma entrada.
 
 ## Roteiro no navegador
 
@@ -77,8 +78,7 @@ Não há outra entrada móvel, observatório ou laboratório de simulação.
 Na pasta `rota-adaptada`, execute `npm test` e `npm run build`. O teste
 `source-graph.test.js` percorre o entrypoint real e os imports dinâmicos: falha
 se houver import local ausente, dependência não declarada ou código em `src/`
-que não pertence a nenhum fluxo ativo. Testes exclusivos das funcionalidades
-retiradas também foram removidos.
+que não pertence a nenhum fluxo ativo.
 
 Os testes de planejamento guiado cobrem criação sem atraso, salvamento
 idempotente, ajuste posterior autorizado, snapshots oficiais, concorrência,
@@ -105,52 +105,7 @@ e atualização offline, teste o build em HTTPS conforme o
 O roteiro técnico não substitui os testes com pessoas leigas nem validação
 agronômica.
 
-## Validação — 15/11/2026
-
-Executado `tests/browser-smoke.mjs` em Chromium com contextos temporários,
-sem acessar o perfil ou os dados pessoais do navegador. Foram conferidas as
-larguras de **1280 px**, **390 px** e **360 px**. Não foram observados erros
-JavaScript de página nem rolagem horizontal nas telas verificadas.
-
-- **Demonstração em computador e celular:** criação do original, salvamento,
-  simulação de 12 dias com ciclos mais curtos, escolha e salvamento de alternativa
-  e abertura do plano exato no avançado. O original permaneceu preservado e o
-  atraso não foi reaplicado ao abrir a alternativa.
-- **Preenchimento real em 360 px:** entrada manual de Vilhena/RO e coordenadas
-  `-12.7405, -60.1458`, data `2026-11-01`, seleção de cultura e ciclo pela
-  interface, erros junto aos campos de ciclo/intervalo com foco correto, ajuda
-  por Enter/Escape e restauração de foco. Recarregar e retomar preservou os dados.
-- **Um e dois cultivos:** foi salvo um plano de um cultivo com atraso zero;
-  editar uma cópia e adicionar o segundo cultivo preservou o primeiro plano.
-  A adaptação posterior abriu no avançado com atraso zero e sem selo de exemplo.
-- **Armazenamento e continuidade no avançado:** troca entre planos com atrasos
-  diferentes, recarga, link com ID inexistente, falha de gravação por quota e
-  nova tentativa, além de proteção de saída com cadastro não confirmado.
-
-A revisão posterior identificou e corrigiu duas condições de corrida no guia.
-Reproduções pontuais com conclusão de transação atrasada em 1,5 segundo confirmaram
-que o atalho para descobrir culturas não substitui uma navegação posterior e que
-voltar/editar durante o salvamento do original permite salvar a cópia. A regressão
-de edição durante gravação foi acrescentada ao smoke; não houve nova execução
-completa da suíte de navegador depois dessa inclusão.
-
-As requisições externas foram bloqueadas no teste. O ZARC foi carregado da base
-local da aplicação. A demonstração usou sua série NASA explicitamente identificada.
-No preenchimento real, a requisição NASA foi mantida pendente até salvar o primeiro
-calendário, enquanto a estimativa de solo ficou indisponível; depois a requisição
-foi interrompida. Nas coordenadas exatas de Vilhena há série histórica local do
-mesmo ponto. Portanto, esse teste confirma o tratamento de espera/falha e **não**
-comprova disponibilidade ou respostas atuais das APIs externas.
-
-O relatório e as capturas ficam em
-`output/pitch-autoguiado/browser-smoke-results.json` e
-`output/pitch-autoguiado/`, na raiz do repositório. O roteiro com participantes
-leigos e avançados continua pendente. Também permanecem pendentes os testes em
-aparelhos físicos e a verificação das fontes externas em condições reais de
-rede. Esta rodada usou o servidor local; a publicação foi verificada depois,
-conforme o registro abaixo.
-
-### Executar o smoke opcional
+## Executar o smoke opcional
 
 Com Node.js 22 e um Playwright/Chromium já disponível no ambiente, inicie o Vite
 em um terminal e execute o smoke em outro, a partir de `rota-adaptada`:
@@ -178,90 +133,7 @@ node tests/browser-smoke.mjs
 capturas. O smoke é separado de `npm test`; sua inclusão não adiciona dependências
 ao projeto nem utiliza um perfil persistente do navegador.
 
-## Publicação HTTPS — 15/11/2026
 
-Publicado em <https://deltashift.udisoft.app.br/> o código do commit `4834090`,
-na branch `codex/planejamento-autoguiado`. A base anterior foi registrada em
-`versao-vitoria` no commit `af32c1b`; `main` e `teste-visual` foram preservadas.
-O script de publicação criou backup da versão anterior e confirmou a saúde do
-serviço e a igualdade entre o HTML público e o HTML da imagem publicada.
-
-- O build no servidor aprovou **136 testes JavaScript**, incluindo um build real
-  que confere todos os arquivos do cache offline. Também passaram os **13 testes
-  Python**, o build local e a checagem de empacotamento.
-- A lista de cache passou a ser gerada após a finalização dos arquivos pelo Vite.
-  Os **18 recursos** publicados retornaram HTTP 200; o cache é
-  `rota-field-801a3fbf9acffb4b`. A mudança conserva a ativação explícita de
-  atualizações e o salvamento prévio dos rascunhos.
-- Em Chromium temporário, a raiz abriu **Planeje sua próxima safra**, com a
-  entrada `index-B2ptp1j9.js`. O Service Worker ficou ativo e controlando a página.
-  O exemplo, percorrido pela interface, calculou milho de 01/11/2026 a 28/02/2027
-  e feijão de 08/03/2027 a 26/05/2027. Não houve erros de página ou HTTP >= 400.
-- Com a rede desligada no contexto de teste, a navegação para a raiz abriu a
-  interface já instalada e exibiu o aviso de ausência de conexão. Isso verifica
-  o shell offline, não novas consultas de dados sem rede.
-- O navegador embutido persistente usado na revisão ainda apresentou uma
-  interface antiga em cache. Seus dados não foram limpos. A publicação nova foi
-  confirmada por HTTP e pelo Chromium temporário; a migração desse perfil legado
-  específico não foi concluída nesta sessão.
-
-Evidências locais: `output/pitch-autoguiado/production-verification.json`,
-`https-validacao.json` e capturas `publicado-*.png`, na raiz. O pitch tem sete
-slides; o vídeo tem 30 segundos exatos, com capturas reais e legendas, sem áudio.
-Foram preparados roteiros de apresentação e vídeo. Continuam pendentes a rodada
-com três pessoas pouco digitais e duas avançadas, o ensaio com o apresentador e
-os testes em aparelhos físicos. Não foram atribuídos resultados a participantes
-que não testaram o aplicativo.
-
-## Correção do catálogo avançado — 15/11/2026
-
-A grade avançada renderizava 402 perfis nacionais, incluindo 109 registros de
-sorgo, sob uma identificação de Vilhena. Agora cartões e seletores usam as
-culturas e os grupos retornados para o **município da propriedade escolhida**.
-O catálogo completo e os dados salvos permanecem intactos; não há remoção ou
-migração de registros. Os nomes municipais preservam diferenças de safra.
-
-- Em Vilhena foram conferidas quatro opções oficiais distintas: Sorgo
-  Forrageiro, Sorgo Forrageiro 2ª Safra, Sorgo Granífero e Sorgo Granífero
-  2ª Safra. Não aparecem perfis oficiais de outras UFs nessa lista.
-- Cadastros próprios, modelos do protótipo e escolhas anteriores preservadas
-  são identificados separadamente. Uma escolha antiga incompatível com a nova
-  área não é substituída automaticamente; o formulário pede revisão.
-- Trocar a propriedade do novo planejamento atualiza o município consultado,
-  preservando nome, data, seleção anterior e foco, inclusive quando a resposta
-  chega enquanto o usuário preenche o formulário.
-- Testes unitários cobrem dois municípios da **mesma UF** com catálogos
-  diferentes, erros de consulta, repetição explícita e preservação das
-  identidades e do catálogo global.
-- `tests/browser-crop-catalog.mjs` passou em 1280 px e 390 px: quatro sorgos
-  oficiais, nomes completos, troca Vilhena → Sinop, resposta municipal atrasada,
-  foco preservado e plano original intacto. Sem erros JavaScript ou rolagem
-  horizontal. Foram usados perfis temporários e APIs externas bloqueadas.
-
-Execute o teste opcional com as mesmas variáveis `ROTA_*` descritas para o smoke
-acima, substituindo o comando por `node tests/browser-crop-catalog.mjs`.
-Relatório e capturas: `output/catalogo-municipal/`, na raiz. A rodada humana
-permanece pendente por decisão do usuário.
-
-## Histórico da revisão — 14/11/2026, antes da nova criação
-
-- Removidos 30 arquivos de código desconectados das entradas atuais, 17 testes
-  obsoletos e 7 cópias/configurações/documentos sem uso. O painel avançado e os
-  dados ativos em `src/data/` foram mantidos, assim como materiais históricos
-  de apresentação e backups que não são servidos pelo site.
-- Aprovação dos 12 arquivos de testes JavaScript restantes, incluindo o novo
-  grafo de dependências; 3 testes Python do atualizador ZARC; build Vite; checagem
-  de empacotamento ServerOS e links locais da documentação ativa.
-- No navegador: descoberta até resultado e download HTML; ajuda com Escape;
-  adaptação com atraso de 12 dias, salvamento e abertura no painel sem reaplicar
-  atraso; cinco abas e relatório imprimível; invalidação de sugestões após
-  mudar data; descarte de consulta após editar latitude; salvamento com solo
-  explicitamente não informado; rascunhos preservados na troca de interface.
-- `?modo=campo` retomou a revisão da consulta guiada. Em viewport de 390 px,
-  o guia não apresentou rolagem horizontal. Nenhum erro de console foi registrado
-  nas navegações conferidas. SoilGrids ficou indisponível e a interface manteve
-  corretamente a análise parcial.
-- A configuração de 404 do Nginx foi revisada, mas não executada em contêiner:
-  o acesso ao socket Docker local não estava disponível. Instalação em aparelho
-  físico e atualização PWA offline não foram repetidas nesta revisão; seus testes
-  automatizados passaram. Não houve publicação no servidor.
+Os testes `browser-crop-catalog.mjs`, `browser-planning-crops.mjs` e
+`browser-planning-simulation.mjs` usam as mesmas variáveis de ambiente.
+A validação com usuários e em aparelhos físicos permanece pendente.

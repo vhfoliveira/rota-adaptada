@@ -38,18 +38,15 @@ python3 -m unittest scripts/test_official_crop_sources_b.py
 
 `--check` prepara e valida arquivos temporários sem substituir o catálogo. `--cache`, ou `--cache-a` e `--cache-b`, controlam os diretórios dos PDFs. A coleta rejeita mudanças não reconhecidas no documento, datas futuras, fontes incompatíveis e perda de perfis já validados. Falhas preservam os arquivos existentes. A troca de cada JSON usa arquivo temporário e rename; publicação do aplicativo continua sendo uma etapa separada.
 
-Testes de integração cobrem culturas reais de Vilhena, calendário de arroz/feijão, mudanças nas condições ZARC por atraso, fases térmicas publicadas, ausência de classificação agronômica indevida, restrições de grupo/manejo, restauração de modelos antigos e preservação de planos. O atualizador foi exercitado offline, produzindo JSON idênticos, e rejeitou cache vazio, coleta parcial e fonte inválida. Os 18 testes Python de extração passaram.
-
-Conferência de interface: seleção sem cultura pré-preenchida, arroz com calendário de 124 dias, atraso de 21 dias, ZARC antes/depois e 13 anos de histórico NASA. O solo indisponível não impediu calendário, consulta oficial ou salvamento. Ajuda com Escape devolveu o foco e manteve o preenchimento; painel inferior conferido em 390 px. Capturas em `screenshots/official-parameters/`.
+Testes de integração cobrem calendário, condições ZARC por data, critérios térmicos,
+restrições de grupo e manejo, restauração de modelos e preservação de planos.
 
 ## Disponibilidade da consulta de solo
 
-O aplicativo usa a API REST SoilGrids do ISRIC. Na conferência, a [documentação oficial](https://docs.isric.org/globaldata/soilgrids/SoilGrids_faqs_02.html) informava pausa temporária sem previsão de retorno e recomendava WCS/WebDAV para usos que precisam de estabilidade. O serviço é beta, sem garantia de disponibilidade, com política de cinco chamadas por minuto.
+A consulta REST SoilGrids tem limite de 9 segundos. Tempo excedido, falha de
+conexão, erro HTTP, limite de chamadas e resposta sem valores são apresentados
+separadamente. Respostas sem dados não são reutilizadas como estimativas válidas;
+Atualizar consulta limpa o cache para uma nova tentativa.
 
-A indisponibilidade da fonte não significa ausência de solo naquele ponto. ZARC e NASA continuam independentes, e a classe do solo não é preenchida silenciosamente. Uma migração para WCS/WebDAV com cache próprio é uma integração adicional; não foi realizada nesta entrega.
-
-Teste direto realizado em 15/11/2026 às 03:56 UTC (14/11, 23:56 em Cuiabá): o mesmo endpoint REST usado pelo app respondeu HTTP 200 em 3,94 s, com CORS permitido, mas retornou `mean: null` para argila e areia em todas as quatro profundidades solicitadas no ponto público de demonstração (-12.7405, -60.1458). Isso confirma ausência de observações utilizáveis nessa resposta, não indisponibilidade global nem ausência de cobertura do mapa. No teste anterior pelo navegador, a chamada excedeu os 9 s do aplicativo. O aviso de pausa da documentação é contexto do fornecedor; não substitui a medição da consulta.
-
-Foi corrigida a retenção de respostas sem dados no cache da jornada: reconsultas não reaproveitam uma falha como resposta válida. O botão Atualizar consulta já limpava o cache e forçava nova tentativa. Erros agora distinguem tempo excedido, conexão, HTTP, limite de chamadas e ausência de valores; nenhuma falha preenche solo automaticamente. A consulta avançada também recarrega a base municipal do plano salvo, preservando condições por data. Relatórios mantêm as fontes e a natureza descritiva da análise.
-
-Verificação final: os 17 arquivos de testes JavaScript e o build passaram, além dos 18 testes Python. A nova integração foi validada localmente; não houve publicação nesta entrega.
+A falha de solo não bloqueia calendário, NASA, ZARC ou salvamento, e não preenche
+uma classe automaticamente. A integração não utiliza WCS/WebDAV.

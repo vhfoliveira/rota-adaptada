@@ -1,3 +1,4 @@
+import {deleteSavedPlanning} from './guided-storage.js';
 import {mountZarcPanel} from './zarc-panel.js';
 import { periodLabel, days, annualDate } from './scenario.js';
 import './style.css';
@@ -406,9 +407,6 @@ function openModal(title, htmlContent) {
   modal.showModal();
 }
 
-/**
- * Always queries NASA POWER API live when loading or switching a property.
- */
 let climateRequest = 0;
 let suggestionRequest = 0;
 let propertyLookupRequest = 0;
@@ -1193,7 +1191,7 @@ function renderSystemSuggestedPlansPanel(allProps) {
 }
 
 /**
- * PASSO 2: Catálogo de Culturas e Ciclos (Somente parâmetros utilizados pelo motor de simulação e NASA POWER)
+ * PASSO 2: Catálogo municipal, modelos de referência e culturas/ciclos personalizados
  */
 function renderScreen2Crops() {
   const selectedIds=[...(appState.planningConfig.successionStages||[]).map(stage=>stage.cropId),...(newCycleFormState.open?[newCycleFormState.cropId]:[])];
@@ -2935,7 +2933,7 @@ function bindScreenEvents() {
           endpoint: res.endpoint
         };
       } catch {
-        // Fallback dataset remains active
+        // Only a cached series for the same coordinates can support the evaluation.
       }
     }
     await delayPromise;
@@ -3326,21 +3324,22 @@ function bindScreenEvents() {
     btn.onclick = async () => {
       const targetPlanId = btn.dataset.removePlanning;
       const targetPlan = availablePlannings().find(plan => plan.id === targetPlanId);
-      if (!targetPlan || !window.confirm(`Excluir o planejamento "${targetPlan.planningName || 'sem nome'}"? Esta ação não pode ser desfeita.`)) return;
-      appState.customPlannings = (appState.customPlannings || []).filter(p => p.id !== targetPlanId);
-      if (appState.planningConfig.id === targetPlanId) {
-        appState.planningConfig = blankPlanning();
-        newPlanningFormState.open = true;
-        appState.selectedStrategyId = 'PLANO_ATUAL';
-        appState.selectedStageIndex = 0;
+      if (!targetPlan || !window.confirm(`Excluir o planejamento "${targetPlan.planningName || 'sem nome'}"? Os preenchimentos vinculados também serão removidos. Outros planos e a propriedade serão mantidos. Esta ação não pode ser desfeita.`)) return;
+      btn.disabled=true;
+      try {
+        await stateSaveChain;
+        appState={...appState,...await deleteSavedPlanning(targetPlanId),activeTab:2};
+        if(!appState.planningConfig.id)newPlanningFormState.open=true;
+        const url=new URL(location.href);
+        if(url.searchParams.get('plano')===targetPlanId)url.searchParams.delete('plano');
+        url.searchParams.set('aba','2');history.replaceState(null,'',url);
+        storageError='';
+        recomputeSimulation();renderShell();
+        toast('Planejamento excluído deste dispositivo.');
+      } catch(error) {
+        storageError=error.message||'Não foi possível excluir o planejamento. Tente novamente.';
+        btn.disabled=false;renderStorageStatus();
       }
-      const url = new URL(location.href);
-      if (url.searchParams.get('plano') === targetPlanId) {
-        url.searchParams.delete('plano');
-        history.replaceState(null, '', url);
-      }
-      const saved = await updateAndRender();
-      if (saved) toast('Planejamento excluído deste dispositivo.');
     };
   });
 

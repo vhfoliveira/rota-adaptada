@@ -2,7 +2,6 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, character => ({'
 const topic = (title, what, action, example = '', details = '') => Object.freeze({title, what, action, example, details});
 
 // Stable topic IDs are shared by the guided journeys and the advanced workspace.
-// These explanations describe current data and behavior, not the retired prototype.
 export const helpTopics = Object.freeze({
   sources: topic('fontes de dados', 'O motor combina NASA POWER, ZARC/MAPA, SoilGrids e os dados do produtor. IBGE, Nominatim e OpenFreeMap apoiam a localização.', 'Abra Fontes de dados para conferir o papel de cada fonte e os dados climáticos da propriedade ativa.', '', 'Disponibilidade e abrangência variam por local, cultura e safra. Dados ausentes permanecem não avaliados.'),
   location: topic('localização da área', 'É o lugar que será usado na consulta. Um ponto identifica uma localização; não desenha os limites da propriedade.', 'Use o GPS se estiver na área ou escolha a localização no mapa. Confira o município antes de continuar.', 'Se estiver em casa, não use o GPS para representar uma fazenda distante.', 'As condições ZARC são municipais. Clima e estimativas de solo usam o ponto confirmado. Sem um ponto, essas análises ficam pendentes.'),

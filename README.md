@@ -56,6 +56,11 @@ usuário escolhe um plano salvo, informa atraso e mudanças aceitas, revisa e
 compara alternativas. A consulta de culturas continua acessível por **Ainda não
 sei o que plantar**.
 
+Na visão geral e em **Meus planejamentos**, o botão **Excluir** permite remover
+um plano salvo após confirmação. A exclusão remove também seus preenchimentos
+vinculados, mantém a propriedade e os outros planos e só é confirmada após a
+gravação no dispositivo. O painel avançado usa a mesma operação.
+
 Rascunhos reais e exemplos ficam separados. O aplicativo confirma o salvamento
 somente após gravar no navegador; falhas permanecem visíveis. O calendário pode
 ser salvo enquanto a consulta climática ainda está em andamento.
@@ -67,7 +72,7 @@ presença no catálogo ZARC não confirma todas as condições da propriedade.
 ## Documentação atual
 
 - [Execução, fontes, armazenamento e PWA](rota-adaptada/README.md)
-- [Nova experiência Órbita](rota-adaptada/docs/EXPERIENCIA_ORBITA.md)
+- [Interface Órbita](rota-adaptada/docs/EXPERIENCIA_ORBITA.md)
 - [Experiência autoguiada e roteiro de validação](rota-adaptada/docs/GUIA_AUTOGUIADO.md)
 - [Contrato e limites do motor de cenários](rota-adaptada/docs/MOTOR_CENARIOS.md)
 - [Base municipal ZARC e atualização](rota-adaptada/docs/ZARC.md)

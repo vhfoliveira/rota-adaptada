@@ -1,12 +1,10 @@
 # Experiência Órbita
 
-Versão experimental na branch `codex/experiencia-orbita`, baseada no planejamento
-autoguiado. O checkpoint anterior permanece em `codex/planejamento-autoguiado`.
+Interface padrão da aplicação, usada na visão geral, biblioteca de planejamentos
+e jornadas guiadas.
 
-A referência de UX é o ambiente operacional do `udisoft-erp`: navegação
-persistente, contexto da área de trabalho, acesso aos registros e ações
-consistentes. A apresentação tem identidade própria, com superfícies claras,
-verde profundo, coral e uma ilustração vetorial dos cultivos.
+A navegação persistente reúne o contexto da área, os registros e as ações.
+`orbit.css` define as cores, superfícies e componentes compartilhados.
 
 ## Experiência
 
@@ -27,9 +25,8 @@ verde profundo, coral e uma ilustração vetorial dos cultivos.
 `orbit-dashboard.js` / `orbit-dashboard.css` apresentam a visão geral e a biblioteca.
 `guided-orbit.css` e `advanced-orbit.css` adaptam os fluxos existentes.
 
-O armazenamento continua no mesmo IndexedDB. Nenhuma migração ou limpeza é
-necessária. Não há alteração nos contratos de NASA, ZARC, SoilGrids ou no motor
-agronômico. Planos originais e alternativas continuam separados.
+O armazenamento usa IndexedDB, com rascunhos reais e exemplos separados.
+As regras de persistência e migração estão no [guia autoguiado](GUIA_AUTOGUIADO.md).
 
 ## Verificação
 

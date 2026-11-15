@@ -37,8 +37,8 @@ também inclui uma cópia inicial para hospedagem estática.
 
 A experiência Órbita usa menu lateral no computador e menu recolhível no celular. A busca de ações abre pelo botão do cabeçalho ou por Ctrl/Cmd + K. O painel avançado mantém seus módulos em abas acessíveis por teclado; `?modo=planejamento&aba=0..4` abre um módulo específico.
 
-Celular e computador usam as mesmas jornadas. A instalação PWA abre a escolha de
-objetivo, conforme `public/manifest.webmanifest`.
+Celular e computador usam as mesmas jornadas. A instalação PWA abre a visão geral,
+conforme `public/manifest.webmanifest`.
 
 - **Criar meu planejamento:** confirmar ponto da área → escolher cultivos, ciclos,
   data e intervalo → revisar → ver e salvar o calendário original, sem atraso.

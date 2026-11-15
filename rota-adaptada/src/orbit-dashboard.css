@@ -133,3 +133,7 @@
 }
 
 .orbit-filter-status{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+.orbit-plan-actions .orbit-delete-plan{color:#9a3930;border-color:#e2c5c1;min-height:44px}
+.orbit-plan-actions .orbit-delete-plan:hover{background:#fff1ee}
+.orbit-plan-actions{flex-wrap:wrap}

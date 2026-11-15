@@ -2,8 +2,8 @@ import {rulesPackage,resolveSuccessionSchedule} from './vilhena-engine.js';
 import {evaluateOfficialWindow} from './official-crop-window.js';
 import {validDate} from './scenario.js';
 
-// Calendar proposals, not a profitability or rotation recommendation. Only
-// documented municipal profiles with an indication on each sowing date qualify.
+// Calendar proposals from documented municipal profiles, in catalog order.
+// Later stages beyond published coverage may use explicitly labelled seasonal projections.
 export function suggestCompletePlans({catalog,location,date,intervalDays=7,soilCode='',management='',horizonDays=365}){
   validDate(date,'Data do primeiro plantio');
   if(!catalog?.queryContext)throw Error('Aguarde o catálogo municipal antes de sugerir o planejamento.');

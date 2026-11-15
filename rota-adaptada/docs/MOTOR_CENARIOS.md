@@ -10,7 +10,7 @@ Em **Planejamento → Incluir novo planejamento**, escolha culturas e ciclos.
 A seção opcional **Datas e ajustes desta etapa** permite definir uma data mínima,
 um intervalo específico e se a cultura ou o ciclo podem mudar. O intervalo vazio
 herda o geral. O primeiro plantio usa a data inicial; as etapas seguintes respeitam
-a colheita anterior, o intervalo e a data mínima informada. O exemplo usa uma
+o fim do ciclo anterior, o intervalo e a data mínima informada. O exemplo usa uma
 âncora anual para o segundo verão: mudar o ano inicial reposiciona essa âncora.
 Datas explícitas de planos do usuário permanecem explícitas.
 
@@ -19,6 +19,10 @@ cadastrada, respeitando as permissões locais e globais. A tela mostra o plano a
 e até três alternativas. O gerador de sugestões usa a mesma sequência e as mesmas
 restrições; quando o formulário ainda está incompleto, usa a sequência ativa.
 Não realiza otimização global de múltiplas alterações, lucro ou produtividade.
+
+A criação guiada usa outro gerador, `guided-suggestions.js`, que monta sequências
+por horizonte e janelas municipais. Ele não usa o ranking climático do motor.
+Veja [sugestões de planejamento](GUIA_AUTOGUIADO.md#sugestões-de-planejamento).
 
 ## Contrato de integração
 
@@ -89,6 +93,5 @@ clima, regras regionais, dados incompletos, falha de APIs, ciclos personalizados
 cobertura e relatório. `npm run build` valida a aplicação Vite.
 
 O roteiro de navegador está em [Validação dos fluxos](VALIDACAO_FLUXOS.md).
-Ele cobre as duas jornadas guiadas, o painel avançado, persistência e mudanças
-durante consultas. O teste antigo que abria a raiz esperando o painel avançado
-foi retirado: não correspondia à entrada atual e reescrevia o IndexedDB do perfil.
+Ele cobre as três jornadas guiadas, o painel avançado, persistência e mudanças
+durante consultas.
