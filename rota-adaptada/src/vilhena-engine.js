@@ -27,9 +27,9 @@ export function createScenarioContext(property, supplied = {}) {
 }
 
 /**
- * Queries the official NASA POWER API live for a given latitude and longitude (2013-2024).
+ * Queries the official NASA POWER API live for a given latitude and longitude (2013 to current date).
  */
-export async function fetchLiveNasaPower(lat, lon, { startDate = defaultNasaDataset.metadata.period.start_date, endDate = defaultNasaDataset.metadata.period.end_date } = {}) {
+export async function fetchLiveNasaPower(lat, lon, { startDate = defaultNasaDataset.metadata.period.start_date, endDate = new Date().toISOString().slice(0, 10) } = {}) {
   validDate(startDate); validDate(endDate);
   if (endDate < startDate) throw new Error('Período climático inválido.');
   if (!locationKey({latitude:lat,longitude:lon})) throw new Error('Coordenadas inválidas.');
@@ -56,6 +56,10 @@ export async function fetchLiveNasaPower(lat, lon, { startDate = defaultNasaData
     let validCount = 0;
 
     for (const k of keys) {
+      const rawRain = p.PRECTOTCORR[k];
+      // Skip days where NASA POWER has not yet published precipitation data (uses -999 fill value)
+      if (typeof rawRain !== 'number' || !Number.isFinite(rawRain) || rawRain < 0) continue;
+
       const iso = `${k.slice(0, 4)}-${k.slice(4, 6)}-${k.slice(6, 8)}`;
       const reading = (key, min, max = Infinity) => {
         const value = p[key]?.[k];
@@ -75,8 +79,15 @@ export async function fetchLiveNasaPower(lat, lon, { startDate = defaultNasaData
     }
 
     const altitudeM = Number.isFinite(raw?.geometry?.coordinates?.[2]) ? Math.round(raw.geometry.coordinates[2]) : null;
-    const totalYears = new Set(keys.map(k => k.slice(0, 4))).size;
-    const meanAnnualRainMm = validCount === keys.length && totalYears ? Math.round(totalRain / totalYears) : null;
+    const validDates = Object.keys(daily).sort();
+    if (!validDates.length) throw new Error('Nenhum registro diário válido retornado pela NASA POWER API');
+    const actualStartDate = validDates[0];
+    const actualEndDate = validDates[validDates.length - 1];
+    const startYear = Number(actualStartDate.slice(0, 4));
+    const endYear = Number(actualEndDate.slice(0, 4));
+    const totalYears = new Set(validDates.map(k => k.slice(0, 4))).size;
+    const effectiveYears = Math.max(1, validCount / 365.25);
+    const meanAnnualRainMm = validCount === validDates.length ? Math.round(totalRain / effectiveYears) : null;
     const meanGwetRoot = validCount ? Number((totalGwetRoot / validCount).toFixed(2)) : null;
     const meanGwetTop = validCount ? Number((totalGwetTop / validCount).toFixed(2)) : null;
 
@@ -92,8 +103,10 @@ export async function fetchLiveNasaPower(lat, lon, { startDate = defaultNasaData
           elevation_m: altitudeM
         },
         period: {
-          start_date: startDate,
-          end_date: endDate,
+          start_date: actualStartDate,
+          end_date: actualEndDate,
+          start_year: startYear,
+          end_year: endYear,
           total_years: totalYears,
           total_days: validCount
         },
@@ -117,6 +130,11 @@ export async function fetchLiveNasaPower(lat, lon, { startDate = defaultNasaData
       meanGwetRoot,
       meanGwetTop,
       totalDays: validCount,
+      startDate: actualStartDate,
+      endDate: actualEndDate,
+      startYear,
+      endYear,
+      totalYears,
       endpoint
     };
   } catch (err) {
