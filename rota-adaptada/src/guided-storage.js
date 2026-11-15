@@ -1,5 +1,5 @@
 import {removeSavedPlanning,removePlanningDrafts} from './planning-deletion.js';
-import {appendGuidedAlternative,appendGuidedPlan} from './guided-planning.js';
+import {appendGuidedAlternative,appendGuidedPlan,refreshSavedPlanSoil} from './guided-planning.js';
 const DATABASE='rota-adaptada-laboratorio-v1';
 const STORE='workspace';
 const DRAFTS='guided-drafts-v1';
@@ -106,6 +106,13 @@ export function saveGuidedPlan(draft,property){
   return update('state',current=>{
     const merged=appendGuidedPlan(current,input.draft,input.property);
     return {value:merged.state,result:merged.plan};
+  });
+}
+export function savePlanSoilObservation(planId,location,estimatedSoil){
+  const point=structuredClone(location),estimate=structuredClone(estimatedSoil||null);
+  return update('state',current=>{
+    const value=refreshSavedPlanSoil(current,planId,point,estimate);
+    return {value,result:value};
   });
 }
 export function saveGuidedAlternative(draft,property,strategy,_legacy){

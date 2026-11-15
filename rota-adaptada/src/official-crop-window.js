@@ -1,3 +1,4 @@
+import {confirmedSoilCode} from './soil-water.js';
 import {queryZarc,GROUPS,RISK_SOURCE} from './zarc-risk.js';
 import {officialSourceValid} from './official-crop-registry.js';
 
@@ -17,12 +18,14 @@ export function evaluateOfficialWindow(crop,group,date,context){
  if(management&&!profile.managementCodes.includes(management))return pending('Confirme o manejo correspondente ao perfil oficial.');
  const matching=base.shard.rows.map(([i])=>base.manifest.scenarios[i]).filter(s=>String(s.Cod_Cultura)===crop.zarcCropId&&String(s.Cod_Ciclo)===group.zarcGroupCode&&profile.managementCodes.includes(String(s.Cod_Outros_Manejos))&&`${s.SafraIni}/${s.SafraFin}`===base.manifest.season&&officialSourceValid(profile,{uf:property.state,season:base.manifest.season,ordinance:s.Portaria}));
  if(!matching.length)return pending('O grupo ou a portaria mudou. Atualize os parâmetros oficiais antes de avaliar esta janela.');
- const result=queryZarc(base.manifest,base.shard,{date,soilCode:context.soilCode||'',management});
+ const soilCode=context.soilCode||confirmedSoilCode(property);
+ const result=queryZarc(base.manifest,base.shard,{date,soilCode,estimatedAdClass:property.estimatedSoil?.adClass||'',cultureCode:crop.zarcCropId,groupCode:group.zarcGroupCode,management});
  if(result.status==='unavailable-season')return pending('A data não tem cobertura na safra ZARC disponível.');
  const culture=result.cultures.find(c=>c.id===crop.zarcCropId);
  const conditions=(culture?.conditions||[]).filter(c=>c.group===GROUPS[group.zarcGroupCode]&&profile.managementCodes.includes(c.managementCode)&&officialSourceValid(profile,{uf:property.state,season:base.manifest.season,ordinance:c.ordinance}));
  if(!conditions.length)return {status:'FORA_DE_JANELA',riskPct:null,badgeLabel:'Sem indicação encontrada',tone:'warning',detail:'Não foi encontrada indicação para esta data, cultura, grupo e manejo nos filtros informados. Isso não é proibição de cultivo.',conditions:[],provenance:'official',source:profile.source};
  const risks=[...new Set(conditions.map(c=>c.risk))].sort();
- const confirmed=Boolean(context.soilCode&&management);
- return {status:confirmed?'ZARC_CONDICIONAL':'PENDENTE',riskPct:null,risks,conditions,badgeLabel:`ZARC: ${risks.map(r=>`${r}%`).join(' / ')}${confirmed?' · conferir condições':' · solo/manejo pendente'}`,tone:'warning',detail:'Riscos publicados nas condições encontradas; confirme solo, grupo, manejo e demais requisitos. Não representam chance de sucesso nem previsão.',provenance:'official',source:profile.source,dataSource:RISK_SOURCE,season:result.season};
+ const estimated=conditions.some(c=>c.soilOrigin==='estimated');
+ const confirmed=Boolean(soilCode&&management);
+ return {soilOrigin:estimated?'estimated':result.soilOrigin,status:confirmed?'ZARC_CONDICIONAL':'PENDENTE',riskPct:null,risks,conditions,badgeLabel:`ZARC: ${risks.map(r=>`${r}%`).join(' / ')}${estimated?' | Solo Estimado: '+property.estimatedSoil.adClass:confirmed?' · conferir condições':' · solo/manejo pendente'}`,tone:'warning',detail:'Riscos publicados nas condições encontradas; confirme solo, grupo, manejo e demais requisitos. Não representam chance de sucesso nem previsão.',provenance:'official',source:profile.source,dataSource:RISK_SOURCE,season:result.season};
 }

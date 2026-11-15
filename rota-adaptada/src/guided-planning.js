@@ -2,10 +2,28 @@ import {
   rulesPackage, defaultPlanningConfig, defaultPropertyProfile, getPlanningStagesList,
   registerCustomCropsInCatalog, simulateAdaptation
 } from './vilhena-engine.js';
-import {validDate, days} from './scenario.js';
+import {validDate, days,locationKey} from './scenario.js';
 import {buildOfficialCropCatalog} from './official-crop-registry.js';
 
 const clone = value => structuredClone(value);
+
+/** Late soil responses update observation metadata only, never planting decisions. */
+export function refreshSavedPlanSoil(legacy,planId,location,estimatedSoil) {
+  const state=clone(legacy||{});
+  const plans=[...(state.customPlannings||[]),state.planningConfig].filter(p=>p?.id===planId);
+  const plan=plans[0];
+  if(!plan)return state;
+  const properties=[...(state.customProperties||[]),state.propertyProfile].filter(Boolean);
+  const property=plan.guidedOrigin?.propertySnapshot || properties.find(p=>p.id===plan.propertyId);
+  const key=locationKey(location);
+  if(!key||locationKey(property)!==key)return state;
+  for(const saved of plans){
+    if(saved.guidedOrigin?.propertySnapshot && locationKey(saved.guidedOrigin.propertySnapshot)===key)
+      saved.guidedOrigin.propertySnapshot.estimatedSoil=clone(estimatedSoil||null);
+  }
+  for(const saved of properties)if(saved.id===plan.propertyId&&locationKey(saved)===key)saved.estimatedSoil=clone(estimatedSoil||null);
+  return state;
+}
 const arrays = legacy => ({customCrops:legacy?.customCrops || [], customCycles:legacy?.customCycles || []});
 function register(legacy) {
   for(const plan of [legacy?.planningConfig,...(legacy?.customPlannings||[])].filter(Boolean)){
@@ -44,6 +62,7 @@ export function extractGuidedPlan(choice) {
     name:plan.planningName || '',
     date:plan.baseSowingDate,
     soilCode:plan.soilCode || '',
+    estimatedSoil:clone(choice.property?.estimatedSoil || null),
     management:plan.management || '',
     stages:clone(stages),
     delayDays:plan.delayDays ?? 0,

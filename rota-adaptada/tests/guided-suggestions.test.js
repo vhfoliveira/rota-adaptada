@@ -7,6 +7,19 @@ import {suggestCompletePlans} from '../src/guided-suggestions.js';
 const manifest=JSON.parse(readFileSync(new URL('../public/zarc/manifest.json',import.meta.url)));
 const location={municipality:'Vilhena',state:'RO'};
 const catalog=await loadGuidedCropCatalog(location,{loadRiskManifest:async()=>manifest,loadMunicipalRisk:async(_,code)=>JSON.parse(gunzipSync(readFileSync(new URL(`../public/zarc/${manifest.version}/${code}.json.gz`,import.meta.url))))});
+
+test('automatic proposals use estimated AD without converting legacy types or confirming soil',()=>{
+ const adCatalog={...catalog,cultures:catalog.cultures.filter(c=>c.id==='12015080000011')};
+ const result=suggestCompletePlans({catalog:adCatalog,location,date:'2026-11-15',horizonDays:180,estimatedSoil:{adClass:'AD4'}});
+ assert.ok(result.suggestions.length);
+ assert.equal(result.analysisSummary.estimatedSoil.adClass,'AD4');
+ let estimated=0;
+ for(const option of result.suggestions)for(const stage of option.evaluation.stages)for(const condition of stage.zarc.conditions||[]){
+  if(Number(condition.soilCode)>=11){assert.equal(condition.soilCode,'14');assert.equal(condition.soilOrigin,'estimated');estimated++;}
+  else assert.equal(condition.soilOrigin,'unknown');
+ }
+ assert.ok(estimated);
+});
 test('location and date produce complete calendars without preselected crops or cycles',()=>{
  const result=suggestCompletePlans({catalog,location,date:'2027-01-01'});
  assert.ok(result.suggestions.length>0&&result.suggestions.length<=3);
@@ -91,7 +104,8 @@ test('suggestion cards expose collection dates and source links without inventin
  assert.match(html,/Coleta da base/);
  assert.match(html,/Coleta do documento/);
  assert.match(html,/Referência do ciclo/);
- assert.match(html,/NASA e SoilGrids não são usados/);
+ assert.match(html,/NASA POWER fornece contexto climático separado/);
+ assert.match(html,/Solo Estimado para registros AD/);
 
  assert.match(html,/https:\/\/www.gov.br/);
  result.analysisSummary.fetchedAt=null;

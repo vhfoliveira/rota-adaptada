@@ -1,9 +1,13 @@
+import {estimateSoilWater,AD_PROFILES} from './soil-water.js';
+import {parseSoilGridsTexture} from './soilgrids-texture.js';
 import {resolveLocation} from './location.js';
 import { validDate, days, locationKey, matchesLocation, historicalYears, periodLabel, annualDate, coverageMetrics } from './scenario.js';
 import rulesPackage from './data/vilhena_rules-v2.json' with { type: 'json' };
 import {buildOfficialCropCatalog} from './official-crop-registry.js';
 import {evaluateOfficialCropClimate,summarizeHistoricalCycle} from './official-crop-climate.js';
 import {evaluateOfficialWindow} from './official-crop-window.js';
+
+Object.assign(rulesPackage.soil_profiles,AD_PROFILES);
 
 Object.assign(rulesPackage.crops_catalog,buildOfficialCropCatalog());
 
@@ -167,24 +171,24 @@ export async function fetchLiveNasaPower(lat, lon, { startDate = `${new Date().g
 
 /**
  * Queries the open ISRIC SoilGrids v2.0 REST API (CC-BY 4.0) by latitude and longitude
- * to estimate clay/sand (0-60 cm) and suggest the Soil Water Retention Class (AD3, AD4, AD5).
+ * to estimate clay/sand/silt (0-60 cm) and apply the MAPA AD1-AD6 equation.
  */
 export async function fetchSoilGridsAndSuggestClass(lat, lon, nasaSummary = null) {
   if (!locationKey({latitude:lat,longitude:lon})) throw new Error('Coordenadas inválidas.');
   const locationPromise = resolveLocation(lat,lon);
   const cleanLat = Number(Number(lat).toFixed(4));
   const cleanLon = Number(Number(lon).toFixed(4));
-  const soilGridsUrl = `https://rest.isric.org/soilgrids/v2.0/properties/query?lat=${cleanLat}&lon=${cleanLon}&property=clay&property=sand&depth=0-5cm&depth=5-15cm&depth=15-30cm&depth=30-60cm&value=mean`;
+  const soilGridsUrl = `https://rest.isric.org/soilgrids/v2.0/properties/query?lat=${cleanLat}&lon=${cleanLon}&property=clay&property=sand&property=silt&depth=0-5cm&depth=5-15cm&depth=15-30cm&depth=30-60cm&value=mean`;
 
   let clayPct = null;
   let sandPct = null;
+  let texture = null;
   let apiSource = 'ISRIC SoilGrids v2.0 API (CC-BY 4.0)';
   let isLiveSoilGrids = false;
   let errorCode = null;
   let errorMessage = null;
   let httpStatus = null;
 
-  const weights = { '0-5cm': 5 / 60, '5-15cm': 10 / 60, '15-30cm': 15 / 60, '30-60cm': 30 / 60 };
 
   let soilTimeout;
   const controller = new AbortController();
@@ -197,31 +201,15 @@ export async function fetchSoilGridsAndSuggestClass(lat, lon, nasaSummary = null
     if (res.ok) {
       requestPhase = 'response';
       const data = await res.json();
-      const layers = data?.properties?.layers || [];
-      const extractWeighted = propName => {
-        const layer = layers.find(l => l.name === propName);
-        if (!layer || !Array.isArray(layer.depths)) return null;
-        const dFactor = layer.unit_measure?.d_factor || 10;
-        let sum = 0;
-        let wSum = 0;
-        for (const d of layer.depths) {
-          const val = d?.values?.mean;
-          const w = weights[d.label] || 0.25;
-          if (typeof val === 'number' && val > 0) {
-            sum += (val / dFactor) * w;
-            wSum += w;
-          }
-        }
-        return wSum > 0 ? Number((sum / wSum).toFixed(1)) : null;
-      };
-
-      clayPct = extractWeighted('clay');
-      sandPct = extractWeighted('sand');
-      if (clayPct !== null && sandPct !== null) {
+      const parsed = parseSoilGridsTexture(data);
+      if (parsed.ok) {
+        texture = parsed;
+        clayPct = parsed.clayPercent;
+        sandPct = parsed.sandPercent;
         isLiveSoilGrids = true;
       } else {
-        errorCode = 'no_data';
-        errorMessage = 'O SoilGrids respondeu, mas não forneceu argila e areia utilizáveis para este ponto.';
+        errorCode = parsed.code;
+        errorMessage = `Solo não estimado. ${parsed.message}`;
       }
     } else if (httpStatus === 429) {
       errorCode = 'rate_limited';
@@ -246,36 +234,35 @@ export async function fetchSoilGridsAndSuggestClass(lat, lon, nasaSummary = null
   }
 
   if (clayPct === null || sandPct === null) {
-    return { isLiveSoilGrids: false, apiSource: 'Solo não consultado', soilGridsUrl,
+    return { isLiveSoilGrids: false, apiSource: 'Solo não estimado', soilGridsUrl,
       errorCode, errorMessage, httpStatus,
-      clayPercent: null, sandPercent: null, suggestedSoilProfileId: null,
+      clayPercent: null, sandPercent: null, siltPercent: null, estimatedSoil: null, textureLayers: [],
+      depthRangeCm: null, textureUnit: null, textureMethod: null, suggestedSoilProfileId: null,
       suggestedSoilProfile: null, suggestionReason: 'Sem dados de solo. Selecione uma classe conhecida ou mantenha não informado.',
       ...await locationPromise };
   }
 
-  // Suggest Soil Water Retention Class (AD3, AD4, AD5) based on clay % in 0-60 cm
-  let suggestedSoilProfileId = 'AD4_ARGILOSA';
-  let suggestionReason = '';
-  if (clayPct < 35) {
-    suggestedSoilProfileId = 'AD3_MEDIA';
-    suggestionReason = `Teor de argila de ${clayPct}% (< 35%) e areia de ${sandPct}% (0–60 cm) indicam Solo de Textura Média (Reserva ~42 mm).`;
-  } else if (clayPct <= 55) {
-    suggestedSoilProfileId = 'AD4_ARGILOSA';
-    suggestionReason = `Teor de argila de ${clayPct}% (entre 35% e 55%) na camada 0–60 cm indica Solo Argiloso (Reserva ~55 mm).`;
-  } else {
-    suggestedSoilProfileId = 'AD5_MUITO_ARGILOSA';
-    suggestionReason = `Teor de argila de ${clayPct}% (> 55%) na camada 0–60 cm indica Solo Muito Argiloso (Reserva ~66 mm).`;
-  }
+  const estimatedSoil = estimateSoilWater(texture);
+  const suggestedSoilProfileId = estimatedSoil?.adClass || null;
+  const suggestionReason = suggestedSoilProfileId
+    ? `Solo Estimado: ${suggestedSoilProfileId} (${estimatedSoil.availableWaterMmPerCm} mm/cm).`
+    : 'Solo fora das classes AD1 a AD6 ou sem dados suficientes.';
 
   const {detectedMunicipality,detectedState} = await locationPromise;
 
   return {
     isLiveSoilGrids,
+    estimatedSoil,
     errorCode, errorMessage, httpStatus,
     apiSource,
     soilGridsUrl,
     clayPercent: clayPct,
     sandPercent: sandPct,
+    siltPercent: texture.siltPercent,
+    textureLayers: texture.textureLayers,
+    depthRangeCm: texture.depthRangeCm,
+    textureUnit: texture.textureUnit,
+    textureMethod: texture.textureMethod,
     suggestedSoilProfileId,
     suggestedSoilProfile: rulesPackage.soil_profiles[suggestedSoilProfileId],
     suggestionReason,
@@ -980,7 +967,7 @@ function buildStrategyEvaluation({
   const criticalStage = stages[criticalStageIndex] || stages[1] || stages[0];
   const anyZarcOut = stages.some(s => ['FORA_DE_JANELA','FORA_JANELA_INFORMADA'].includes(s.zarc.status));
   const incomplete = stages.some(s => s.zarc.status === 'PENDENTE' || !s.stressTest.evaluatedYears);
-  const estimated = stages.some(s => s.stressTest.estimated || s.zarc.provenance === 'user');
+  const estimated = stages.some(s => s.stressTest.estimated || s.zarc.provenance === 'user' || s.zarc.soilOrigin === 'estimated');
 
   let overallStatus = 'VALIDO';
   let statusLabel = 'Dentro da janela cadastrada · histórico sem alerta elevado';

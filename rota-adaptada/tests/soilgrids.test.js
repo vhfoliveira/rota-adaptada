@@ -10,7 +10,7 @@ function mockSoilFetch(t,request){
 }
 function assertUnknown(value){
  assert.equal(value.isLiveSoilGrids,false);assert.equal(value.clayPercent,null);
- assert.equal(value.sandPercent,null);assert.equal(value.suggestedSoilProfileId,null);
+ assert.equal(value.siltPercent,null);assert.equal(value.sandPercent,null);assert.equal(value.suggestedSoilProfileId,null);
 }
 
 test('SoilGrids reports server and rate-limit failures distinctly without inventing observations',async t=>{
@@ -46,14 +46,17 @@ test('SoilGrids timeout also covers a stalled response body',async t=>{
  assertUnknown(result);assert.equal(result.errorCode,'timeout');assert.equal(result.httpStatus,200);assert.match(result.errorMessage,/9 segundos/);
 });
 
-test('valid SoilGrids data retains the existing weighted texture and profile calculation',async t=>{
+test('valid SoilGrids texture produces a MAPA class with estimated provenance',async t=>{
  const depths=['0-5cm','5-15cm','15-30cm','30-60cm'];
  mockSoilFetch(t,async(url)=>{
+  assert.ok(new URL(url).searchParams.getAll('property').includes('silt'));
   assert.match(url,/lat=-12\.7405&lon=-60\.1458/);
-  return {ok:true,status:200,json:async()=>({properties:{layers:[['clay',[100,200,400,500]],['sand',[400,300,200,100]]].map(([name,values])=>({name,unit_measure:{d_factor:10},depths:depths.map((label,i)=>({label,values:{mean:values[i]}}))}))}})};
+  return {ok:true,status:200,json:async()=>({properties:{layers:[['clay',[100,200,400,500]],['sand',[400,300,200,100]],['silt',[500,500,400,400]]].map(([name,values])=>({name,unit_measure:{mapped_units:'g/kg',d_factor:10},depths:depths.map((label,i)=>({label,values:{mean:values[i]}}))}))}})};
  });
  const result=await fetchSoilGridsAndSuggestClass(-12.7405,-60.1458);
  assert.equal(result.isLiveSoilGrids,true);assert.equal(result.errorCode,null);assert.equal(result.errorMessage,null);
+ assert.equal(result.siltPercent,42.5);assert.equal(result.textureLayers.length,4);
  assert.equal(result.clayPercent,39.2);assert.equal(result.sandPercent,18.3);
- assert.equal(result.suggestedSoilProfileId,'AD4_ARGILOSA');assert.equal(result.httpStatus,200);
+ assert.equal(result.suggestedSoilProfileId,'AD5');assert.equal(result.httpStatus,200);
+ assert.equal(result.estimatedSoil.origin,'estimated');assert.equal(result.estimatedSoil.availableWaterMmPerCm,1.39);
 });

@@ -1,3 +1,6 @@
+import {soilSummary,soilClassOptions,soilDecisionHint} from './soil-ui.js';
+import {soilCodesForZarc} from './zarc-risk.js';
+import {AD_PROFILES,soilClassificationState} from './soil-water.js';
 import {onLangChange,t} from './i18n.js';
 import {deleteSavedPlanning} from './guided-storage.js';
 import {mountZarcPanel} from './zarc-panel.js';
@@ -95,6 +98,7 @@ let newPropertyFormState = {
   latitude: '',
   longitude: '',
   lookupResult: null,
+  soilSelectedByProducer: false,
   selectedSoilProfileId: ''
 };
 
@@ -205,7 +209,8 @@ const municipalCatalogs = createMunicipalCatalogStore(loadGuidedCropCatalog, key
   const active = key === officialZarcKey(appState.propertyProfile);
   const visible = [1,2].includes(appState.activeTab) && key === officialZarcKey(editorCatalogProperty());
   if (active && needsOfficialZarc()) recomputeSimulation();
-  if (visible || (active && needsOfficialZarc())) refreshCatalogView();
+  const soilVisible=newPropertyFormState.open&&newPropertyFormState.lookupResult&&key===municipalCatalogKey(newPropertyFormState);
+  if (visible || (active && needsOfficialZarc()) || soilVisible) refreshCatalogView();
 });
 
 function ensureOfficialZarc(force=false) {
@@ -416,6 +421,7 @@ function invalidatePropertyLookup() {
   propertyLookupRequest++;
   newPropertyFormState.lookupResult = null;
   newPropertyFormState.selectedSoilProfileId = '';
+  newPropertyFormState.soilSelectedByProducer = false;
   newPropertyFormState.consulting = false;
   $('.lookup-result-box')?.remove();
   const button = $('#btn-run-auto-lookup');
@@ -515,6 +521,10 @@ const TABS = [
 ];
 
 const SOIL_FRIENDLY = {
+  1:{shortTitle:'Tipo 1 — Arenoso',waterLabel:'Reserva de água não avaliada',practicalImpact:''},
+  2:{shortTitle:'Tipo 2 — Textura média',waterLabel:'Reserva de água não avaliada',practicalImpact:''},
+  3:{shortTitle:'Tipo 3 — Argiloso',waterLabel:'Reserva de água não avaliada',practicalImpact:''},
+  ...Object.fromEntries(Object.keys(AD_PROFILES).map(id=>[id,{shortTitle:id,waterLabel:'CAD depende da profundidade das raizes',practicalImpact:''}])),
   AD3_MEDIA: {
     shortTitle: 'Solo de Textura Média (AD3)',
     waterLabel: 'Reserva de água: 42 mm',
@@ -591,7 +601,7 @@ const PHASE_SIMPLE_NAMES = {
 function renderShell() {
   const p = appState.propertyProfile;
   const activeSoil = rulesPackage.soil_profiles[p.soilProfileId] || UNKNOWN_SOIL;
-  const soilFriendly = SOIL_FRIENDLY[activeSoil.id] || UNKNOWN_SOIL_LABEL;
+  const soilFriendly = SOIL_FRIENDLY[p.confirmedSoil?.classification || activeSoil.id] || UNKNOWN_SOIL_LABEL;
   const moduleNames = ['Propriedade', 'Culturas e ciclos', 'Calendário', 'Simulação e comparação', 'Relatório'].map(name => t(name));
   const moduleIcons = ['pin', 'leaf', 'plans', 'change', 'book'];
 
@@ -653,7 +663,7 @@ function updateAndRender() {
 function renderScreen1Property() {
   const p = appState.propertyProfile;
   const activeSoil = rulesPackage.soil_profiles[p.soilProfileId] || UNKNOWN_SOIL;
-  const soilFriendly = SOIL_FRIENDLY[activeSoil.id] || UNKNOWN_SOIL_LABEL;
+  const soilFriendly = SOIL_FRIENDLY[p.confirmedSoil?.classification || activeSoil.id] || UNKNOWN_SOIL_LABEL;
   const allProperties = availableProperties();
 
   return `
@@ -832,9 +842,10 @@ function renderScreen1Property() {
 
 function renderAutoLookupResult(res) {
   const { nasa, soil } = res;
-  const soilsList = Object.values(rulesPackage.soil_profiles);
+  const soilCatalog=municipalCatalogs.ensure(newPropertyFormState);
+  const soilCodes=soilCodesForZarc(soilCatalog.value?.queryContext);
   const chosenSoil =
-    rulesPackage.soil_profiles[newPropertyFormState.selectedSoilProfileId] || soil.suggestedSoilProfile || UNKNOWN_SOIL;
+    rulesPackage.soil_profiles[newPropertyFormState.selectedSoilProfileId] || (SOIL_FRIENDLY[newPropertyFormState.selectedSoilProfileId]?{id:newPropertyFormState.selectedSoilProfileId}:UNKNOWN_SOIL);
 
   return `
     <div class="lookup-result-box">
@@ -857,35 +868,16 @@ function renderAutoLookupResult(res) {
 
         <div class="sub-box highlight-soil-suggestion">
           <span class="eyebrow">2. RETENÇÃO DE ÁGUA DO SOLO · ISRIC SOILGRIDS API</span>
-          <h3>Classe Sugerida: ${esc(SOIL_FRIENDLY[soil.suggestedSoilProfileId]?.shortTitle || 'Não disponível')}</h3>
-          <p class="muted">
-            <strong>Textura obtida (0–60 cm):</strong> Argila <b>${num(soil.clayPercent, 1)}%</b> · Areia <b>${num(
-    soil.sandPercent,
-    1
-  )}%</b>
-          </p>
-          <p class="suggestion-reason-note">
-            💡 ${esc(soil.suggestionReason)}<br>
-            <small>Fonte: ${esc(soil.apiSource)}</small>
-          </p>
-
+          ${soilSummary(soil.estimatedSoil,{message:soil.errorMessage||''})}
           <label style="margin-top:10px">
-            Classe de Solo a Utilizar na Simulação:
-            <select id="np-soil-select"><option value="">Não informado</option>
-              ${soilsList
-                .map(
-                  s => `
-                <option value="${esc(s.id)}" ${
-                    s.id === newPropertyFormState.selectedSoilProfileId ? 'selected' : ''
-                  }>
-                  ${esc(SOIL_FRIENDLY[s.id]?.shortTitle || s.name)} — ${esc(SOIL_FRIENDLY[s.id]?.waterLabel)} ${
-                    s.id === soil.suggestedSoilProfileId ? '[Sugerido pela API]' : ''
-                  }
-                </option>`
-                )
-                .join('')}
+            Solo para o planejamento:
+            <select id="np-soil-select" ${soilCatalog.status==='ready'?'':'disabled'}>${soil.estimatedSoil?.adClass&&soilCodes.includes(String(10+Number(soil.estimatedSoil.adClass.slice(2))))?`<option value="__estimated__" ${!newPropertyFormState.soilSelectedByProducer?'selected':''}>Usar Solo Estimado: ${esc(soil.estimatedSoil.adClass)}</option>`:''}<option value="" ${!newPropertyFormState.selectedSoilProfileId?'selected':''}>Não sei meu solo</option>
+              ${soilClassOptions(newPropertyFormState.soilSelectedByProducer?newPropertyFormState.selectedSoilProfileId:'',{profileValues:true,codes:soilCodes})}
             </select>
           </label>
+          <p class="muted">${soilCatalog.status==='ready'?`Classes presentes no ZARC de ${esc(soilCatalog.value.city.name)} / ${esc(soilCatalog.value.city.uf)}, safra ${esc(soilCatalog.value.season)}. Antes de escolher os cultivos, são mostradas as classes das culturas do município.`:soilCatalog.status==='error'?'Não foi possível consultar as classes do ZARC. Você pode continuar sem informar o solo.':'Consultando as classes de solo do ZARC para este município…'}</p>
+          <p class="muted">${esc(soilDecisionHint(newPropertyFormState.soilSelectedByProducer?newPropertyFormState.selectedSoilProfileId:'',newPropertyFormState.soilSelectedByProducer?null:soil.estimatedSoil,{codes:soilCodes}))}</p>
+          <p class="muted">Tipos 1/2/3 e classes AD1–AD6 são opções distintas, sem conversão automática.</p>
         </div>
       </div>
 
@@ -2572,6 +2564,8 @@ function bindScreenEvents() {
   if (npMun) npMun.oninput = e => (newPropertyFormState.municipality = e.target.value);
   const npUf = $('#np-uf');
   if (npUf) npUf.oninput = e => (newPropertyFormState.state = e.target.value.toUpperCase());
+  if (npMun) npMun.onchange=()=>renderActiveScreen();
+  if (npUf) npUf.onchange=()=>renderActiveScreen();
 
   const btnUseGps = $('#btn-use-gps');
   if (btnUseGps) {
@@ -2624,7 +2618,8 @@ function bindScreenEvents() {
       }
 
       newPropertyFormState.consulting = false;
-      newPropertyFormState.selectedSoilProfileId = soilRes.suggestedSoilProfileId;
+      newPropertyFormState.soilSelectedByProducer = false;
+      newPropertyFormState.selectedSoilProfileId = soilRes.suggestedSoilProfileId || '';
       newPropertyFormState.lookupResult = {
         latitude: lat,
         longitude: lon,
@@ -2641,7 +2636,8 @@ function bindScreenEvents() {
   if (npSoilSelect) {
     npSoilSelect.onchange = e => {
       if (e.target.checkValidity && !e.target.checkValidity()) { e.target.reportValidity(); return; }
-      newPropertyFormState.selectedSoilProfileId = e.target.value;
+      newPropertyFormState.soilSelectedByProducer = e.target.value !== '__estimated__';
+      newPropertyFormState.selectedSoilProfileId = e.target.value === '__estimated__' ? newPropertyFormState.lookupResult?.soil?.suggestedSoilProfileId || '' : e.target.value;
       renderActiveScreen();
     };
   }
@@ -2668,8 +2664,19 @@ function bindScreenEvents() {
         longitude: lon,
         altitudeM: res.nasa.altitudeM ?? null,
         soilProfileId: soilId,
+        zarcSoilCode:newPropertyFormState.soilSelectedByProducer?(/^AD[1-6]$/.test(soilId)?String(10+Number(soilId.slice(2))):['1','2','3'].includes(soilId)?soilId:''):'',
+        ...soilClassificationState(newPropertyFormState.soilSelectedByProducer&&!soilId?null:res.soil.estimatedSoil,
+          newPropertyFormState.soilSelectedByProducer ? soilId||null : null),
         soilEvidence: {
-          clayPercent: res.soil.clayPercent
+          clayPercent: res.soil.clayPercent,
+          sandPercent: res.soil.sandPercent,
+          siltPercent: res.soil.siltPercent,
+          textureLayers: res.soil.textureLayers,
+          depthRangeCm: res.soil.depthRangeCm,
+          textureUnit: res.soil.textureUnit,
+          textureMethod: res.soil.textureMethod,
+          source: res.soil.apiSource,
+          sourceUrl: res.soil.soilGridsUrl
         }
       };
 

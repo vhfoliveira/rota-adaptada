@@ -1,5 +1,22 @@
 export const RISK_SOURCE='https://dados.agricultura.gov.br/dataset/tabua-de-risco-zoneamento-agricola-de-risco-climatico';
 export const SOILS={1:'Arenoso',2:'Textura média',3:'Argiloso',11:'AD1',12:'AD2',13:'AD3',14:'AD4',15:'AD5',16:'AD6'};
+// Municipality is defined by the shard; collect classes across the published
+// season, not just today's planting window or the currently selected soil.
+export function soilCodesForZarc(context,{cultureCodes=[],season=context?.manifest?.season,date=''}={}){
+ const {manifest,shard,city}=context||{};
+ if(!manifest||!Array.isArray(shard?.rows)||season!==manifest.season)return [];
+ if(city?.code&&shard.municipalityCode&&String(city.code)!==String(shard.municipalityCode))return [];
+ if(date&&manifest.coverageYears&&!manifest.coverageYears.includes(Number(date.slice(0,4))))return [];
+ const cultures=new Set(cultureCodes.filter(Boolean).map(String)),codes=new Set();
+ for(const [index,periods] of shard.rows){
+  const row=manifest.scenarios[index];
+  if(!row||`${row.SafraIni}/${row.SafraFin}`!==season||!/[234]/.test(periods))continue;
+  if(cultures.size&&!cultures.has(String(row.Cod_Cultura)))continue;
+  const code=String(row.Cod_Solo);
+  if(SOILS[code])codes.add(code);
+ }
+ return [...codes].sort((a,b)=>Number(a)-Number(b));
+}
 export const GROUPS={13:'Perene',19:'Semiperene',20:'Grupo I',21:'Grupo II',22:'Grupo III',24:'Grupo IV',25:'Grupo V',26:'Grupo VI'};
 const normalized=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
 export function decendio(date){
@@ -21,13 +38,17 @@ export function validateShard(manifest,shard,code){
  if(shard.version!==manifest.version||shard.municipalityCode!==code||!Array.isArray(shard.rows)||!shard.rows.length||shard.rows.some(r=>!Array.isArray(r)||r.length!==2||!Number.isInteger(r[0])||!manifest.scenarios[r[0]]||! /^[0234]{36}$/.test(r[1])))throw Error('Base municipal ZARC inválida ou incompatível.');
  return shard;
 }
-export function queryZarc(manifest,shard,{date,soilCode='',management='',season=manifest.season}={}){
+export function queryZarc(manifest,shard,{date,soilCode='',estimatedAdClass='',cultureCode='',groupCode='',management='',season=manifest.season}={}){
  const period=decendio(date),year=Number(date.slice(0,4));
  if(season!==manifest.season||!manifest.coverageYears.includes(year))return {status:'unavailable-season',period,season,cultures:[]};
  if(soilCode && !SOILS[soilCode])throw Error('Classe de solo ZARC desconhecida.');
+ const estimatedCode=/^AD[1-6]$/.test(estimatedAdClass)?String(10+Number(estimatedAdClass.slice(2))):'';
  const crops=new Map();let matchingRows=0;
  for(const [index,series] of shard.rows){
   const s=manifest.scenarios[index];
+  if(cultureCode&&String(s.Cod_Cultura)!==String(cultureCode)||groupCode&&String(s.Cod_Ciclo)!==String(groupCode))continue;
+  // An AD estimate filters only AD records. Legacy Types 1/2/3 remain conditional.
+  if(!soilCode&&estimatedCode&&Number(s.Cod_Solo)>=11&&String(s.Cod_Solo)!==estimatedCode)continue;
   if(`${s.SafraIni}/${s.SafraFin}`!==season||(soilCode&&s.Cod_Solo!==String(soilCode))||(management&&s.Cod_Outros_Manejos!==String(management)))continue;
   // Do not present a published rule as evidence for dates before its publication.
   const pub=s.Portaria.match(/(\d{2})-(\d{2})-(\d{4})/);
@@ -37,11 +58,11 @@ export function queryZarc(manifest,shard,{date,soilCode='',management='',season=
   if(![20,30,40].includes(risk))continue; // 0 means no indication, never zero risk.
   const key=s.Cod_Cultura;
   if(!crops.has(key))crops.set(key,{id:key,name:s.Nome_cultura,conditions:[]});
-  crops.get(key).conditions.push({risk,soilCode:s.Cod_Solo,soil:SOILS[s.Cod_Solo]||s.Cod_Solo,group:GROUPS[s.Cod_Ciclo]||s.Cod_Ciclo,management:s.Nome_Outros_Manejos,managementCode:s.Cod_Outros_Manejos,climate:s.Nome_Clima,managementLevel:s.Cod_NM,productivity:s.Produtividade,ordinance:s.Portaria});
+  crops.get(key).conditions.push({soilOrigin:soilCode?'producer':estimatedCode&&String(s.Cod_Solo)===estimatedCode?'estimated':'unknown',risk,soilCode:s.Cod_Solo,soil:SOILS[s.Cod_Solo]||s.Cod_Solo,group:GROUPS[s.Cod_Ciclo]||s.Cod_Ciclo,management:s.Nome_Outros_Manejos,managementCode:s.Cod_Outros_Manejos,climate:s.Nome_Clima,managementLevel:s.Cod_NM,productivity:s.Produtividade,ordinance:s.Portaria});
  }
  const cultures=[...crops.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
  for(const c of cultures){c.risks=[...new Set(c.conditions.map(v=>v.risk))].sort();c.irrigatedOnly=c.conditions.every(v=>v.managementCode!=='1');}
- return {status:cultures.length?'ok':matchingRows?'no-indication':'no-matching-data',period,season,cultures,soilConfirmed:!!soilCode};
+ return {status:cultures.length?'ok':matchingRows?'no-indication':'no-matching-data',period,season,cultures,soilConfirmed:!!soilCode,soilOrigin:soilCode?'producer':estimatedCode?'estimated':'unknown',estimatedAdClass:estimatedCode?estimatedAdClass:null};
 }
 let manifestPromise;const shards=new Map();
 export async function loadRiskManifest({fetchImpl=fetch}={}){

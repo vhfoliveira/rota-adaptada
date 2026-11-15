@@ -146,7 +146,7 @@ test('production build precaches only files that exist after Vite finalizes its 
   assert.ok(files.includes('index.html'));
   for(const file of files)assert.ok((await stat(join(outputDir,file))).isFile(),`Precache resource is missing: ${file}`);
   const emittedCode=(await readdir(outputDir,{recursive:true})).filter(file=>/\.(html|js|css)$/.test(file)&&file!=='sw.js');
-  for(const file of emittedCode)assert.ok(files.includes(file),`Final application resource was omitted: ${file}`);
+  for(const file of emittedCode)assert.ok(files.includes(file.replaceAll('\\','/')),`Final application resource was omitted: ${file}`);
   assert.ok(files.some(file=>/maplibre-gl-.*\.js$/.test(file)),'integration must exercise the map chunks that triggered the regression');
   const html=await readFile(join(outputDir,'index.html'),'utf8');
   for(const [,src] of html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/g))assert.ok(files.includes(src.replace(/^\.\//,'')),`Entry script is missing from precache: ${src}`);

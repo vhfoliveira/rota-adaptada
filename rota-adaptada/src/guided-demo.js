@@ -1,7 +1,7 @@
 import {loadGuidedCropCatalog} from './guided-crops.js';
 import {rulesPackage} from './vilhena-engine.js';
 
-const DEMO_POINT=Object.freeze({latitude:-12.7405,longitude:-60.1458,municipality:'Vilhena',municipalityCode:'1100304',state:'RO'});
+const DEMO_POINT=Object.freeze({latitude:-12.701583537156845,longitude:-60.093740319417925,municipality:'Vilhena',municipalityCode:'1100304',state:'RO'});
 const DEMO_STAGES=Object.freeze([
   {cultureId:'12015080000811',groupKey:'ZARC_21_1',cycleDays:120},
   {cultureId:'12013560000021',groupKey:'ZARC_21_1',cycleDays:80}

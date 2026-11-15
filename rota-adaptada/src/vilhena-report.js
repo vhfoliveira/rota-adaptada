@@ -1,3 +1,4 @@
+import {soilSummary} from './soil-ui.js';
 import {stageDetails} from './official-crop-ui.js';
 import { formatBRDate, rulesPackage } from './vilhena-engine.js';
 
@@ -81,7 +82,7 @@ export function generateVilhenaReportHTML(simResult, selectedStrategyId = null, 
         <p><strong>Série Histórica NASA:</strong> ${esc(simResult.climatePeriod || 'não disponível')} (Chuva <code>PRECTOTCORR</code>, Umidade do Solo <code>GWETTOP</code>/<code>GWETROOT</code> e Temperatura <code>T2M_MAX</code>/<code>T2M_MIN</code>)</p>
       </div>
       <div class="card">
-        <h3>Retenção de Água do Solo e Atraso Simulado</h3>
+        ${soilSummary(p.estimatedSoil)}<h3>Retenção de Água do Solo e Atraso Simulado</h3>
         <p><strong>Classe de solo informada ou estimada:</strong> ${esc(soil.name)}${p.soilEvidence?.clayPercent ? ` (Argila: ${esc(p.soilEvidence.clayPercent)}% em 0–60 cm)` : ''}</p>
         <p><strong>Planejamento Ativo:</strong> ${esc(cfg.planningName || 'Planejamento Padrão')}</p>
         <p><strong>Cenário de Atraso:</strong> Plantio inicial de ${formatBRDate(simResult.baselineSowingDate)} deslocado em <strong>+${esc(simResult.delayDays)} dias</strong> para ${formatBRDate(simResult.delayedSowingDate)} (Intervalo entre sucessões: ${esc(simResult.operationalIntervalDays)} dias).</p>

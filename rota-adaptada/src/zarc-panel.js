@@ -1,4 +1,6 @@
-import {RISK_SOURCE,SOILS,loadRiskManifest,findMunicipality,loadMunicipalRisk,queryZarc} from './zarc-risk.js';
+import {confirmedSoilCode} from './soil-water.js';
+import {soilSummary,soilClassOptions} from './soil-ui.js';
+import {RISK_SOURCE,soilCodesForZarc,loadRiskManifest,findMunicipality,loadMunicipalRisk,queryZarc} from './zarc-risk.js';
 import {resolveLocation} from './location.js';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today=()=>{const d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,10);};
@@ -25,20 +27,21 @@ export function mountZarcPanel(element,property,options={}){
   if(!active())return;
   status.textContent=`${city.name} / ${city.uf} · Safra consultada ${manifest.season}`;
   const controls=document.createElement('div');controls.className='zarc-controls';
-  controls.innerHTML=`<label>Quando pretende plantar?<input type="date" data-zarc-date value="${esc(options.date||today())}"></label><details><summary>Ajustar solo e irrigação (opcional)</summary><p>Não precisa conhecer estes dados para explorar. Sem confirmação, mostramos as condições em que cada cultura tem indicação.</p><label>Solo confirmado no ZARC<select data-zarc-soil><option value="">Ainda não sei — explorar opções</option>${Object.entries(SOILS).map(([code,name])=>`<option value="${code}" ${String(property.zarcSoilCode||'')===code?'selected':''}>${esc(name)}</option>`).join('')}</select></label><p>As classes AD representam água disponível no solo. A textura estimada pelo mapa não confirma essa classe.</p><label>Água disponível<select data-zarc-management><option value="">Mostrar todas as opções</option><option value="1">Dependo da chuva (sequeiro)</option><option value="2">Tenho irrigação</option></select></label></details>`;
+  controls.innerHTML=`<label>Quando pretende plantar?<input type="date" data-zarc-date value="${esc(options.date||today())}"></label><details><summary>Ajustar solo e irrigação (opcional)</summary><p>Não precisa conhecer estes dados para explorar. Sem confirmação, mostramos as condições em que cada cultura tem indicação.</p><label>Solo confirmado no ZARC<select data-zarc-soil><option value="">Não sei meu solo</option>${soilClassOptions(confirmedSoilCode(property),{codes:soilCodesForZarc({manifest,shard,city},{date:options.date||today(),cultureCodes:options.cultureCode?[options.cultureCode]:[]})})}</select></label><p>As classes AD representam água disponível no solo. A textura estimada pelo mapa não confirma essa classe.</p><label>Água disponível<select data-zarc-management><option value="">Mostrar todas as opções</option><option value="1">Dependo da chuva (sequeiro)</option><option value="2">Tenho irrigação</option></select></label></details>`;
   const content=document.createElement('div');content.setAttribute('aria-live','polite');content.className='zarc-options';
   element.append(controls,content);
   const render=()=>{
    if(!active())return;
-   const date=controls.querySelector('[data-zarc-date]').value,soilCode=controls.querySelector('[data-zarc-soil]').value,management=controls.querySelector('[data-zarc-management]').value;
+   const date=controls.querySelector('[data-zarc-date]').value,soilSelect=controls.querySelector('[data-zarc-soil]'),soilCode=soilSelect.value,management=controls.querySelector('[data-zarc-management]').value;
+   soilSelect.innerHTML=`<option value="">Não sei meu solo</option>${soilClassOptions(soilCode,{codes:soilCodesForZarc({manifest,shard,city},{date,cultureCodes:options.cultureCode?[options.cultureCode]:[]})})}`;
    try {
-    const result=queryZarc(manifest,shard,{date,soilCode,management});
+    const result=queryZarc(manifest,shard,{date,soilCode,estimatedAdClass:property.estimatedSoil?.adClass||'',management,cultureCode:options.cultureCode||''});
     options.onResult?.({...result,date,municipality:city,soilCode});
     if(result.status==='unavailable-season'){content.innerHTML='<p>Não temos a safra correspondente a esse ano nesta base. Nenhuma indicação foi calculada.</p>';return;}
     const counts=result.cultures.length;
-    content.innerHTML=`<p><strong>${counts?`${counts} opções com indicação neste período`:'Nenhuma opção encontrada para estes filtros'}</strong></p><p>${soilCode?'Filtrado pelo solo informado.':'Solo ainda não confirmado: as opções dependem das condições abaixo.'} Os percentuais são níveis de risco do ZARC, não chances de sucesso da lavoura.</p>${!counts?'<p>Isso não significa que o município seja impróprio para agricultura. Altere a data ou confira as condições; ausência de registro não é proibição.</p>':''}${result.cultures.map(c=>{
+    content.innerHTML=`${soilSummary(property.estimatedSoil)}<p><strong>${counts?`${counts} opções com indicação neste período`:'Nenhuma opção encontrada para estes filtros'}</strong></p><p>${soilCode?'Filtrado pelo solo informado.':result.soilOrigin==='estimated'?'Resultados baseados no Solo Estimado. Tipos 1/2/3 exigem confirmação.':'Solo ainda não confirmado: as opções dependem das condições abaixo.'} Os percentuais são níveis de risco do ZARC, não chances de sucesso da lavoura.</p>${!counts?'<p>Isso não significa que o município seja impróprio para agricultura. Altere a data ou confira as condições; ausência de registro não é proibição.</p>':''}${result.cultures.map(c=>{
       const rain=c.conditions.some(v=>v.managementCode==='1');
-      const conditionRows=[...new Set(c.conditions.map(v=>`${v.management} · ${v.soil} · ${v.group} · risco ${v.risk}%${v.climate!=='Não se aplica'?` · ${v.climate}`:''}${v.managementLevel&&v.managementLevel!=='0'?` · nível de manejo ${v.managementLevel}`:''}${v.productivity&&v.productivity!=='0'?` · produtividade ${v.productivity}`:''} · ${v.ordinance}`))];
+      const conditionRows=[...new Set(c.conditions.map(v=>`${v.soilOrigin==='estimated'?'Solo Estimado | ':v.soilOrigin==='unknown'?'Solo a confirmar | ':''}${v.management} · ${v.soil} · ${v.group} · risco ${v.risk}%${v.climate!=='Não se aplica'?` · ${v.climate}`:''}${v.managementLevel&&v.managementLevel!=='0'?` · nível de manejo ${v.managementLevel}`:''}${v.productivity&&v.productivity!=='0'?` · produtividade ${v.productivity}`:''} · ${v.ordinance}`))];
       return `<article class="crop zarc-crop"><h3>${esc(c.name)}</h3><p><strong>${rain?'Há opção sem irrigação':'Exige irrigação nas condições encontradas'}</strong></p><p>Risco publicado: ${c.risks.map(r=>`${r}%`).join(' / ')} · varia com solo, ciclo e manejo.</p><details><summary>Ver condições de plantio</summary><ul>${conditionRows.map(v=>`<li>${esc(v)}</li>`).join('')}</ul></details></article>`;
     }).join('')}`;
    }catch(e){content.textContent=e.message;options.onResult?.({status:'error',cultures:[],date});}

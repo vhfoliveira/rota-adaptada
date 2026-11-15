@@ -1,4 +1,6 @@
 import {automaticCultureIssue} from './guided-suggestions.js';
+import {t} from './i18n.js';
+import {soilSummary} from './soil-ui.js';
 import {rulesPackage,formatBRDate} from './vilhena-engine.js';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date=v=>v&&/^\d{4}-\d{2}-\d{2}/.test(v)?formatBRDate(v.slice(0,10)):'Não informada na fonte';
@@ -18,7 +20,7 @@ export function suggestionPreferences(draft,cultures){
 
 }
 function sourceDetails(summary){
- return `<aside class="suggestion-source"><strong>Base da sugestão · ${link(summary.source,'ZARC / MAPA')}</strong><p>Safra ${esc(summary.season)} · Atualização: ${date(summary.sourceUpdated)} · Coleta da base (UTC): ${date(summary.fetchedAt)}</p><p>Município, data, ciclos oficiais, janelas de plantio, intervalo, solo e manejo informados orientam o calendário. Sem manejo informado, usamos sequeiro. NASA e SoilGrids não são usados para escolher estas opções. A ordem segue suas preferências e o catálogo, sem ranking de produtividade.</p></aside>`;
+ return `<aside class="suggestion-source"><strong>Base da sugestão · ${link(summary.source,'ZARC / MAPA')}</strong><p>Safra ${esc(summary.season)} · Atualização: ${date(summary.sourceUpdated)} · Coleta da base (UTC): ${date(summary.fetchedAt)}</p><p>Município, data, ciclos oficiais, janelas de plantio, intervalo, solo e manejo orientam o calendário. Sem manejo informado, usamos sequeiro. ${esc(t('A classe informada pelo produtor tem prioridade; na ausência dela, usamos o Solo Estimado para registros AD. Tipos 1/2/3 permanecem a confirmar. NASA POWER fornece contexto climático separado.'))} A ordem segue suas preferências e o catálogo, sem ranking de produtividade.</p>${soilSummary(summary.estimatedSoil)}</aside>`;
 }
 export function suggestionDetails(option,summary,index){
  return `<div class="suggestion-dialog-heading"><div><span class="suggestion-number">OPÇÃO ${index+1}</span><h2 id="suggestion-dialog-title">${esc(option.title)}</h2></div><button type="button" data-close-suggestion aria-label="Fechar detalhes" autofocus>✕</button></div><div class="suggestion-dialog-body"><span class="guide-pill">${esc(option.badge)}</span><p>${esc(option.rationale)}</p><ol class="suggestion-stages">${option.evaluation.stages.map(stage=>{

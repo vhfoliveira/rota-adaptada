@@ -17,7 +17,7 @@ export function automaticCultureIssue(catalog, cultureId, management='') {
 
 // Calendar proposals from documented municipal profiles, in catalog order.
 // Later stages beyond published coverage may use explicitly labelled seasonal projections.
-export function suggestCompletePlans({catalog,location,date,intervalDays=7,soilCode='',management='',horizonDays=365,preferences={},preferredCultureId=''}){
+export function suggestCompletePlans({catalog,location,date,intervalDays=7,soilCode='',estimatedSoil=null,management='',horizonDays=365,preferences={},preferredCultureId=''}){
   validDate(date,'Data do primeiro plantio');
   if(!catalog?.queryContext)throw Error('Aguarde o catálogo municipal antes de sugerir o planejamento.');
   const interval=Number(intervalDays);
@@ -51,7 +51,7 @@ export function suggestCompletePlans({catalog,location,date,intervalDays=7,soilC
   const secondSeason=stage=>/2ª Safra/i.test(stage.zarcCropName);
   const firstAllowed=stage=>(!preferences.firstSeason&&!preferences.secondSeason)||
     (preferences.firstSeason&&firstSeason(stage))||(preferences.secondSeason&&secondSeason(stage));
-  const context={officialZarc:catalog.queryContext,property:{...location,municipalityCode:catalog.city.code},soilCode,management:management||'1'};
+  const context={officialZarc:catalog.queryContext,property:{...location,estimatedSoil,municipalityCode:catalog.city.code},soilCode,management:management||'1'};
   const windowFor=(stage,sow)=>evaluateOfficialWindow(rulesPackage.crops_catalog[stage.cropId],rulesPackage.crops_catalog[stage.cropId].cultivar_groups[stage.groupKey],sow,context);
   // Future seasons are projections of published seasonal windows, never official
   // validation. Keep the actual date for subsequent evaluation and persistence.
@@ -98,5 +98,5 @@ export function suggestCompletePlans({catalog,location,date,intervalDays=7,soilC
     suggestions.push({title:stageDefs.map(stage=>stage.zarcCropName).join(' → '),stageDefs,intervalDays:interval,horizonDays:horizon,endDate,evaluation:{stages},badge:projected?'Inclui projeção de safra futura':'Proposta para revisão',rationale:`Planejamento de ${horizon} dias, até ${endDate}: ${stages.length} cultivos completos. Intervalo mínimo de ${interval} dias; esperas adicionais respeitam as janelas sazonais. ${trailingDays?`Os últimos ${trailingDays} dias ficam sem cultivo sugerido: não foi encontrado outro ciclo completo que caiba no período.`:''} ${projected?`Etapas fora da cobertura publicada são projeções das janelas da safra ${catalog.season}, sem validação ZARC para a safra futura.`:''} ${management?'Manejo informado.':'Hipótese: cultivo dependente da chuva, sem irrigação.'} Confirme solo, cultivar, colheita e compatibilidade da sucessão com assistência técnica.`});
     seen.add(first.zarcCropId);if(suggestions.length===3)break;
   }
-  return {suggestions,analysisSummary:{source:catalog.queryContext.manifest.source,sourceUpdated:catalog.queryContext.manifest.sourceUpdated,fetchedAt:catalog.queryContext.manifest.fetchedAt,season:catalog.season,climatePeriod:`Base municipal ZARC · safra ${catalog.season}. Opções por ordem de catálogo, sem classificação de produtividade ou análise climática comparativa`}};
+  return {suggestions,analysisSummary:{estimatedSoil:estimatedSoil||null,soilCode,source:catalog.queryContext.manifest.source,sourceUpdated:catalog.queryContext.manifest.sourceUpdated,fetchedAt:catalog.queryContext.manifest.fetchedAt,season:catalog.season,climatePeriod:`Base municipal ZARC · safra ${catalog.season}. Opções por ordem de catálogo, sem classificação de produtividade ou análise climática comparativa`}};
 }
