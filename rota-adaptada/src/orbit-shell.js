@@ -42,7 +42,9 @@ let cleanup;
 export function bindWorkspaceShell(root,{navigate}={}) {
   cleanup?.();
   const sidebar=root.querySelector('.orbit-sidebar'), toggle=root.querySelector('.orbit-menu-button'), backdrop=root.querySelector('.orbit-menu-backdrop');
-  const setMenu=open=>{sidebar?.classList.toggle('is-open',open);toggle?.setAttribute('aria-expanded',String(open));if(backdrop)backdrop.hidden=!open;if(open)sidebar?.querySelector('.is-active')?.focus();};
+  const mobile=window.matchMedia('(max-width:860px)');
+  const setMenu=open=>{sidebar?.classList.toggle('is-open',open);if(sidebar)sidebar.inert=mobile.matches&&!open;toggle?.setAttribute('aria-expanded',String(open));if(backdrop)backdrop.hidden=!open;if(open)sidebar?.querySelector('.is-active')?.focus();};
+  const resize=()=>setMenu(false);mobile.addEventListener('change',resize);setMenu(false);
   toggle?.addEventListener('click',()=>setMenu(toggle.getAttribute('aria-expanded')!=='true'));
   backdrop?.addEventListener('click',()=>{setMenu(false);toggle?.focus();});
   if(navigate)root.querySelectorAll('[data-workspace-route]').forEach(link=>link.addEventListener('click',event=>{
@@ -61,5 +63,5 @@ export function bindWorkspaceShell(root,{navigate}={}) {
   root.querySelector('.orbit-search-trigger')?.addEventListener('click',openSearch);
   const keydown=event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();if(!dialog.open)openSearch();}if(event.key==='Escape'&&sidebar?.classList.contains('is-open')){setMenu(false);toggle?.focus();}if(event.key==='Tab'&&sidebar?.classList.contains('is-open')){const links=[...sidebar.querySelectorAll('a')];if(event.shiftKey&&document.activeElement===links[0]){event.preventDefault();links.at(-1).focus();}else if(!event.shiftKey&&document.activeElement===links.at(-1)){event.preventDefault();links[0].focus();}}};
   document.addEventListener('keydown',keydown);
-  cleanup=()=>{document.removeEventListener('keydown',keydown);dialog.remove();};
+  cleanup=()=>{document.removeEventListener('keydown',keydown);mobile.removeEventListener('change',resize);dialog.remove();};
 }

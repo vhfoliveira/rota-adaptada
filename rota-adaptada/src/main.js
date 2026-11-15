@@ -3,8 +3,10 @@ import { periodLabel, days, annualDate } from './scenario.js';
 import './style.css';
 import './space.css';
 import './context-help.css';
+import './orbit.css';
+import './advanced-orbit.css';
 import {helpButton, mountAdvancedHelp, annotateAdvancedHelp} from './context-help.js';
-import {missionBanner} from './space-brand.js';
+import {workspaceSidebar,workspaceTopbar,bindWorkspaceShell,icon} from './orbit-shell.js';
 import {buildOfficialCropCatalog} from './official-crop-registry.js';
 import {loadGuidedCropCatalog} from './guided-crops.js';
 import {buildAdvancedCropCatalog, createMunicipalCatalogStore, municipalCatalogKey} from './advanced-crop-catalog.js';
@@ -419,7 +421,7 @@ function invalidatePropertyLookup() {
   const button = $('#btn-run-auto-lookup');
   if (button) {
     button.disabled = false;
-    button.textContent = '🔍 Consultar NASA POWER + ISRIC SoilGrids por Coordenada';
+    button.textContent = 'Consultar clima e solo';
   }
   return propertyLookupRequest;
 }
@@ -590,94 +592,50 @@ function renderShell() {
   const p = appState.propertyProfile;
   const activeSoil = rulesPackage.soil_profiles[p.soilProfileId] || UNKNOWN_SOIL;
   const soilFriendly = SOIL_FRIENDLY[activeSoil.id] || UNKNOWN_SOIL_LABEL;
+  const moduleNames = ['Propriedade', 'Culturas e ciclos', 'Calendário', 'Simulação e comparação', 'Relatório'];
+  const moduleIcons = ['pin', 'leaf', 'plans', 'change', 'book'];
 
   $('#app').innerHTML = `
-    <header class="app-header">
-      <a class="brand" href="#top" id="brand-home">
-        <span class="brandmark" aria-hidden="true">
-          <svg viewBox="0 0 48 48" fill="none">
-            <circle cx="24" cy="24" r="11" stroke="currentColor" stroke-width="1.6"/>
-            <ellipse cx="24" cy="24" rx="22" ry="7" transform="rotate(-32 24 24)" stroke="currentColor" stroke-width="1.4"/>
-            <path d="M19 29c-1-7 3-11 11-12 0 7-3 12-11 12Z" fill="currentColor"/>
-            <circle cx="40" cy="12" r="3" fill="#ed965d"/>
-          </svg>
-        </span>
-        <span>
-          Rota Adaptada
-          <small>PLANEJAMENTO AVANÇADO</small>
-        </span>
-      </a>
-
-      <div class="header-context-strip">
-        <a class="context-chip" href="./" id="advanced-guide-link">← Voltar ao guia</a>
-        ${isExamplePlanning() ? '<span class="context-chip accent">Demonstração · dados de exemplo</span>' : ''}
-        <span class="context-chip">
-          📍 <strong>${esc(p.propertyName)}</strong> (${esc(p.municipality)}/${esc(p.state)} · ${esc(
-    soilFriendly.shortTitle
-  )})
-        </span>
-        <span class="context-chip ${nasaLiveState.loading ? 'accent' : nasaLiveState.isLive ? 'live-ok' : ''}">
-          ${
-            nasaLiveState.loading
-              ? '🛰️ Consultando NASA POWER ao vivo...'
-              : nasaLiveState.isLive
-                ? `🛰️ NASA POWER ao Vivo (${esc(nasaLiveState.fetchedAt)})`
-                : getActiveNasaDataset(p) ? '🛰️ NASA POWER (Série local)' : '🛰️ Clima não disponível'
-          }
-        </span>
+    <div class="orbit-workspace advanced-workspace">
+      ${workspaceSidebar({active:'advanced'})}
+      <div class="orbit-main">
+        ${workspaceTopbar({section:'Ferramentas',title:'Painel avançado'})}
+        <section class="advanced-workspace-heading" aria-label="Contexto do planejamento">
+          <div class="advanced-heading-copy"><span class="eyebrow">SEU CENTRO DE DECISÕES</span><a id="brand-home" href="#screen-container"><h2>Planejamento avançado<span>.</span></h2></a><p>Conecte sua área, organize os cultivos e explore o que pode mudar.</p></div>
+          <div class="header-actions">
+            <button type="button" id="btn-nasa-info" class="nasa-button">${icon('globe')} Fontes de dados</button>
+            <button type="button" id="btn-open-report" class="primary-header-btn">${icon('book')} Resumo imprimível</button>
+          </div>
+        </section>
+        <div class="header-context-strip">
+          <div class="advanced-property-context">${icon('pin')}<span><small>ÁREA DE TRABALHO</small><strong>${p.id ? esc(p.propertyName || 'Minha propriedade') : 'Sua propriedade começa aqui'}</strong>${p.id ? `<span>${esc(p.municipality)} / ${esc(p.state)} · ${esc(soilFriendly.shortTitle)}</span>` : '<span>Cadastre uma área para começar o planejamento.</span>'}</span></div>
+          <span class="context-chip ${nasaLiveState.loading ? 'accent' : nasaLiveState.isLive ? 'live-ok' : ''}">${icon('globe')}${nasaLiveState.loading ? 'Consultando histórico NASA…' : nasaLiveState.isLive ? `NASA POWER · consulta de ${esc(nasaLiveState.fetchedAt)}` : getActiveNasaDataset(p) ? 'NASA POWER · histórico local' : 'Clima ainda não consultado'}</span>
+          ${isExamplePlanning() ? '<span class="context-chip accent">Demonstração · dados de exemplo</span>' : ''}
+          <a class="advanced-guide-link" href="./" id="advanced-guide-link">Voltar ao guia ${icon('arrow')}</a>
+        </div>
+        <div class="advanced-notices">
+          <section id="advanced-storage" role="status" aria-live="polite" class="notice"></section>
+          ${dirtyEditors.size ? '<p class="notice">Há campos de cadastro ainda não confirmados. Use o botão de salvar do cadastro antes de sair.</p>' : ''}
+          ${planningNotice ? `<section class="notice" role="status"><p>${esc(planningNotice)}</p></section>` : ''}
+          ${appState.planningConfig.guidedOrigin ? `<section class="notice"><strong>${esc(appState.planningConfig.planningName || 'Seu planejamento salvo')}</strong><p>${appState.planningConfig.guidedOrigin.sourcePlanId ? 'As datas deste plano já incluem a adaptação que você salvou.' : 'Este é o planejamento que você criou no guia.'} ${appState.activeTab >= 3 ? `Atraso adicional em simulação: ${esc(appState.planningConfig.delayDays ?? 0)} dias.` : 'Consulte as datas em Calendário e teste mudanças em Simulação.'}</p></section>` : ''}
+        </div>
+        <div id="workspace-content" tabindex="-1">
+          <nav class="screen-tabs" role="tablist" aria-label="Módulos do planejamento">
+            ${TABS.map(t=>`<div class="help-tab-item" role="presentation"><button type="button" role="tab" id="planning-tab-${t.index}" class="screen-tab ${appState.activeTab===t.index?'selected':''}" aria-selected="${appState.activeTab===t.index}" aria-controls="screen-container" tabindex="${appState.activeTab===t.index?'0':'-1'}" data-switch-tab="${t.index}"><span class="tab-step">${icon(moduleIcons[t.index])}</span><strong>${moduleNames[t.index]}</strong><small>${t.subtitle}</small></button>${helpButton(['location','catalog','plan','results','phases'][t.index])}</div>`).join('')}
+          </nav>
+          <main id="screen-container" class="screen-container" role="tabpanel" aria-labelledby="planning-tab-${appState.activeTab}" tabindex="0"></main>
+        </div>
+        <footer class="app-footer">
+          <div class="footer-left"><button type="button" id="btn-team-crest" class="team-signature" aria-label="Equipe Interplários"><img src="./branding/interplarios.png" alt="" width="24" height="24"><span>Equipe Interplários</span></button><span>${p.id ? `${esc(p.latitude)}°, ${esc(p.longitude)}° · ${esc(p.municipality)}/${esc(p.state)}` : 'Seus planejamentos ficam neste dispositivo.'}</span></div>
+          <div class="footer-right"><button type="button" class="quiet-btn" id="btn-reset-demo">Experimentar Vilhena/RO</button><button type="button" class="quiet-btn" id="btn-export-state">Exportar simulação</button></div>
+        </footer>
       </div>
-
-      <div class="header-actions">
-        <button id="btn-team-crest" class="team-signature" aria-label="Equipe Interplários">
-          <img src="./branding/interplarios.png" alt="Brasão Interplários" width="30" height="30">
-          <span><small>EQUIPE</small><strong>Interplários</strong></span>
-        </button>
-        <button id="btn-nasa-info" class="nasa-button">◎ Fontes de dados</button>
-        <button id="btn-open-report" class="primary-header-btn">⎙ Resumo Imprimível</button>
-      </div>
-    </header>
-
-    ${missionBanner()}
-    <section id="advanced-storage" role="status" aria-live="polite" class="notice"></section>
-    ${dirtyEditors.size ? '<p class="notice">Há campos de cadastro ainda não confirmados. Use o botão de salvar do cadastro antes de sair.</p>' : ''}
-    ${planningNotice ? `<section class="notice" role="status"><p>${esc(planningNotice)}</p></section>` : ''}
-    ${appState.planningConfig.guidedOrigin ? `<section class="notice"><strong>${esc(appState.planningConfig.planningName || 'Seu planejamento salvo')}</strong><p>${appState.planningConfig.guidedOrigin.sourcePlanId ? 'As datas deste plano já incluem a adaptação que você salvou.' : 'Este é o planejamento que você criou no guia.'} ${appState.activeTab >= 3 ? `Atraso adicional em simulação: ${esc(appState.planningConfig.delayDays ?? 0)} dias.` : 'Consulte o calendário original no passo 3 e teste mudanças no passo 4.'} Use as abas para consultar os detalhes ou volte ao guia.</p></section>` : ''}
-    <nav class="screen-tabs" role="tablist" aria-label="Cinco passos do fluxo de decisão">
-      ${TABS.map(
-        t => `
-        <div class="help-tab-item" role="presentation"><button
-          type="button"
-          role="tab"
-          class="screen-tab ${appState.activeTab === t.index ? 'selected' : ''}"
-          aria-selected="${appState.activeTab === t.index}"
-          data-switch-tab="${t.index}"
-        >
-          <span class="tab-step">${t.step}</span>
-          <strong>${t.title}</strong>
-          <small>${t.subtitle}</small>
-        </button>${helpButton(['location','catalog','plan','results','phases'][t.index])}</div>`
-      ).join('')}
-    </nav>
-
-    <main id="screen-container" class="screen-container" role="tabpanel"></main>
-
-    <footer class="app-footer">
-      <div class="footer-left">
-        <span>● Coordenadas ativas: <strong>${esc(p.latitude)}°, ${esc(p.longitude)}°</strong> (${esc(
-    p.municipality
-  )}/${esc(p.state)})</span>
-      </div>
-      <div class="footer-right">
-        <button type="button" class="quiet-btn" id="btn-reset-demo">Simular dados · Vilhena/RO</button>
-        <button type="button" class="quiet-btn" id="btn-export-state">↓ Salvar Simulação (JSON)</button>
-      </div>
-    </footer>
-
-    <div id="toast" role="status" aria-live="polite"></div>
-    <dialog id="modal"></dialog>
-  `;
+      <div id="toast" role="status" aria-live="polite"></div>
+      <dialog id="modal"></dialog>
+    </div>`;
 
   bindShellEvents();
+  bindWorkspaceShell($('#app'), {navigate:async(_route,href)=>{if(await persistState())location.assign(href);}});
   renderActiveScreen();
   renderStorageStatus();
 }
@@ -701,17 +659,17 @@ function renderScreen1Property() {
   return `
     <div class="screen-header">
       <div>
-        <span class="eyebrow">PASSO 1 · PROPRIEDADE, CLIMA (NASA POWER) E SOLO (ISRIC SOILGRIDS)</span>
+        <span class="eyebrow">01 / PROPRIEDADE</span>
         <h1>${p.id ? `${esc(p.propertyName)} — ${esc(p.municipality)}/${esc(p.state)}` : 'Cadastre sua propriedade'}</h1>
         <p>
-          A propriedade ativa fornece as coordenadas geográficas para consultar ao vivo a série histórica da <strong>NASA POWER API (${esc(climateLabel())})</strong> e a retenção de água do solo via <strong>ISRIC SoilGrids</strong>.
+          Defina sua área de cultivo. A localização conecta o planejamento ao histórico climático e às estimativas de solo.
         </p>
       </div>
       <div class="screen-header-cta">
         <button type="button" class="secondary-cta-btn" id="btn-toggle-new-prop">
-          ${newPropertyFormState.open ? '✕ Fechar Cadastro de Nova Propriedade' : '+ Incluir Nova Propriedade (Lat/Lon)'}
+          ${newPropertyFormState.open ? 'Fechar cadastro' : '+ Nova propriedade'}
         </button>
-        <button type="button" class="primary lg-btn" data-go-tab="1">Avançar para 2. Culturas →</button>
+        <button type="button" class="primary lg-btn" data-go-tab="1">Culturas e ciclos →</button>
       </div>
     </div>
 
@@ -745,36 +703,36 @@ function renderScreen1Property() {
       <section class="panel-card new-property-panel section-block">
         <div class="card-head">
           <div>
-            <span class="eyebrow">NOVA PROPRIEDADE · CONSULTA AUTOMÁTICA POR COORDENADA</span>
-            <h2>Incluir Propriedade por Latitude e Longitude</h2>
+            <span class="eyebrow">CADASTRO DA ÁREA</span>
+            <h2>Vamos conhecer sua propriedade</h2>
             <p class="muted">
-              Informe as coordenadas para consultar ao vivo a <strong>NASA POWER API</strong> (precipitação, temperatura e umidade do solo ${esc(climateLabel())}) e a <strong>ISRIC SoilGrids API</strong> (argila e areia para estimar a reserva de água do solo).
+              Dê um nome à área e informe a localização. Vamos consultar o histórico NASA POWER (${esc(climateLabel())}) e uma estimativa de solo do ISRIC SoilGrids.
             </p>
           </div>
-          <button type="button" class="quiet-btn" id="btn-use-gps">📍 Usar Minha Localização (GPS)</button>
+          <button type="button" class="quiet-btn" id="btn-use-gps">Usar minha localização</button>
         </div>
 
         <div class="new-prop-form-grid">
           <label>
-            Nome da Nova Propriedade *
+            Nome da propriedade *
             <input type="text" id="np-name" placeholder="Ex.: Fazenda Santa Helena" value="${esc(
               newPropertyFormState.propertyName
             )}">
           </label>
           <label>
-            Latitude (Graus Decimais) *
+            Latitude *
             <input type="number" id="np-lat" step="0.0001" min="-90" max="90" placeholder="-12.7405" value="${esc(
               newPropertyFormState.latitude
             )}">
           </label>
           <label>
-            Longitude (Graus Decimais) *
+            Longitude *
             <input type="number" id="np-lon" step="0.0001" min="-180" max="180" placeholder="-60.1458" value="${esc(
               newPropertyFormState.longitude
             )}">
           </label>
           <label>
-            Município / UF (Auto-detectado pela coordenada)
+            Município e estado
             <div class="inline-mun-uf">
               <input type="text" id="np-mun" placeholder="Auto pela coordenada" value="${esc(
                 newPropertyFormState.municipality
@@ -793,8 +751,8 @@ function renderScreen1Property() {
           >
             ${
               newPropertyFormState.consulting
-                ? '⏳ Consultando NASA POWER API e ISRIC SoilGrids ao vivo...'
-                : '🔍 Consultar NASA POWER + ISRIC SoilGrids por Coordenada'
+                ? 'Consultando clima e solo…'
+                : 'Consultar clima e solo'
             }
           </button>
         </div>
@@ -1244,8 +1202,8 @@ function renderScreen2Crops() {
   return `
     <div class="screen-header">
       <div>
-        <span class="eyebrow">PASSO 2 · CATÁLOGO DE CULTURAS, CICLOS E JANELAS DE SIMULAÇÃO</span>
-        <h1>Culturas e Ciclos Disponíveis para o Planejamento e Adaptação</h1>
+        <span class="eyebrow">02 / CULTURAS E CICLOS</span>
+        <h1>Seu catálogo de cultivos</h1>
         <p>
           Cada cultura e seus <strong>ciclos cadastrados (em dias)</strong> alimentam o <strong>Planejamento (Passo 3)</strong> e o teste do histórico disponível da <strong>NASA POWER (${esc(climateLabel())})</strong>. Você pode cadastrar <strong>novas culturas</strong> (já informando o ciclo médio e o ciclo precoce) ou <strong>cadastrar novos ciclos</strong> para qualquer cultura.
         </p>
@@ -1257,7 +1215,7 @@ function renderScreen2Crops() {
         <button type="button" class="secondary-cta-btn" id="btn-toggle-new-crop">
           ${newCropFormState.open ? '✕ Fechar Cadastro de Cultura' : '+ Cadastrar Nova Cultura'}
         </button>
-        <button type="button" class="primary lg-btn" data-go-tab="2">Avançar para 3. Planejamento →</button>
+        <button type="button" class="primary lg-btn" data-go-tab="2">Montar calendário →</button>
       </div>
     </div>
 
@@ -2456,6 +2414,16 @@ function bindShellEvents() {
       renderShell();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     };
+    btn.onkeydown = event => {
+      if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+      event.preventDefault();
+      const index = Number(btn.dataset.switchTab);
+      const target = event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + TABS.length) % TABS.length;
+      appState.activeTab = target;
+      persistState();
+      renderShell();
+      $(`[data-switch-tab="${target}"]`)?.focus({preventScroll:true});
+    };
   });
 
   $('#btn-team-crest').onclick = () =>
@@ -3583,6 +3551,8 @@ window.addEventListener('rota:before-update', event => {
       appState.activeTab = appState.propertyProfile.id ? 2 : 0;
     }
   }
+  const requestedTab = new URLSearchParams(location.search).get('aba');
+  if (requestedTab !== null && /^[0-4]$/.test(requestedTab)) appState.activeTab = Number(requestedTab);
   recomputeSimulation();
   newPropertyFormState.open = !appState.propertyProfile.id;
   newPlanningFormState.open = !appState.planningConfig.id;

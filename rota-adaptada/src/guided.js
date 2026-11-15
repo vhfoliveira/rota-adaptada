@@ -1,6 +1,10 @@
 import './space.css';
 import './guided.css';
 import './context-help.css';
+import './orbit.css';
+import './guided-orbit.css';
+import {workspaceSidebar,workspaceTopbar,bindWorkspaceShell,icon} from './orbit-shell.js';
+import {renderDashboard,renderPlanLibrary} from './orbit-dashboard.js';
 import {helpButton,mountContextHelp} from './context-help.js';
 import {mountLocationPicker} from './guided-location.js';
 import {readDrafts,saveDraft,readLegacyState,saveGuidedAlternative,saveGuidedPlan} from './guided-storage.js';
@@ -27,6 +31,7 @@ const app=document.querySelector('#app');
 const analysisCache=new Map(),demoAnalysisCache=new Map();
 let draftRevision=0,pendingPlanSave=null,writeSerial=0,navigationEpoch=0;
 let draft=null,drafts={},demoDrafts={},legacy={},sources=emptySources(),simulation=null,query=null,locationCleanup=null,storageError='',notice='',saveChain=Promise.resolve(),savedPlanId=null,sourceReady=false,saving=false,pendingStart=null;
+let homeView=new URLSearchParams(location.search).get('visao')==='planos'?'library':'home';
 let cropCatalog={status:'idle'},cropCatalogRequest=0;
 const cropLocationKey=location=>JSON.stringify([location.municipalityCode||'',location.municipality||'',location.state||'']);
 const currentCropCatalog=()=>cropCatalog.owner===draft&&cropCatalog.key===cropLocationKey(draft.location)?cropCatalog:{status:'idle'};
@@ -45,17 +50,24 @@ function stopQuery(){query?.cancel();query=null;}
 function invalidate(){draftRevision++;stopQuery();sources=emptySources();simulation=null;savedPlanId=null;delete draft.savedPlanId;delete draft.selectedCultureId;delete draft.selectedStrategyId;if(currentCropCatalog().status!=='ready')delete draft.zarcCatalog;}
 function network(){const el=document.getElementById('guide-network');if(el)el.textContent=navigator.onLine?'':'Você está sem conexão. Seu preenchimento pode continuar; novas consultas dependem da internet.';}
 addEventListener('online',network);addEventListener('offline',network);
+async function navigateWorkspace(route,href){
+  const previous=draft,epoch=navigationEpoch;
+  await save();
+  if((previous&&storageError)||epoch!==navigationEpoch)return;
+  if(route==='advanced'){location.assign(href);return;}
+  const url=new URL(location.href);url.search='';url.hash='';
+  if(route==='library')url.searchParams.set('visao','planos');
+  history.replaceState(null,'',url);
+  homeView=route==='library'?'library':'home';home();
+  if(['planning','adaptation','discovery'].includes(route))requestStart(route);
+  else document.getElementById('workspace-content')?.focus({preventScroll:true});
+  window.scrollTo({top:0,behavior:'instant'});
+}
 function frame(content,wide=false){
   locationCleanup?.();locationCleanup=null;
-  app.innerHTML=`<header class="guide-header"><a class="guide-brand" href="./">◉ Rota Adaptada<small>DADOS DO ESPAÇO. DECISÕES NA TERRA.</small></a><nav><a href="?modo=planejamento">Planejamento avançado</a>${helpButton('advanced')}</nav></header><main class="guide-main ${wide?'wide':''}"><p id="guide-storage" class="guide-message warning" role="status"></p><p id="guide-network" class="guide-message warning" role="status"></p>${content}</main><footer class="guide-footer"><img src="./branding/interplarios.png" alt="" width="24" height="24">Desenvolvido pela equipe Interplários<br>Seus rascunhos ficam neste dispositivo. ${helpButton('privacy')}</footer>`;
-  app.querySelectorAll('.guide-header a').forEach(link=>link.onclick=async event=>{
-    if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
-    event.preventDefault();
-    const pendingDraft=draft;
-    await save();
-    if(pendingDraft&&storageError)return;
-    location.assign(link.href);
-  });
+  const title=draft?objectiveLabels[draft.objective]:homeView==='library'?'Meus planejamentos':'Visão geral';
+  app.innerHTML=`<div class="orbit-workspace guided-workspace">${workspaceSidebar({active:draft?.objective||homeView})}<div class="orbit-main">${workspaceTopbar({section:'Meu espaço',title})}<main id="workspace-content" tabindex="-1" class="guide-main orbit-guide ${wide?'wide':''} ${draft?'is-journey':'is-dashboard'}"><p id="guide-storage" class="guide-message warning" role="status"></p><p id="guide-network" class="guide-message warning" role="status"></p>${content}<footer class="orbit-footer"><span>Rota Adaptada · Equipe Interplários</span><span>Seus planos ficam neste dispositivo. ${helpButton('privacy')}</span></footer></main></div></div>`;
+  bindWorkspaceShell(app,{navigate:navigateWorkspace});
   storageStatus();network();
 }
 function label(id,text,help){return `<div class="guide-label"><label for="${id}">${text}</label>${helpButton(help)}</div>`;}
@@ -65,14 +77,19 @@ function sequence(){return `<ol>${draft.stages.map(s=>`<li>${esc(s.zarcCropName|
 function home(){
   navigationEpoch++;stopQuery();cropCatalogRequest++;cropCatalog={status:'idle'};draft=null;notice='';
   const resumes=[...Object.values(drafts),...Object.values(demoDrafts)].filter(d=>d?.objective&&titles[d.objective]);
-  frame(`<span class="guide-kicker">NASA SPACE APPS · DO ESPAÇO AO CAMPO</span>
-    <h1>Planeje sua próxima safra.</h1><p class="guide-intro">Monte sua sequência de cultivos, entenda o calendário e compare ajustes quando as condições mudarem.</p>
-    <div class="guide-choices"><button class="guide-choice featured" data-start="planning"><span class="guide-icon" aria-hidden="true">◎</span><strong>Criar meu planejamento</strong><span>Escolha seus cultivos. Nós organizamos as datas e ajudamos a entender as condições.</span><span class="choice-action">Montar meu plano →</span></button>
-    <button class="guide-choice" data-start="adaptation"><span class="guide-icon" aria-hidden="true">↗</span><strong>Ajustar um planejamento existente</strong><span>Retome um plano salvo e veja como um atraso muda os próximos cultivos.</span><span class="choice-action">Escolher um plano →</span></button></div>
-    <section id="start-choice" class="guide-card" hidden aria-live="polite"></section>
-    <div class="guide-links"><button data-start="discovery">Ainda não sei o que plantar</button><button id="try-example">Experimentar com um exemplo</button>${helpButton('example')}</div>
-    ${resumes.length?'<h2 class="resume-heading">Continue de onde parou</h2>':''}
-    ${resumes.map(d=>`<section class="guide-card guide-resume"><div><strong>${esc(objectiveLabels[d.objective])}${d.example?' · Exemplo':''}</strong><p class="guide-small">${esc(d.location?.municipality||'Local ainda não escolhido')} · etapa ${Math.min(progressFor(d).total,progressFor(d).step)} de ${progressFor(d).total}</p></div><div class="guide-resume-actions"><button data-resume="${d.objective}" data-example="${Boolean(d.example)}">Continuar preenchimento</button><button data-remove-draft="${d.objective}" data-example="${Boolean(d.example)}" aria-label="Remover preenchimento ${esc(objectiveLabels[d.objective])}${d.example?' · Exemplo':''}">Remover preenchimento</button></div></section>`).join('')}`);
+  const plans=listPlanningChoices(legacy);
+  frame((homeView==='library'?renderPlanLibrary:renderDashboard)({plans,resumes}),true);
+  app.querySelectorAll('[data-adapt-plan]').forEach(button=>button.onclick=()=>loadPlanForAdaptation(button.dataset.adaptPlan,true));
+  const search=document.getElementById('plan-search');let planFilter='all';
+  const filterPlans=()=>{
+    const normalize=value=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const term=normalize(search?.value||'');let count=0;
+    app.querySelectorAll('[data-plan-row]').forEach(row=>{row.hidden=!(planFilter==='all'||row.dataset.planKind===planFilter)||!normalize(row.dataset.planSearch||row.textContent).includes(term);if(!row.hidden)count++;});
+    const empty=document.getElementById('plan-empty-filter');if(empty)empty.hidden=count>0||!plans.length;
+    const status=document.getElementById('plan-filter-status');if(status)status.textContent=`${count} planejamento${count===1?'':'s'} encontrado${count===1?'':'s'}`;
+  };
+  if(search)search.oninput=filterPlans;
+  app.querySelectorAll('[data-plan-filter]').forEach(button=>button.onclick=()=>{planFilter=button.dataset.planFilter;app.querySelectorAll('[data-plan-filter]').forEach(item=>{item.classList.toggle('is-active',item===button);item.setAttribute('aria-pressed',String(item===button));});filterPlans();});
   app.querySelectorAll('[data-start]').forEach(b=>b.onclick=()=>requestStart(b.dataset.start));
   app.querySelectorAll('[data-resume]').forEach(b=>b.onclick=()=>resume((b.dataset.example==='true'?demoDrafts:drafts)[b.dataset.resume]));
   app.querySelectorAll('[data-remove-draft]').forEach(button=>button.onclick=async()=>{
@@ -254,6 +271,10 @@ function adaptationResults(){
     ${savedPlanId?savedActions():`<div class="guide-links result-actions"><button class="primary" id="save-alternative" ${!draft.selectedStrategyId||pendingPlanSave?'disabled':''}>${pendingPlanSave?'Salvando…':'Salvar alternativa'}</button>${draft.selectedStrategyId?'<button id="save-summary">Baixar resumo</button>':''}</div>`}
     <p class="guide-small">A chuva é contexto histórico. Mais chuva não significa, por si só, uma alternativa melhor. As mudanças usam o catálogo municipal e respeitam suas permissões.</p>${sourcePanel()}`;
 }
+function journeyContext(){
+  return `<aside class="orbit-journey-context" aria-label="Contexto do planejamento"><div class="orbit-context-heading">${icon('leaf')}<span>Seu plano, em construção</span></div><h2>${esc(draft.name||draft.sourcePlanning?.planningName||'Uma safra de possibilidades')}</h2><dl><div><dt>LOCALIZAÇÃO</dt><dd>${esc(draft.location?.municipality?`${draft.location.municipality} / ${draft.location.state}`:'Escolha sua área')}</dd></div><div><dt>PRIMEIRO PLANTIO</dt><dd>${draft.date?esc(formatBRDate(draft.date)):'Data a definir'}</dd></div><div><dt>CULTIVOS</dt><dd>${draft.stages?.filter(stage=>stage.cropId).length||'Nenhum'} selecionado(s)</dd></div></dl><div class="orbit-context-note">${icon('book')}<p>Você decide o que plantar. Os dados ajudam a entender o caminho.</p></div><p class="guide-small">NASA POWER · ZARC/MAPA · SoilGrids</p><p class="orbit-context-footnote">Histórico climático não é previsão. Dados ausentes permanecem não avaliados.</p></aside>`;
+}
+function refreshJourneyContext(){const context=app.querySelector('.orbit-journey-context');if(context)context.outerHTML=journeyContext();}
 function render(focus=true){
   if(!draft)return home();
   const step=draft.step;
@@ -264,16 +285,18 @@ function render(focus=true){
   const nextLabel=step===0?(draft.objective==='adaptation'?'Simular uma mudança':'Usar esta localização'):step===resultIndex()-1?(draft.objective==='planning'?'Ver meu planejamento':draft.objective==='discovery'?'Consultar opções':'Comparar alternativas'):'Continuar';
   const {total,step:visibleStep}=progressFor(draft);
   const backLabel=step===0?'← Início':draft.objective==='planning'&&savedPlanId?'Editar uma cópia':'← Voltar';
-  frame(`<div class="guide-progress"><span>Etapa ${visibleStep} de ${total}</span><progress value="${visibleStep}" max="${total}" aria-label="Progresso"></progress><span>${objectiveLabels[draft.objective]}</span></div>
+  const stepLabels=draft.objective==='discovery'?['Localização','Condições','Revisão','Opções','Resumo']:draft.objective==='adaptation'?['Plano original','Mudanças','Revisão','Comparação']:['Localização','Cultivos e datas','Revisão','Calendário'];
+  frame(`<ol class="orbit-steps" aria-label="Etapas do planejamento">${stepLabels.map((name,index)=>`<li class="${index+1===visibleStep?'is-current':index+1<visibleStep?'is-complete':''}" ${index+1===visibleStep?'aria-current="step"':''}><span>${index+1<visibleStep?icon('check'):String(index+1).padStart(2,'0')}</span><strong>${name}</strong></li>`).join('')}</ol>
+    <div class="orbit-journey ${isResult()?'has-results':''}"><div class="orbit-journey-content"><div class="guide-progress"><span>Etapa ${visibleStep} de ${total}</span><progress value="${visibleStep}" max="${total}" aria-label="Progresso"></progress><span>${objectiveLabels[draft.objective]}</span></div>
     ${draft.example?'<p class="guide-message warning">Exemplo de Vilhena · dados demonstrativos. O solo permanece desconhecido; o histórico NASA usa 2013–2024.</p>':''}
     <span class="guide-kicker">${draft.objective==='discovery'?'OPÇÕES PARA SUA ÁREA':'SEU PLANEJAMENTO'}</span><h1 id="guide-title" tabindex="-1">${titles[draft.objective][step]}</h1>
     ${notice?`<p class="guide-message" role="status">${esc(notice)}</p>`:''}<p id="guide-error" class="guide-message error guide-error" role="alert" tabindex="-1"></p><div id="guide-body">${body}</div>
-    <div class="guide-nav"><button type="button" id="guide-back">${backLabel}</button>${hasNext?`<div class="guide-action"><button type="button" class="primary" id="guide-next">${nextLabel}</button>${helpButton(step===0?(draft.objective==='adaptation'?'plan':'location'):step===1?'sequence':draft.objective==='adaptation'&&step===2?'changes':'review')}</div>`:'<button type="button" id="guide-home">Concluir e voltar ao início</button>'}</div>
-    <p id="guide-save-status" class="guide-small" role="status"></p>`,isResult());
+    <div class="guide-nav"><button type="button" id="guide-back">${backLabel}</button>${hasNext?`<div class="guide-action"><button type="button" class="primary" id="guide-next">${nextLabel} ${icon('arrow')}</button>${helpButton(step===0?(draft.objective==='adaptation'?'plan':'location'):step===1?'sequence':draft.objective==='adaptation'&&step===2?'changes':'review')}</div>`:'<button type="button" id="guide-home">Concluir e voltar ao início</button>'}</div>
+    <p id="guide-save-status" class="guide-small" role="status"></p></div>${isResult()?'':journeyContext()}</div>`,isResult());
   bind();storageStatus();
   if(isPlan()&&((draft.objective==='planning'&&step>=1)||draft.sourcePlanId))ensureCropCatalog();
   const picker=document.getElementById('location-picker');
-  if(picker){locationCleanup=mountLocationPicker(picker,{value:draft.location,allowMunicipalityOnly:draft.objective==='discovery',onChange:value=>{draft.location=value;invalidate();save();}});}
+  if(picker){locationCleanup=mountLocationPicker(picker,{value:draft.location,allowMunicipalityOnly:draft.objective==='discovery',onChange:value=>{draft.location=value;invalidate();save();refreshJourneyContext();}});}
   if(focus){document.getElementById('guide-title').focus({preventScroll:true});window.scrollTo({top:0,behavior:'instant'});}
 }
 function error(message,fieldId){
@@ -361,7 +384,7 @@ function bind(){
   app.querySelectorAll('[data-field]').forEach(el=>{el.oninput=()=>{
     const key=el.dataset.field;draft[key]=el.type==='checkbox'?el.checked:el.value;
     el.removeAttribute('aria-invalid');el.removeAttribute('aria-errormessage');document.getElementById(`${el.id}-error`)?.remove();
-    invalidate();save();refreshPreview();
+    invalidate();save();refreshPreview();refreshJourneyContext();
   };});
   app.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>prepareEdit(Number(b.dataset.edit)));
   app.querySelectorAll('[data-stage]').forEach(el=>el.onchange=()=>{
@@ -431,6 +454,7 @@ async function init(){
   const params=new URLSearchParams(location.search);
   if(params.get('demo')==='planejamento'||params.get('demo')==='adaptacao'){home();requestStart('planning',true);}
   else if(params.get('modo')==='campo'){if(drafts.discovery)resume(drafts.discovery);else start('discovery');}
+  else if(['planejar','adaptar'].includes(params.get('acao'))){home();requestStart(params.get('acao')==='planejar'?'planning':'adaptation');}
   else home();
 }
 await init();

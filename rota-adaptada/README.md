@@ -27,11 +27,15 @@ também inclui uma cópia inicial para hospedagem estática.
 
 | URL | Módulo | Comportamento |
 | --- | --- | --- |
-| `/` | `src/guided.js` | Criação como objetivo principal, ajuste de plano salvo, descoberta de culturas e retomada de rascunhos. |
+| `/` | `src/guided.js` | Visão geral Órbita com navegação persistente, indicadores locais, ações e retomadas. |
+| `?visao=planos` | `src/guided.js` | Biblioteca com busca por nome/município e filtros de planos reais e exemplos. |
+| `?acao=planejar` / `?acao=adaptar` | `src/guided.js` | Acesso direto à criação ou à adaptação. |
 | `?demo=planejamento` | `src/guided.js` | Inicia ou oferece retomar o exemplo de criação em Vilhena. |
 | `?modo=campo` | `src/guided.js` | Consulta guiada de plantio, retomando seu rascunho quando existir. |
 | `?modo=planejamento` | `src/main.js` | Painel avançado de planejamento. |
 | `?modo=planejamento&plano=<id>` | `src/main.js` | Abre o plano salvo correspondente com sua propriedade e suas decisões. |
+
+A experiência Órbita usa menu lateral no computador e menu recolhível no celular. A busca de ações abre pelo botão do cabeçalho ou por Ctrl/Cmd + K. O painel avançado mantém seus módulos em abas acessíveis por teclado; `?modo=planejamento&aba=0..4` abre um módulo específico.
 
 Celular e computador usam as mesmas jornadas. A instalação PWA abre a escolha de
 objetivo, conforme `public/manifest.webmanifest`.

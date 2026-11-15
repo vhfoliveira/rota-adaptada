@@ -129,7 +129,7 @@ const openOriginal=async page=>{await page.locator('[data-switch-tab="2"]').clic
    await real.locator(`#cycle-${index}`).selectOption(choice.value);return choice.value;
  };
  const readRealState=()=>real.evaluate(()=>new Promise(resolve=>{const request=indexedDB.open('rota-adaptada-laboratorio-v1',1);request.onsuccess=()=>{const q=request.result.transaction('workspace').objectStore('workspace').get('state');q.onsuccess=()=>resolve(q.result);};}));
- await real.goto(base);await real.locator('[data-start="planning"]').click();
+ await real.goto(base);await real.locator('.orbit-button-coral[data-start="planning"]').click();
  await real.waitForFunction(()=>document.querySelector('[data-location-city]')?.list?.options.length>0);
  await real.locator('[data-location-city]').fill('Vilhena / RO');
  await real.locator('.location-manual summary').click();

@@ -32,7 +32,9 @@ A entrada é `rota-adaptada/src/bootstrap.js`. Celular e computador usam as mesm
 
 | Entrada | Experiência |
 | --- | --- |
-| `/` | **Criar meu planejamento** como entrada principal; **Ajustar um planejamento existente** e descoberta de culturas como alternativas, com retomada dos rascunhos. |
+| `/` | Visão geral Órbita com indicadores locais, criação, retomada de rascunhos e acesso aos planos salvos. |
+| `?visao=planos` | Biblioteca com busca por nome/município, filtros de planos reais e exemplos e acesso à simulação. |
+| `?acao=planejar` / `?acao=adaptar` | Acesso direto à criação ou à adaptação de um planejamento. |
 | `?demo=planejamento` | Exemplo explícito de criação em Vilhena, com ciclos documentados e histórico NASA 2013–2024. |
 | `?modo=campo` | Acesso direto à consulta guiada de plantio. |
 | `?modo=planejamento` | Painel avançado com propriedade, culturas/ciclos, planejamento original, simulação e comparação, e explicação. |
@@ -56,6 +58,7 @@ presença no catálogo ZARC não confirma todas as condições da propriedade.
 ## Documentação atual
 
 - [Execução, fontes, armazenamento e PWA](rota-adaptada/README.md)
+- [Nova experiência Órbita](rota-adaptada/docs/EXPERIENCIA_ORBITA.md)
 - [Experiência autoguiada e roteiro de validação](rota-adaptada/docs/GUIA_AUTOGUIADO.md)
 - [Contrato e limites do motor de cenários](rota-adaptada/docs/MOTOR_CENARIOS.md)
 - [Base municipal ZARC e atualização](rota-adaptada/docs/ZARC.md)
