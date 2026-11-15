@@ -1,20 +1,17 @@
 import {createHash} from 'node:crypto';
-import {readFileSync} from 'node:fs';
+import {readFileSync,writeFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 export function createPwaVersion(bundle, entryHtml, publicAssets) {
   const hash=createHash('sha256').update(entryHtml);
   for(const [name,asset] of Object.entries(bundle).sort(([a],[b])=>a.localeCompare(b)))hash.update(name+'\0').update(asset.code??asset.source??'');
   for(const [name,bytes] of Object.entries(publicAssets).sort(([a],[b])=>a.localeCompare(b)))hash.update(name+'\0').update(bytes);
   return hash.digest('hex').slice(0,16);
 }
+export const PWA_PUBLIC_FILES=Object.freeze(['manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','branding/interplarios.png']);
+
 // Precaches only application files, never location/API requests.
-export function pwaBuild() {
-  return {name:'field-pwa', generateBundle(_options,bundle){
-    const files=Object.keys(bundle).filter(f=>/\.(html|js|css)$/.test(f));
-    const publicFiles=['manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','branding/interplarios.png'];
-    const publicAssets=Object.fromEntries(publicFiles.map(file=>[file,readFileSync(new URL('./public/'+file,import.meta.url))]));
-    const version=createPwaVersion(Object.fromEntries(files.map(file=>[file,bundle[file]])),readFileSync(new URL('./index.html',import.meta.url)),publicAssets);
-    const assets=[...new Set(['index.html',...files]),...publicFiles];
-    this.emitFile({type:'asset',fileName:'sw.js',source:`
+export function createPwaWorker(assets,version) {
+  return `
 const CACHE='rota-field-${version}';
 const FILES=${JSON.stringify(assets)};
 const urls=FILES.map(f=>new URL(f,self.registration.scope).href);
@@ -56,6 +53,29 @@ self.addEventListener('fetch',e=>{
  }
  if(urls.includes(url.href))e.respondWith(caches.open(CACHE).then(c=>c.match(e.request)).then(r=>r||fetch(e.request)));
  else if(url.pathname.includes('/assets/'))e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)));
-});`});
-  }};
+});`;
+}
+
+export function pwaBuild() {
+  return {
+    name:'field-pwa',
+    apply:'build',
+    writeBundle:{
+      order:'post',
+      sequential:true,
+      handler(options,bundle) {
+        if(!options.dir)throw Error('PWA generation requires a build output directory.');
+        const outputDir=resolve(options.dir);
+        // Vite may remove empty chunks in its own generateBundle hooks. Only
+        // collect resources after all generation hooks and file writes finish.
+        const files=Object.keys(bundle).filter(file=>/\.(html|js|css)$/.test(file)&&file!=='sw.js').sort();
+        const finalAssets=Object.fromEntries(files.map(file=>[file,{source:readFileSync(resolve(outputDir,file))}]));
+        const entryHtml=readFileSync(resolve(outputDir,'index.html'));
+        const publicAssets=Object.fromEntries(PWA_PUBLIC_FILES.map(file=>[file,readFileSync(resolve(outputDir,file))]));
+        const version=createPwaVersion(finalAssets,entryHtml,publicAssets);
+        const assets=[...new Set(['index.html',...files,...PWA_PUBLIC_FILES])];
+        writeFileSync(resolve(outputDir,'sw.js'),createPwaWorker(assets,version));
+      }
+    }
+  };
 }

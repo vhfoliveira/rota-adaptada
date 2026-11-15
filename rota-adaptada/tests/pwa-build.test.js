@@ -1,12 +1,16 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {runInNewContext} from 'node:vm';
-import {pwaBuild,createPwaVersion} from '../pwa-build.js';
+import {createPwaWorker,createPwaVersion,PWA_PUBLIC_FILES} from '../pwa-build.js';
+import {build} from 'vite';
+import {mkdtemp,readFile,readdir,stat,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 
 const entry = '<!doctype html><html><script type="module" src="./assets/app.js"></script></html>';
 function worker({wrongMimePath,failedPath,entryBody=entry} = {}) {
-  let emitted;
-  pwaBuild().generateBundle.call({emitFile(asset) { emitted = asset; }}, {}, {'assets/app.js': {code: 'app'}, 'assets/app.css': {source: 'body{}'}});
+  const source=createPwaWorker(['index.html','assets/app.js','assets/app.css',...PWA_PUBLIC_FILES],'unit-test');
   const handlers = new Map(), cachesByName = new Map(), network = [], deleted = [], precached = [];
   let skipWaiting = 0, claimed = 0, offline = false, navigationBody = entry;
   const currentCache = {
@@ -16,7 +20,7 @@ function worker({wrongMimePath,failedPath,entryBody=entry} = {}) {
   };
   const oldCache = {entries: new Map([['https://example.com/farm/assets/old.js', new Response('old application chunk',{headers:{'Content-Type':'application/javascript'}})]])};
   cachesByName.set('rota-field-old', oldCache);
-  runInNewContext(emitted.source, {
+  runInNewContext(source, {
     URL,
     self: {
       registration: {scope: 'https://example.com/farm/'},
@@ -52,7 +56,7 @@ function worker({wrongMimePath,failedPath,entryBody=entry} = {}) {
 }
 const request = (url, mode = 'cors', method = 'GET') => ({url, mode, method});
 
-test('PWA precaches entry before HTML emission, reloads resources and preserves subpath scope', async () => {
+test('PWA precaches the final entry, reloads resources and preserves subpath scope', async () => {
   const sw = worker();
   await sw.dispatch('install');
   assert.ok(sw.precached.includes('https://example.com/farm/index.html'));
@@ -129,4 +133,21 @@ test('public logo, manifest and icon bytes participate in application cache vers
   for(const name of Object.keys(assets))assert.notEqual(createPwaVersion(bundle,entry,{...assets,[name]:'new-bytes'}),original);
   assert.equal(createPwaVersion(bundle,entry,{...assets}),original);
   assert.notEqual(createPwaVersion(bundle,entry+' ',assets),original);
+});
+
+
+test('production build precaches only files that exist after Vite finalizes its chunks', async t=>{
+  const outputDir=await mkdtemp(join(tmpdir(),'rota-pwa-build-'));
+  t.after(()=>rm(outputDir,{recursive:true,force:true}));
+  await build({root:fileURLToPath(new URL('../',import.meta.url)),logLevel:'silent',build:{outDir:outputDir,emptyOutDir:true}});
+  const workerSource=await readFile(join(outputDir,'sw.js'),'utf8');
+  const files=JSON.parse(workerSource.match(/const FILES=(\[[^\n]*\]);/)[1]);
+  assert.equal(files.length,new Set(files).size,'precache files must be unique');
+  assert.ok(files.includes('index.html'));
+  for(const file of files)assert.ok((await stat(join(outputDir,file))).isFile(),`Precache resource is missing: ${file}`);
+  const emittedCode=(await readdir(outputDir,{recursive:true})).filter(file=>/\.(html|js|css)$/.test(file)&&file!=='sw.js');
+  for(const file of emittedCode)assert.ok(files.includes(file),`Final application resource was omitted: ${file}`);
+  assert.ok(files.some(file=>/maplibre-gl-.*\.js$/.test(file)),'integration must exercise the map chunks that triggered the regression');
+  const html=await readFile(join(outputDir,'index.html'),'utf8');
+  for(const [,src] of html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/g))assert.ok(files.includes(src.replace(/^\.\//,'')),`Entry script is missing from precache: ${src}`);
 });
