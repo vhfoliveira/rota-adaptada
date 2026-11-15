@@ -35,7 +35,7 @@ A entrada é `rota-adaptada/src/bootstrap.js`. Celular e computador usam as mesm
 | `/` | **Criar meu planejamento** como entrada principal; **Ajustar um planejamento existente** e descoberta de culturas como alternativas, com retomada dos rascunhos. |
 | `?demo=planejamento` | Exemplo explícito de criação em Vilhena, com ciclos documentados e histórico NASA 2013–2024. |
 | `?modo=campo` | Acesso direto à consulta guiada de plantio. |
-| `?modo=planejamento` | Painel avançado com propriedade, culturas/ciclos, planejamento, comparação e explicação. |
+| `?modo=planejamento` | Painel avançado com propriedade, culturas/ciclos, planejamento original, simulação e comparação, e explicação. |
 | `?modo=planejamento&plano=<id>` | Abre os detalhes de um plano salvo neste navegador, respeitando suas próprias datas e permissões. |
 
 A criação tem quatro etapas: localização, cultivos e datas, revisão e calendário.

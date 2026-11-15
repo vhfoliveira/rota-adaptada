@@ -44,9 +44,13 @@ Não há outra entrada móvel, observatório ou laboratório de simulação.
    com histórico pendente. Simule falha de IndexedDB: não pode aparecer sucesso.
    Durante gravação, atualizações de fontes não podem reabilitar salvamentos
    duplicados nem atribuir um plano salvo às respostas que foram editadas depois.
-8. No painel, percorra Propriedade, Culturas, Planejamento, Comparação e
-   Explicação. Troque entre dois planos com atrasos diferentes: cada um deve
-   conservar seu próprio atraso. Abra o resumo imprimível.
+8. No painel, percorra Propriedade, Culturas, Planejamento, Simulação e Comparação,
+   e Explicação. O passo 3 deve mostrar o calendário original, sem controles de
+   atraso ou permissões de mudança. No passo 4, teste um atraso personalizado e
+   os atalhos; confira o efeito nas sucessões e as permissões por etapa. Retorne
+   ao passo 3: datas e condições devem continuar originais. Troque entre dois
+   planos com atrasos diferentes: cada um deve conservar seu próprio cenário.
+   Abra o resumo imprimível.
 9. Em um novo planejamento avançado, preencha culturas/ciclos e gere sugestões. Altere a
    data, intervalo ou etapas: as cartas anteriores devem desaparecer. Gere de
    novo e confira que correspondem aos valores novos. Repita cancelando enquanto
@@ -81,6 +85,12 @@ idempotente, ajuste posterior autorizado, snapshots oficiais, concorrência,
 falha de armazenamento e migração de demos antigas. Testes de ativação verificam
 que abrir um plano respeita sua propriedade e suas decisões. Esses testes não
 substituem o roteiro de navegador nem testes com usuários.
+
+Com o Vite iniciado, `node tests/browser-planning-simulation.mjs` verifica a
+separação dos passos 3 e 4 em computador e celular, incluindo retomada do
+cenário, troca de planos, edição das datas originais e um perfil oficial de
+etapa única. Usa contextos temporários e bloqueia APIs externas; aceita as
+mesmas variáveis `ROTA_*` de `tests/browser-smoke.mjs`.
 
 Na raiz, execute:
 

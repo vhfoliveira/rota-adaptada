@@ -47,9 +47,12 @@ objetivo, conforme `public/manifest.webmanifest`.
 - **Ainda não sei o que plantar:** confirmar área → informar data e condições → revisar
   → explorar opções municipais ZARC → entender e baixar o resumo.
 - **Planejamento avançado:** cadastros de propriedade, culturas e ciclos,
-  configuração da sequência, comparação e explicação histórica com relatório
-  imprimível. Originais e alternativas salvos pelo guia também ficam disponíveis
-  aqui. Abrir um plano não herda o atraso do plano que estava ativo anteriormente.
+  calendário original no passo 3, simulação de atraso e comparação no passo 4,
+  e explicação histórica com relatório imprimível no passo 5. O passo 3 mantém
+  datas e condições sem o atraso simulado, mesmo após testar mudanças no passo 4.
+  As permissões de mudança, inclusive por etapa, ficam junto da comparação.
+  Originais e alternativas salvos pelo guia também ficam disponíveis aqui.
+  Abrir um plano não herda o atraso do plano que estava ativo anteriormente.
 
 Consulte [a experiência autoguiada](docs/GUIA_AUTOGUIADO.md) para o roteiro de
 interações e [o contrato do motor](docs/MOTOR_CENARIOS.md) para limites e integração.

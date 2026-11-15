@@ -103,6 +103,47 @@ test('suggestions preserve length, dates and locks; incomplete plans are never r
  assert.ok(result.suggestions.length>0);
  for(const s of result.suggestions){assert.equal(s.stageDefs.length,3);assert.equal(s.stageDefs[2].plannedSowDate,'2031-01-01');assert.equal(s.stageDefs[1].intervalDays,45);assert.equal(s.evaluation.overallStatus,'NAO_AVALIADO');}
 });
+test('suggestions require an explicit succession instead of inserting the soybean and corn example',()=>{
+ for(const successionStages of [undefined,null,[]])assert.throws(
+  ()=>generateSystemSuggestedPlannings({propertyProfile:prop,baseSowingDate:'2029-01-01',successionStages}),
+  /Inclua ao menos uma etapa no planejamento/
+ );
+});
+test('suggestions preserve a non-soybean first culture and every locked crop and cycle',()=>{
+ const stages=[
+  stage({cropId:'SORGO_GRANIFERO',groupKey:'GRUPO_I_PRECOCE',allowCropChange:true,allowCycleChange:false}),
+  stage({cropId:'MILHO_1_SAFRA',groupKey:'GRUPO_I_PRECOCE',allowCropChange:false,allowCycleChange:false}),
+  stage({cropId:'MILHO_2_SAFRA',allowCropChange:false,allowCycleChange:true})
+ ];
+ const result=generateSystemSuggestedPlannings({propertyProfile:prop,baseSowingDate:'2029-01-01',successionStages:stages,preservedDecisions:{keepFirstCropSoy:true}});
+ assert.ok(result.suggestions.length>0);
+ for(const suggestion of result.suggestions){
+  assert.deepEqual(suggestion.stageDefs.map(s=>s.cropId),stages.map(s=>s.cropId));
+  assert.equal(suggestion.stageDefs[0].groupKey,stages[0].groupKey);
+  assert.equal(suggestion.stageDefs[1].groupKey,stages[1].groupKey);
+ }
+ assert.ok(result.suggestions.some(s=>s.stageDefs[2].groupKey!==stages[2].groupKey));
+});
+test('suggestions inherit the supplied plan crop restrictions and decisions',()=>{
+ const config=plan({
+  successionStages:[
+   stage({cropId:'SORGO_GRANIFERO',groupKey:'GRUPO_I_PRECOCE',allowCropChange:true}),
+   stage({cropId:'MILHO_2_SAFRA',allowCropChange:true})
+  ],
+  allowedCropIds:['SORGO_GRANIFERO'],
+  preservedDecisions:{keepFirstCropSoy:true,allowCycleAdjustment:false}
+ });
+ const before=structuredClone(config);
+ const result=generateSystemSuggestedPlannings({propertyProfile:prop,planningConfig:config});
+ assert.ok(result.suggestions.length>0);
+ for(const suggestion of result.suggestions){
+  assert.deepEqual(suggestion.stageDefs.map(s=>s.cropId),['SORGO_GRANIFERO','SORGO_GRANIFERO']);
+  assert.equal(suggestion.stageDefs[0].groupKey,config.successionStages[0].groupKey);
+ }
+ assert.deepEqual(config,before);
+ const noChanges=generateSystemSuggestedPlannings({propertyProfile:prop,planningConfig:config,preservedDecisions:{maxChangesAllowed:0}});
+ assert.equal(noChanges.suggestions.length,0);
+});
 test('failed NASA and SoilGrids calls do not fabricate foreign climate or soil',async t=>{
  const original=globalThis.fetch;t.after(()=>globalThis.fetch=original);
  globalThis.fetch=async()=>{throw new Error('offline');};

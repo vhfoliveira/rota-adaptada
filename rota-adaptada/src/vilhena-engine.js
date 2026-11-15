@@ -1384,13 +1384,13 @@ export function simulateAdaptation(
 // Suggestions reuse the same constraints and evaluation as the comparison screen.
 // No fixed second year or four-stage template is introduced here.
 export function generateSystemSuggestedPlannings({
-  propertyProfile=defaultPropertyProfile(),baseSowingDate=defaultPlanningConfig().baseSowingDate,
-  operationalIntervalDays=7,delayDays=0,customCrops=[],customCycles=[],
-  successionStages=null,preservedDecisions={},context={}
+  planningConfig={},propertyProfile=defaultPropertyProfile(),baseSowingDate=planningConfig.baseSowingDate,
+  operationalIntervalDays=planningConfig.operationalIntervalDays??7,delayDays=planningConfig.delayDays??0,customCrops=[],customCycles=[],
+  successionStages=planningConfig.successionStages,preservedDecisions=planningConfig.preservedDecisions||{},context={}
 }={}) {
   registerCustomCropsInCatalog(customCrops,customCycles);
-  const stages=successionStages || defaultPlanningConfig().successionStages.slice(0,2);
-  const config={baseSowingDate,operationalIntervalDays,delayDays,successionStages:stages,preservedDecisions};
+  const stages=successionStages;
+  const config={...planningConfig,baseSowingDate,operationalIntervalDays,delayDays,successionStages:stages,preservedDecisions};
   const result=simulateAdaptation(propertyProfile,config,customCrops,customCycles,context);
   const ds=createScenarioContext(propertyProfile,context).dataset;
   const soil=rulesPackage.soil_profiles[propertyProfile.soilProfileId];
