@@ -3,38 +3,46 @@ import './guided.css';
 import './context-help.css';
 import {helpButton,mountContextHelp} from './context-help.js';
 import {mountLocationPicker} from './guided-location.js';
-import {readDrafts,saveDraft,readLegacyState,saveGuidedAlternative} from './guided-storage.js';
-import {listPlanningChoices,extractGuidedPlan,buildGuidedPlanning,simulateGuidedPlanning} from './guided-planning.js';
+import {readDrafts,saveDraft,readLegacyState,saveGuidedAlternative,saveGuidedPlan} from './guided-storage.js';
+import {listPlanningChoices,extractGuidedPlan,buildGuidedPlanning,simulateGuidedPlanning,buildGuidedOriginalPlanning,simulateGuidedOriginalPlanning} from './guided-planning.js';
+import {createPlanningDemoDraft,DEMO_SOURCE_DEPENDENCIES} from './guided-demo.js';
 import {queryGuidedSources,emptySources} from './guided-discovery.js';
 import {loadGuidedCropCatalog} from './guided-crops.js';
 import {officialStageDetails} from './official-crop-ui.js';
-import {rulesPackage,registerCustomCropsInCatalog,defaultPropertyProfile,formatBRDate,getCycleGroupLabel,getPlanningStagesList} from './vilhena-engine.js';
+import {rulesPackage,registerCustomCropsInCatalog,formatBRDate,getCycleGroupLabel,getPlanningStagesList,resolveSuccessionSchedule,diffDaysUTC} from './vilhena-engine.js';
 import {zarcConditionText,keepDiscoveryQuery} from './guided-format.js';
 import {SOILS,RISK_SOURCE} from './zarc-risk.js';
 import {validDate,locationKey} from './scenario.js';
 
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const today=()=>{const d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,10);};
-const fresh=objective=>({version:1,objective,step:0,location:{latitude:null,longitude:null,municipality:'',municipalityCode:'',state:'',confirmed:false},date:today(),management:'',soilCode:'',soilProfileId:'',stages:[{cropId:'',groupKey:''}],delayDays:0,intervalDays:7,allowCropChange:false,allowCycleChange:false,example:false});
-const titles={discovery:['Onde fica sua área?','Quando pretende plantar?','Confira suas respostas','Explore as opções','Entenda e salve'],adaptation:['Qual área e planejamento?','O que pretende plantar?','O que mudou?','Confira a simulação','Escolha e salve']};
+const fresh=objective=>({version:2,objective,planId:crypto.randomUUID(),step:0,name:'',location:{latitude:null,longitude:null,municipality:'',municipalityCode:'',state:'',confirmed:false},date:'',management:'',soilCode:'',soilProfileId:'',stages:[{cropId:'',groupKey:''}],delayDays:0,intervalDays:'',allowCropChange:false,allowCycleChange:false,example:false});
+const titles={planning:['Onde fica sua área?','O que pretende plantar?','Confira seu planejamento','Meu planejamento'],discovery:['Onde fica sua área?','Quando pretende plantar?','Confira suas respostas','Explore as opções','Entenda e salve'],adaptation:['Qual planejamento deseja ajustar?','O que pretende plantar?','O que mudou?','Confira a simulação','Compare e salve']};
+const objectiveLabels={planning:'Criar meu planejamento',discovery:'Descobrir o que plantar',adaptation:'Ajustar meu planejamento'};
+const progressFor=value=>({total:value.objective==='adaptation'?4:titles[value.objective].length,step:value.objective==='adaptation'&&value.step>=2?value.step:(value.step||0)+1});
+const resultIndex=()=>draft?.objective==='adaptation'?4:3;
+const isPlan=()=>draft&&draft.objective!=='discovery';
+const isResult=()=>draft&&draft.step>=resultIndex();
+const isCultivating=()=>isPlan()&&draft.step===1;
 const app=document.querySelector('#app');
-const analysisCache=new Map();
-let draft=null,drafts={},legacy={},sources=emptySources(),simulation=null,query=null,locationCleanup=null,storageError='',notice='',saveChain=Promise.resolve(),savedPlanId=null,sourceReady=false;
+const analysisCache=new Map(),demoAnalysisCache=new Map();
+let draftRevision=0,pendingPlanSave=null,writeSerial=0,navigationEpoch=0;
+let draft=null,drafts={},demoDrafts={},legacy={},sources=emptySources(),simulation=null,query=null,locationCleanup=null,storageError='',notice='',saveChain=Promise.resolve(),savedPlanId=null,sourceReady=false,saving=false,pendingStart=null;
 let cropCatalog={status:'idle'},cropCatalogRequest=0;
 const cropLocationKey=location=>JSON.stringify([location.municipalityCode||'',location.municipality||'',location.state||'']);
 const currentCropCatalog=()=>cropCatalog.owner===draft&&cropCatalog.key===cropLocationKey(draft.location)?cropCatalog:{status:'idle'};
 const originalStages=()=>draft.sourcePlanning?getPlanningStagesList(draft.sourcePlanning):[];
-const property=()=>({...draft.location,id:draft.location.id||'guided-area',propertyName:draft.example?'Demonstração · Vilhena':draft.location.propertyName||draft.location.municipality||'Minha área',soilProfileId:draft.soilProfileId||''});
+const property=()=>({...draft.location,id:draft.location.id||`area-${draft.planId}`,propertyName:draft.example?'Demonstração · Vilhena':draft.location.propertyName||draft.location.municipality||'Minha área',soilProfileId:draft.soilProfileId||'',isExample:Boolean(draft.example)});
 function save(){
   if(!draft)return saveChain;
-  const snapshot=structuredClone({...draft,updatedAt:new Date().toISOString()});drafts[snapshot.objective]=snapshot;
-  saveChain=saveChain.catch(()=>{}).then(()=>saveDraft(snapshot.objective,snapshot)).then(()=>{storageError='';storageStatus();},()=>{storageError='Não foi possível salvar neste navegador. Mantenha esta página aberta e baixe o resumo ao concluir.';storageStatus();});
+  const snapshot=structuredClone({...draft,updatedAt:new Date().toISOString()});(snapshot.example?demoDrafts:drafts)[snapshot.objective]=snapshot;
+  const serial=++writeSerial;saving=true;storageStatus();
+  saveChain=saveChain.catch(()=>{}).then(()=>saveDraft(snapshot.objective,snapshot,{example:Boolean(snapshot.example)})).then(()=>{if(serial===writeSerial){storageError='';saving=false;storageStatus();}},()=>{if(serial!==writeSerial)return;saving=false;storageError='Não foi possível salvar neste navegador. Mantenha esta página aberta e baixe o resumo ao concluir.';storageStatus();});
   return saveChain;
 }
 window.addEventListener('rota:before-update',e=>{if(e.detail)e.detail.promise=save().then(()=>!storageError);});
-function storageStatus(){const el=document.getElementById('guide-storage');if(el){el.textContent=storageError;el.hidden=!storageError;}}
+function storageStatus(){const el=document.getElementById('guide-storage');if(el){el.textContent=storageError;el.hidden=!storageError;}const status=document.getElementById('guide-save-status');if(status)status.textContent=storageError?'Preenchimento ainda não salvo.':saving?'Salvando preenchimento…':'Preenchimento salvo neste dispositivo.';}
 function stopQuery(){query?.cancel();query=null;}
-function invalidate(){stopQuery();sources=emptySources();simulation=null;savedPlanId=null;delete draft.selectedCultureId;delete draft.selectedStrategyId;if(currentCropCatalog().status!=='ready')delete draft.zarcCatalog;}
+function invalidate(){draftRevision++;stopQuery();sources=emptySources();simulation=null;savedPlanId=null;delete draft.savedPlanId;delete draft.selectedCultureId;delete draft.selectedStrategyId;if(currentCropCatalog().status!=='ready')delete draft.zarcCatalog;}
 function network(){const el=document.getElementById('guide-network');if(el)el.textContent=navigator.onLine?'':'Você está sem conexão. Seu preenchimento pode continuar; novas consultas dependem da internet.';}
 addEventListener('online',network);addEventListener('offline',network);
 function frame(content,wide=false){
@@ -55,18 +63,58 @@ function soilControls(){return `<details><summary>Informar solo (opcional)</summ
 function overview(){return `<dl class="guide-data"><div><dt>Área</dt><dd>${esc(draft.location.municipality)} / ${esc(draft.location.state)}${draft.example?' · Demonstração':''}</dd></div><div><dt>Localização</dt><dd>${locationKey(draft.location)?`${Number(draft.location.latitude).toFixed(5)}, ${Number(draft.location.longitude).toFixed(5)}`:'Somente município; clima pontual não será consultado'}</dd></div><div><dt>Plantio previsto</dt><dd>${esc(formatBRDate(draft.date))}</dd></div><div><dt>Solo</dt><dd>${esc(draft.soilCode?SOILS[draft.soilCode]:'Não confirmado')}</dd></div></dl>`;}
 function sequence(){return `<ol>${draft.stages.map(s=>`<li>${esc(s.zarcCropName||rulesPackage.crops_catalog[s.cropId]?.common_name||'Cultura não informada')} · ${esc(rulesPackage.crops_catalog[s.cropId]?.cultivar_groups[s.groupKey]?.cycle_days_default??'Duração não informada')} dias</li>`).join('')}</ol>`;}
 function home(){
-  stopQuery();cropCatalogRequest++;cropCatalog={status:'idle'};draft=null;notice='';
-  frame(`<span class="guide-kicker">NASA SPACE APPS · DO ESPAÇO AO CAMPO</span><h1>O que você quer fazer?</h1><p class="guide-intro">Vamos por partes. Escolha seu objetivo e nós guiamos os próximos passos.</p><div class="guide-choices"><button class="guide-choice" data-start="discovery"><span class="guide-icon" aria-hidden="true">◎</span><strong>Descobrir o que plantar</strong><span>Explore opções para sua área e época de plantio.</span><span class="choice-action">Começar consulta →</span></button><button class="guide-choice" data-start="adaptation"><span class="guide-icon" aria-hidden="true">↗</span><strong>Adaptar meu planejamento</strong><span>Veja como um atraso muda sua sequência de cultivos.</span><span class="choice-action">Começar planejamento →</span></button></div>${Object.entries(drafts).filter(([,d])=>d?.objective&&titles[d.objective]).map(([key,d])=>`<section class="guide-card guide-resume"><div><strong>${key==='discovery'?'Consulta de plantio':'Adaptação de planejamento'}</strong><p class="guide-small">${esc(d.location?.municipality||'Local ainda não escolhido')} · etapa ${Math.min(5,(d.step||0)+1)} de 5${d.example?' · Demonstração':''}</p></div><button data-resume="${key}">Continuar de onde parei</button></section>`).join('')}<div class="guide-links"><div class="guide-action"><button id="try-example">Experimentar com um exemplo</button>${helpButton('example')}</div><p class="guide-small">Toque em “?” sempre que precisar de uma explicação.</p></div>`);
-  app.querySelectorAll('[data-start]').forEach(b=>b.onclick=()=>start(b.dataset.start));
-  app.querySelectorAll('[data-resume]').forEach(b=>b.onclick=()=>{draft=structuredClone(drafts[b.dataset.resume]);sources=emptySources();simulation=null;if(draft.step>=3){draft.step=draft.objective==='discovery'?2:3;notice='Retomamos suas respostas. Consulte novamente para atualizar os resultados.';}render();});
-  document.getElementById('try-example').onclick=()=>{start('discovery',true);};
+  navigationEpoch++;stopQuery();cropCatalogRequest++;cropCatalog={status:'idle'};draft=null;notice='';
+  const resumes=[...Object.values(drafts),...Object.values(demoDrafts)].filter(d=>d?.objective&&titles[d.objective]);
+  frame(`<span class="guide-kicker">NASA SPACE APPS · DO ESPAÇO AO CAMPO</span>
+    <h1>Planeje sua próxima safra.</h1><p class="guide-intro">Monte sua sequência de cultivos, entenda o calendário e compare ajustes quando as condições mudarem.</p>
+    <div class="guide-choices"><button class="guide-choice featured" data-start="planning"><span class="guide-icon" aria-hidden="true">◎</span><strong>Criar meu planejamento</strong><span>Escolha seus cultivos. Nós organizamos as datas e ajudamos a entender as condições.</span><span class="choice-action">Montar meu plano →</span></button>
+    <button class="guide-choice" data-start="adaptation"><span class="guide-icon" aria-hidden="true">↗</span><strong>Ajustar um planejamento existente</strong><span>Retome um plano salvo e veja como um atraso muda os próximos cultivos.</span><span class="choice-action">Escolher um plano →</span></button></div>
+    <section id="start-choice" class="guide-card" hidden aria-live="polite"></section>
+    <div class="guide-links"><button data-start="discovery">Ainda não sei o que plantar</button><button id="try-example">Experimentar com um exemplo</button>${helpButton('example')}</div>
+    ${resumes.length?'<h2 class="resume-heading">Continue de onde parou</h2>':''}
+    ${resumes.map(d=>`<section class="guide-card guide-resume"><div><strong>${esc(objectiveLabels[d.objective])}${d.example?' · Exemplo':''}</strong><p class="guide-small">${esc(d.location?.municipality||'Local ainda não escolhido')} · etapa ${Math.min(progressFor(d).total,progressFor(d).step)} de ${progressFor(d).total}</p></div><button data-resume="${d.objective}" data-example="${Boolean(d.example)}">Continuar preenchimento</button></section>`).join('')}`);
+  app.querySelectorAll('[data-start]').forEach(b=>b.onclick=()=>requestStart(b.dataset.start));
+  app.querySelectorAll('[data-resume]').forEach(b=>b.onclick=()=>resume((b.dataset.example==='true'?demoDrafts:drafts)[b.dataset.resume]));
+  document.getElementById('try-example').onclick=()=>requestStart('planning',true);
 }
-function start(objective,example=false){
-  stopQuery();cropCatalogRequest++;cropCatalog={status:'idle'};draft=fresh(objective);sources=emptySources();simulation=null;notice='';savedPlanId=null;
-  if(example){const p=defaultPropertyProfile();draft.location={...p,municipalityCode:'1100304',confirmed:true,source:'manual'};draft.example=true;draft.soilProfileId=p.soilProfileId;}
+function resume(value){
+  if(!value)return home();
+  navigationEpoch++;stopQuery();cropCatalogRequest++;cropCatalog={status:'idle'};
+  draft=structuredClone(value);draft.planId||=crypto.randomUUID();sources=emptySources();simulation=null;savedPlanId=draft.savedPlanId||null;notice='';
+  // Old adaptation drafts still retain their sequence and can be reviewed.
+  if(draft.step>=resultIndex()){draft.step=resultIndex()-1;notice='Retomamos suas respostas. Confira antes de atualizar o resultado.';}
+  render();
+}
+function requestStart(objective,example=false,afterStart=null){
+  const previous=(example?demoDrafts:drafts)[objective];
+  if(!previous)return start(objective,example).then(()=>afterStart?.());
+  pendingStart={objective,example,afterStart};
+  const host=document.getElementById('start-choice');
+  if(!host){if(!confirm('Já existe um preenchimento salvo para este objetivo. Substituir esse rascunho?'))return;return start(objective,example).then(()=>afterStart?.());}
+  host.hidden=false;
+  host.innerHTML=`<h2>Você já começou este preenchimento</h2><p>Seu rascunho de ${esc(previous.location?.municipality||'local ainda não escolhido')} está guardado. Substituir afeta apenas este rascunho; planos salvos permanecem disponíveis.</p><div class="guide-links"><button class="primary" id="resume-existing">Retomar preenchimento</button><button id="replace-draft">Começar outro preenchimento</button><button id="cancel-start">Cancelar</button></div>`;
+  document.getElementById('resume-existing').onclick=()=>resume(previous);
+  document.getElementById('replace-draft').onclick=()=>{const next=pendingStart;pendingStart=null;start(next.objective,next.example).then(()=>next.afterStart?.());};
+  document.getElementById('cancel-start').onclick=()=>{host.hidden=true;pendingStart=null;};
+  document.getElementById('resume-existing').focus();
+}
+async function start(objective,example=false){
+  const epoch=++navigationEpoch;stopQuery();cropCatalogRequest++;cropCatalog={status:'idle'};
+  sources=emptySources();simulation=null;notice='';savedPlanId=null;
+  if(example){
+    const button=document.getElementById('try-example')||document.getElementById('replace-draft');if(button){button.disabled=true;button.textContent='Preparando exemplo…';}
+    try{const prepared=await createPlanningDemoDraft();if(epoch!==navigationEpoch)return;draft=prepared;}catch(e){if(epoch!==navigationEpoch)return;home();const host=document.getElementById('start-choice');host.hidden=false;host.innerHTML=`<p role="alert">Não foi possível preparar o exemplo. ${esc(e.message)}</p><button id="retry-example">Tentar novamente</button>`;document.getElementById('retry-example').onclick=()=>start('planning',true);return;}
+  }else draft=fresh(objective);
   save();render();
 }
-function locationStep(){return `${draft.objective==='adaptation'?`<div class="guide-card">${label('existing-plan','Usar um planejamento salvo','sequence')}<select id="existing-plan"><option value="">Montar um novo planejamento</option>${listPlanningChoices(legacy).map(p=>`<option value="${esc(p.id)}" ${draft.sourcePlanId===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`:''}<div class="guide-card"><div class="guide-card-head"><h2>Confirme onde fica a propriedade</h2>${helpButton('location')}</div><div id="location-picker" class="location-picker"></div></div>`;}
+function locationStep(){
+  if(draft.objective==='adaptation'){
+    const choices=listPlanningChoices(legacy);
+    return `<section class="guide-card"><h2>Escolha o plano que deseja ajustar</h2><p>O original será preservado. A simulação considera cultivos ainda planejados.</p>${choices.length?`${label('existing-plan','Planejamento salvo','plan')}<select id="existing-plan"><option value="">Escolher planejamento</option>${choices.map(p=>`<option value="${esc(p.id)}" ${draft.sourcePlanId===p.id?'selected':''}>${esc(p.name)}${p.isExample?' · Demonstração':''}</option>`).join('')}</select>${draft.sourcePlanId?`${overview()}${sequence()}`:''}`:'<p>Você ainda não salvou um planejamento.</p><button class="primary" id="create-first-plan">Criar meu planejamento</button>'}</section>`;
+  }
+  if(draft.example)return `<section class="guide-card"><h2>Uma área de exemplo em Vilhena</h2><p>Experimente o planejamento com uma localização preparada. Seus dados reais permanecem separados.</p>${overview()}<button id="use-own-area">Usar minha própria área</button></section>`;
+  return `<section class="guide-card"><div class="guide-card-head"><h2>Confirme onde fica a propriedade</h2>${helpButton('location')}</div><p>O município identifica as opções oficiais. Um ponto da área permite consultar o histórico climático.</p><div id="location-picker" class="location-picker"></div></section>`;
+}
 function plantingStep(){return `<section class="guide-card">${label('plant-date','Data prevista de plantio','date')}<input id="plant-date" type="date" required data-field="date" value="${esc(draft.date)}">${label('management','Você terá irrigação?','irrigation')}<select id="management" data-field="management"><option value="" ${!draft.management?'selected':''}>Ainda não sei</option><option value="1" ${draft.management==='1'?'selected':''}>Dependo da chuva</option><option value="2" ${draft.management==='2'?'selected':''}>Tenho irrigação</option></select>${soilControls()}</section>`;}
 const isOfficialStage=stage=>Boolean(stage?.officialSource||rulesPackage.crops_catalog[stage?.cropId]?.officialProfile);
 const cycleEndLabel=stage=>isOfficialStage(stage)?'Fim do ciclo de referência':'Colheita';
@@ -84,18 +132,33 @@ function cropFields(){
    const choices=cycleChoices(selected),missing=selected&&!choices.length;
    const currentGroup=rulesPackage.crops_catalog[stage.cropId]?.cultivar_groups[stage.groupKey];
    if(original&&stage.groupKey&&!choices.some(c=>c.cropId===stage.cropId&&c.key===stage.groupKey))choices.unshift({value:`${stage.cropId}::${stage.groupKey}`,label:`${getCycleGroupLabel(stage.groupKey,currentGroup)} · plano original`});
-   return `<div class="guide-stage"><div class="guide-card-head"><h3>Cultivo ${index+1}</h3>${draft.stages.length>1?`<button type="button" data-remove-stage="${index}" aria-label="Retirar cultivo ${index+1}">Retirar</button>`:''}</div>${label(`crop-${index}`,'Cultura no ZARC municipal','municipalCrops')}<select id="crop-${index}" data-stage="${index}" data-key="zarcCropId" ${catalog.status!=='ready'?'disabled':''}><option value="" ${!selectedValue?'selected':''}>Escolher cultura</option>${previous?`<option value="previous" selected>${esc(name)} — escolha anterior</option>`:''}${cultures.map(c=>`<option value="${esc(c.id)}" ${selectedValue===c.id?'selected':''}>${esc(c.name)}${!c.models?.length?' — parâmetros em conferência':''}</option>`).join('')}</select>${stage.cropId&&!stage.zarcCropId?`<p class="guide-small">Escolha recuperada ${draft.sourcePlanId?'do plano salvo':'do seu rascunho'}; não foi selecionada pelo ZARC.</p>`:''}${previous&&catalog.status==='ready'?`<p class="guide-message warning">A escolha anterior não consta nesta lista municipal.${original?' Ela permanece como parte do plano original, sem indicação oficial confirmada.':' Escolha uma cultura da lista para continuar.'}</p>`:''}${missing?'<p class="guide-message warning">Ainda não há duração utilizável com fonte compatível com esta UF, safra e manejo. Consulte as condições oficiais enquanto os parâmetros são conferidos.</p><button type="button" data-discover-from-plan>Consultar condições por data</button>':''}${label(`cycle-${index}`,'Ciclo e manejo para o planejamento','officialParameters')}<select id="cycle-${index}" data-stage="${index}" data-key="officialCycle" ${!choices.length?'disabled':''}><option value="">Escolher ciclo e manejo</option>${choices.map(choice=>`<option value="${esc(choice.value)}" ${`${stage.cropId}::${stage.groupKey}`===choice.value?'selected':''}>${esc(choice.label)}</option>`).join('')}</select>${stage.managementCode==='2'?'<p class="guide-message warning">Este ciclo exige cultivo irrigado. Confirme a disponibilidade de água durante o cultivo.</p>':''}${currentGroup?.calendarBasis==='upper-bound'?`<p class="guide-message warning">${esc(currentGroup.calendarExplanation)}. Usaremos ${currentGroup.cycle_days_default} dias como limite para montar o calendário; a duração real pode variar.</p>`:''}${selected?.pendingGroups?.length?'<p class="guide-small">Alguns grupos não têm duração definida suficiente para montar o calendário e ainda não estão disponíveis.</p>':''}</div>`;
+   return `<div class="guide-stage"><div class="guide-card-head"><h3>Cultivo ${index+1}</h3>${draft.stages.length>1?`<button type="button" data-remove-stage="${index}" aria-label="Retirar cultivo ${index+1}">Retirar</button>`:''}</div>${label(`crop-${index}`,'O que pretende plantar?','municipalCrops')}<select id="crop-${index}" data-stage="${index}" data-key="zarcCropId" ${catalog.status!=='ready'?'disabled':''}><option value="" ${!selectedValue?'selected':''}>Escolher cultura</option>${previous?`<option value="previous" selected>${esc(name)} — escolha anterior</option>`:''}${cultures.map(c=>`<option value="${esc(c.id)}" ${selectedValue===c.id?'selected':''}>${esc(c.name)}${!c.models?.length?' — parâmetros em conferência':''}</option>`).join('')}</select>${stage.cropId&&!stage.zarcCropId?`<p class="guide-small">Escolha recuperada ${draft.sourcePlanId?'do plano salvo':'do seu rascunho'}; não foi selecionada pelo ZARC.</p>`:''}${previous&&catalog.status==='ready'?`<p class="guide-message warning">A escolha anterior não consta nesta lista municipal.${original?' Ela permanece como parte do plano original, sem indicação oficial confirmada.':' Escolha uma cultura da lista para continuar.'}</p>`:''}${missing?'<p class="guide-message warning">Ainda não há duração utilizável com fonte compatível com esta UF, safra e manejo. Consulte as condições oficiais enquanto os parâmetros são conferidos.</p><button type="button" data-discover-from-plan>Consultar condições por data</button>':''}${label(`cycle-${index}`,'Qual ciclo será usado?','officialParameters')}<select id="cycle-${index}" data-stage="${index}" data-key="officialCycle" ${!choices.length?'disabled':''}><option value="">Ainda não escolhi o ciclo</option>${choices.map(choice=>`<option value="${esc(choice.value)}" ${`${stage.cropId}::${stage.groupKey}`===choice.value?'selected':''}>${esc(choice.label)}</option>`).join('')}</select><p class="guide-small">Confira a duração e o grupo na ficha da cultivar ou no material do fornecedor. Se não souber, mantenha o rascunho e confirme antes de calcular.</p>${stage.managementCode==='2'?'<p class="guide-message warning">Este ciclo exige cultivo irrigado. Confirme a disponibilidade de água durante o cultivo.</p>':''}${currentGroup?.calendarBasis==='upper-bound'?`<p class="guide-message warning">${esc(currentGroup.calendarExplanation)}. Usaremos ${currentGroup.cycle_days_default} dias como limite para montar o calendário; a duração real pode variar.</p>`:''}${selected?.pendingGroups?.length?'<p class="guide-small">Alguns grupos não têm duração definida suficiente para montar o calendário e ainda não estão disponíveis.</p>':''}</div>`;
  }).join('');
 }
-function planStep(){return `${draft.sourcePlanning?'<p class="guide-message">As culturas do plano salvo representam suas escolhas anteriores. Datas fixas, intervalos e restrições por cultivo são preservados.</p>':''}<section class="guide-card">${label('plant-date','Quando começa o primeiro cultivo?','date')}<input id="plant-date" type="date" data-field="date" required value="${esc(draft.date)}"><div class="guide-card-head"><h2>Sua sequência de cultivos</h2>${helpButton('sequence')}</div><p class="guide-small">Escolha uma cultura e um ciclo entre as opções documentadas para sua região.</p><div id="guide-crop-fields">${cropFields()}</div><div class="guide-action"><button type="button" id="add-stage">+ Adicionar próximo cultivo</button>${helpButton('sequence')}</div>${label('interval','Intervalo entre cultivos (dias)','interval')}<input id="interval" type="number" min="0" max="36500" step="1" data-field="intervalDays" value="${esc(draft.intervalDays)}">${officialIntervalNote(draft.stages)}${soilControls()}</section>`;}
+function calendarList(stages){return `<ol class="guide-timeline">${stages.map((st,i)=>`<li><span class="timeline-order">${i+1}</span><div><strong>${esc(st.shortCropName||st.cropName||st.cropId)}</strong><p>${st.cycleDays} dias de referência · ${st.managementCode==='2'?'Com irrigação':st.managementCode==='1'?'Depende da chuva':'Manejo a conferir'}</p><div class="timeline-dates"><span>Plantio<strong>${formatBRDate(st.sowDate)}</strong></span><span>${cycleEndLabel(st)}<strong>${formatBRDate(st.harvestDate)}</strong></span></div>${st.zarc?`<p class="stage-condition"><strong>${esc(st.zarc.badgeLabel||'Condições a conferir')}</strong>${st.zarc.status==='FORA_DE_JANELA'?' · Não encontramos indicação para estes filtros; isso não é proibição de cultivo.':''}</p>`:''}</div></li>`).join('')}</ol>`;}
+function calendarPreview(){
+  try{
+    const plan=buildGuidedOriginalPlanning({...draft,objective:'planning'},legacy);
+    const stages=resolveSuccessionSchedule(getPlanningStagesList(plan),plan.baseSowingDate,plan.operationalIntervalDays);
+    return `<h2>Seu calendário começa a tomar forma</h2>${calendarList(stages)}<p class="guide-small">Prévia sem atraso. O fim do ciclo de referência não confirma a colheita nem a liberação da área.</p>`;
+  }catch{return '<h2>Prévia do calendário</h2><p class="guide-small">Preencha a data, os ciclos e o intervalo para visualizar as datas dos cultivos.</p>';}
+}
+function refreshPreview(){const el=document.getElementById('calendar-preview');if(el)el.innerHTML=calendarPreview();}
+function planStep(){return `${draft.sourcePlanning?'<p class="guide-message">Você está revisando uma cópia do plano salvo. O original permanece guardado.</p>':''}<section class="guide-card">
+  ${draft.objective==='planning'?`${label('plan-name','Nome do planejamento (opcional)','name')}<input id="plan-name" data-field="name" maxlength="120" value="${esc(draft.name||'')}" placeholder="Ex.: Área do sítio · próxima safra">`:''}
+  ${label('plant-date','Quando começa o primeiro cultivo?','date')}<input id="plant-date" type="date" data-field="date" required value="${esc(draft.date)}">
+  <div class="guide-card-head section-heading"><h2>Sua sequência de cultivos</h2>${helpButton('sequence')}</div><p class="guide-small">Escolha as culturas na ordem em que ocuparão a mesma área. A lista contém registros municipais; cada data e condição será conferida no resultado.</p>
+  <div id="guide-crop-fields">${cropFields()}</div><div class="guide-action"><button type="button" id="add-stage">+ Adicionar próximo cultivo</button>${helpButton('sequence')}</div>
+  ${label('interval','Dias reservados entre cultivos','interval')}<input id="interval" type="number" required min="0" max="36500" step="1" data-field="intervalDays" value="${esc(draft.intervalDays)}" aria-describedby="interval-hint"><p id="interval-hint" class="guide-small">Inclua secagem, colheita e preparo após o fim do ciclo de referência. Informe 0 se não reservar intervalo.${draft.example?' Os 7 dias são apenas uma hipótese deste exemplo.':''}</p>
+  ${soilControls()}<button type="button" data-discover-from-plan>Ainda não sei o que plantar</button></section><section class="guide-card calendar-preview" id="calendar-preview" aria-live="polite">${calendarPreview()}</section>`;}
 function refreshCropFields(){
- if(!draft||draft.objective!=='adaptation'||draft.step!==1)return;
+ if(!isCultivating())return;
  const container=document.getElementById('guide-crop-fields');
  if(container){const focusId=document.activeElement?.id;container.innerHTML=cropFields();bind();if(focusId)document.getElementById(focusId)?.focus({preventScroll:true});}
 }
 function applyCropCatalog(value){const models=value.cultures.flatMap(c=>c.models||[]);draft.zarcCatalog={cityCode:value.city.code,season:value.season,sourceUpdated:value.sourceUpdated,engineCropIds:models.map(m=>m.engineCropId),groupKeysByCrop:Object.fromEntries(models.filter(m=>m.groupKeys).map(m=>[m.engineCropId,m.groupKeys])),managementCodesByCrop:Object.fromEntries(models.map(m=>[m.engineCropId,m.managementCodes||[]]))};}
 function ensureCropCatalog(force=false){
- if(!draft||draft.objective!=='adaptation')return;
+ if(!isPlan())return;
  const key=cropLocationKey(draft.location),current=currentCropCatalog();
  if(!force&&current.status==='ready'){applyCropCatalog(current.value);return;}
  if(!force&&['loading','error'].includes(current.status))return;
@@ -105,10 +168,10 @@ function ensureCropCatalog(force=false){
    if(request!==cropCatalogRequest||draft!==owner||key!==cropLocationKey(draft.location))return;
    cropCatalog={status:'ready',key,value,owner};
    applyCropCatalog(value);
-   save();refreshCropFields();if(draft.step===4)updateResults();
+   save();refreshCropFields();if(isResult())updateResults();
  },error=>{
    if(request!==cropCatalogRequest||draft!==owner||key!==cropLocationKey(draft.location))return;
-   cropCatalog={status:'error',key,message:error.message,owner};refreshCropFields();if(draft.step===4)updateResults();
+   cropCatalog={status:'error',key,message:error.message,owner};refreshCropFields();if(isResult())updateResults();
  });
 }
 function validateCropSelections(){
@@ -122,100 +185,238 @@ function validateCropSelections(){
  });
 }
 function changesStep(){return `<section class="guide-card">${label('delay','Quantos dias o plantio atrasou?','delay')}<input id="delay" type="number" min="0" max="36500" step="1" data-field="delayDays" value="${esc(draft.delayDays)}"><div class="guide-card-head"><h2>O que você aceita mudar?</h2>${helpButton('changes')}</div><label class="check"><input type="checkbox" data-field="allowCycleChange" ${draft.allowCycleChange?'checked':''}>Usar ciclos mais curtos</label><label class="check"><input type="checkbox" data-field="allowCropChange" ${draft.allowCropChange?'checked':''}>Trocar as culturas seguintes, mantendo a primeira</label><p class="guide-small">As mudanças serão comparadas. Nada será alterado no plano original.</p></section>`;}
-function reviewStep(){return `<section class="guide-card"><div class="guide-card-head"><h2>Está tudo certo?</h2>${helpButton('review')}</div>${overview()}${draft.objective==='adaptation'?`${sequence()}<p>Atraso: <strong>${esc(draft.delayDays)} dias</strong>. Intervalo entre cultivos: ${esc(draft.intervalDays)} dias.</p><p>${draft.allowCycleChange?'Aceita ciclos mais curtos.':'Mantém os ciclos.'} ${draft.allowCropChange?'Aceita trocar as culturas seguintes.':'Mantém as culturas.'}</p>`:`<p>Irrigação: ${draft.management==='1'?'depende da chuva':draft.management==='2'?'informada pelo usuário':'ainda não informada'}.</p>`}<div class="guide-links"><button type="button" data-edit="0">Editar localização</button><button type="button" data-edit="1">Editar plantio</button></div></section><p class="guide-message warning">${!draft.soilProfileId||!draft.soilCode?'Solo não confirmado para uma ou mais análises. ':''}Os resultados dependem das condições da sua área. Histórico climático não é previsão de safra.</p>`;}
+function reviewStep(){return `<section class="guide-card"><div class="guide-card-head"><h2>Confira antes de calcular</h2>${helpButton('review')}</div>${overview()}<button type="button" data-edit="0">${draft.objective==='adaptation'?'Editar escolha do plano':'Editar localização'}</button>
+  ${isPlan()?`${sequence()}<p>Intervalo entre cultivos: <strong>${esc(draft.intervalDays)} dias</strong>.</p><ul>${draft.stages.map((stage,i)=>`<li>Cultivo ${i+1}: ${stage.managementCode==='2'?'com irrigação':stage.managementCode==='1'?'depende da chuva':'manejo a conferir na opção escolhida'}.</li>`).join('')}</ul><button type="button" data-edit="1">Editar cultivos e datas</button>`:`<p>Irrigação: ${draft.management==='1'?'depende da chuva':draft.management==='2'?'informada pelo usuário':'ainda não informada'}.</p><button type="button" data-edit="1">Editar data e condições</button>`}
+  ${draft.objective==='adaptation'?`<div class="review-changes"><p>Atraso a simular: <strong>${esc(draft.delayDays)} dias</strong>.</p><p>${draft.allowCycleChange?'Aceita testar ciclos mais curtos.':'Mantém os ciclos.'} ${draft.allowCropChange?'Aceita trocar culturas seguintes.':'Mantém as culturas.'}</p><button type="button" data-edit="2">Editar atraso e permissões</button></div>`:''}</section>
+  <p class="guide-message warning">${!draft.soilProfileId||!draft.soilCode?'Solo não confirmado para uma ou mais análises. Você pode montar o calendário e conferir as pendências depois. ':''}Histórico climático não é previsão de safra.</p>`;}
 const statusLabel=s=>({idle:'Aguardando consulta',loading:'Consultando…',ready:'Disponível',error:'Indisponível',unavailable:'Ponto não informado'}[s.status]);
-function sourcePanel(){return `<section class="guide-card"><div class="guide-card-head"><h2>Dados da consulta</h2>${helpButton('results')}</div>${[['zarc','Opções oficiais · ZARC'],['nasa','Histórico climático · NASA'],['soil','Estimativa de solo']].map(([key,name])=>`<div class="guide-source" role="status"><strong>${name}</strong><span>${statusLabel(sources[key])}${sources[key].message?`<br>${esc(sources[key].message)}`:''}</span></div>`).join('')}<p class="guide-small">As fontes são independentes. Uma falha não apaga os dados das outras.</p><button id="retry-sources" type="button">Atualizar consulta</button></section>`;}
-function climatePanel(){const v=sources.nasa.value,s=v?.summary;return s?`<section class="guide-card"><div class="guide-card-head"><h2>Clima no mês do plantio</h2>${helpButton('nasa')}</div><p>${s.years.length} anos completos · ${v.isLive?'consulta atual':'histórico em cache para este ponto'}.</p><dl class="guide-data"><div><dt>Chuva média no mês</dt><dd>${Math.round(s.meanRainMm)} mm</dd></div><div><dt>Variação entre os anos</dt><dd>${Math.round(s.minRainMm)} a ${Math.round(s.maxRainMm)} mm</dd></div></dl><p class="guide-small">É histórico climático, não previsão. Não define sozinho qual cultura plantar.</p></section>`:'';}
+function sourcePanel(){return `<details data-condition="sources"><summary>Fontes e andamento das consultas</summary><section class="guide-card"><div class="guide-card-head"><h2>Dados da consulta</h2>${helpButton('results')}</div>${[['zarc','Opções oficiais · ZARC'],['nasa','Histórico climático · NASA'],['soil','Estimativa de solo']].map(([key,name])=>`<div class="guide-source" role="status"><strong>${name}</strong><span>${statusLabel(sources[key])}${sources[key].message?`<br>${esc(sources[key].message)}`:''}</span></div>`).join('')}<p class="guide-small">As fontes são independentes. Uma falha não apaga os dados das outras.</p><button id="retry-sources" type="button">Atualizar consulta</button></section></details>`;}
+function climatePanel(){const v=sources.nasa.value,s=v?.summary;return s?`<section class="guide-card"><div class="guide-card-head"><h2>Clima no mês do plantio</h2>${helpButton('nasa')}</div><p>${s.years.length} anos completos · ${v.isDemo?'histórico de demonstração 2013–2024':v.isLive?'consulta atual':'histórico em cache para este ponto'}.</p><dl class="guide-data"><div><dt>Chuva média no mês</dt><dd>${Math.round(s.meanRainMm)} mm</dd></div><div><dt>Variação entre os anos</dt><dd>${Math.round(s.minRainMm)} a ${Math.round(s.maxRainMm)} mm</dd></div></dl><p class="guide-small">É histórico climático, não previsão. Não define sozinho qual cultura plantar.</p></section>`:'';}
 function conditionList(c){return `<details data-condition="${esc(c.id)}"><summary>Ver condições de plantio</summary><ul>${[...new Set(c.conditions.map(zarcConditionText))].map(row=>`<li>${esc(row)}</li>`).join('')}</ul></details>`;}
 function resultStep(){
  const z=sources.zarc.value,cultures=z?.cultures||[];
  return `${!draft.soilCode?'<p class="guide-message warning">Solo não confirmado: cada opção depende das condições indicadas. Os percentuais do ZARC não são chances de sucesso.</p>':''}<div class="guide-card-head"><h2>Opções oficiais para o período</h2>${helpButton('zarc')}</div><p class="guide-small">${esc(draft.location.municipality)} / ${esc(draft.location.state)} · ${formatBRDate(draft.date)}${z?` · safra ${esc(z.season)}`:''}</p>${cultures.length?`<div class="guide-result-grid">${cultures.map(c=>`<article class="guide-card"><h3>${esc(c.name)}</h3><p>${c.irrigatedOnly?'Exige irrigação nas condições encontradas.':'Há opção sem irrigação nas condições encontradas.'}</p><span class="guide-pill">Risco publicado: ${c.risks.map(r=>`${r}%`).join(' / ')}</span>${conditionList(c)}<div class="guide-action"><button class="primary" id="culture-${esc(c.id)}" data-culture="${esc(c.id)}">Ver esta opção</button>${helpButton('results')}</div></article>`).join('')}</div>`:`<p class="guide-message">${sources.zarc.status==='loading'?'Buscando opções oficiais…':z?.status==='unavailable-season'?'Não temos dados da safra para esse ano. Altere a data para consultar um período disponível.':z?'Nenhuma opção encontrada para estes filtros. Isso não significa proibição ou que sua área seja imprópria. Revise a data e as condições.':'As opções oficiais ainda não estão disponíveis. Confira a conexão e tente novamente.'}</p>`}${climatePanel()}${sourcePanel()}`;
 }
 function selectedCulture(){return sources.zarc.value?.cultures.find(c=>String(c.id)===String(draft.selectedCultureId));}
-function cultureSummary(){const c=selectedCulture();if(!c)return '<p>Selecione uma opção na etapa anterior.</p>';return `<section class="guide-card"><div class="guide-card-head"><h2>${esc(c.name)}</h2>${helpButton('results')}</div>${overview()}<p>${c.irrigatedOnly?'Necessita irrigação nas condições encontradas.':'Há condições sem irrigação.'} Risco publicado: ${c.risks.map(r=>`${r}%`).join(' / ')}.</p><p class="guide-message warning">Antes de plantar, confirme solo, grupo de cultivar e manejo correspondentes às condições oficiais. Esta consulta não garante produtividade nem enquadramento em crédito ou seguro.</p>${conditionList(c)}<p><strong>Próximo passo:</strong> leve este resumo para conferir as condições da propriedade com assistência técnica.</p><p class="guide-small">Safra ${esc(sources.zarc.value.season)} · fonte atualizada em ${esc(sources.zarc.value.sourceUpdated)}.</p></section>${climatePanel()}<div class="guide-action"><button id="save-summary" class="primary">Salvar resumo</button>${helpButton('save')}</div><p class="guide-small">Baixa um arquivo HTML que pode ser aberto e impresso pelo navegador.</p>`;}
-function strategyCard(s){return `<article class="guide-card ${draft.selectedStrategyId===s.strategyId?'selected':''}"><div class="guide-card-head"><h3>${esc(s.title)}</h3>${helpButton('results')}</div><span class="guide-pill">${esc(s.statusLabel||s.overallStatus||'Avaliação parcial')}</span><p>${esc(s.changedDescriptions?.join(' ')||'Mesma sequência, com o atraso informado.')}</p>${s.assessment?.incomplete||s.assessment?.estimated?'<p class="guide-message warning">Avaliação parcial ou estimada: não é possível afirmar que esta opção é melhor.</p>':''}${officialIntervalNote(s.stages)}<ol>${s.stages.map(st=>`<li>${esc(st.shortCropName||st.cropId)} · ${st.cycleDays} dias<br>Plantio: ${formatBRDate(st.sowDate)} · ${cycleEndLabel(st)}: ${formatBRDate(st.harvestDate)}${officialStageDetails(st)}</li>`).join('')}</ol><p class="guide-small">${esc(s.tradeOffSummary||'')}</p><div class="guide-action"><button id="strategy-${esc(s.strategyId)}" data-strategy="${esc(s.strategyId)}" ${draft.selectedStrategyId===s.strategyId?'aria-pressed="true"':'aria-pressed="false"'}>${draft.selectedStrategyId===s.strategyId?'Selecionada':'Escolher esta opção'}</button></div></article>`;}
-function adaptationResults(){return `${currentCropCatalog().status==='error'?'<p class="guide-message warning">As culturas municipais estão indisponíveis. Use Atualizar consulta para tentar novamente; seu plano foi mantido.</p>':''}${sourcePanel()}${simulation?`<p class="guide-message warning">${esc(simulation.noBetterAlternativeMessage||'Compare as mudanças e as condições antes de escolher. O resultado histórico não é uma previsão.')}</p><p class="guide-small">As trocas usam somente culturas registradas no ZARC municipal com modelo disponível. As condições de cada data, solo e manejo ainda precisam ser confirmadas; janelas regionais do motor não substituem o ZARC.</p><div class="guide-result-grid">${simulation.strategies.map(strategyCard).join('')}</div><div class="guide-action" style="margin-top:24px"><button class="primary" id="save-alternative" ${!draft.selectedStrategyId||savedPlanId||sources.nasa.status==='loading'?'disabled':''}>${savedPlanId?'Alternativa salva':'Salvar alternativa'}</button>${helpButton('save')}</div>${savedPlanId?'<p class="guide-message success">Novo plano salvo neste dispositivo. O plano original foi preservado. Acesse-o em Planejamento avançado.</p><button id="save-summary">Baixar resumo</button>':''}`:`<p class="guide-message">${currentCropCatalog().status==='error'?'A comparação aguarda a consulta das culturas municipais.':'Preparando a comparação…'}</p>`}`;}
+function cultureSummary(){const c=selectedCulture();if(!c)return '<p>Selecione uma opção na etapa anterior.</p>';return `<section class="guide-card"><div class="guide-card-head"><h2>${esc(c.name)}</h2>${helpButton('results')}</div>${overview()}<p>${c.irrigatedOnly?'Necessita irrigação nas condições encontradas.':'Há condições sem irrigação.'} Risco publicado: ${c.risks.map(r=>`${r}%`).join(' / ')}.</p><p class="guide-message warning">Antes de plantar, confirme solo, grupo de cultivar e manejo correspondentes às condições oficiais. Esta consulta não garante produtividade nem enquadramento em crédito ou seguro.</p>${conditionList(c)}<p><strong>Próximo passo:</strong> leve este resumo para conferir as condições da propriedade com assistência técnica.</p><p class="guide-small">Safra ${esc(sources.zarc.value.season)} · fonte atualizada em ${esc(sources.zarc.value.sourceUpdated)}.</p></section>${climatePanel()}<div class="guide-action"><button id="save-summary" class="primary">Baixar resumo</button>${helpButton('save')}</div><p class="guide-small">Baixa um arquivo HTML que pode ser aberto e impresso pelo navegador.</p>`;}
+function stageClimate(stage){
+  const c=stage.stressTest?.climateSummary;
+  if(!c?.completeYears)return '<p class="guide-small">Histórico deste período ainda não disponível.</p>';
+  const number=v=>Number.isFinite(v)?v.toLocaleString('pt-BR',{maximumFractionDigits:1}):'—';
+  return `<div class="climate-evidence"><span>NASA POWER · ${esc(simulation?.climatePeriod||'histórico disponível')}</span><strong>${number(c.meanRainMm)} mm</strong><p>Chuva acumulada média no período deste cultivo, em ${c.completeYears} anos completos.</p><small>Variação histórica: ${number(c.minRainMm)} a ${number(c.maxRainMm)} mm. Histórico não é previsão.</small></div>`;
+}
+function strategyDetails(s){return `<details data-condition="strategy-${esc(s.strategyId)}"><summary>Condições de plantio e fontes dos parâmetros</summary>${s.stages.map((st,i)=>`<section><h3>Cultivo ${i+1} · ${esc(st.shortCropName||st.cropId)}</h3>${officialStageDetails(st)||'<p>Parâmetros do modelo de referência; confirme a adequação à sua área.</p>'}</section>`).join('')}</details>`;}
+function limitations(){return `<p class="guide-message warning">${!draft.soilCode||!draft.soilProfileId?'Solo não confirmado. ':''}${simulation?.strategies.some(s=>s.assessment?.incomplete||s.assessment?.estimated)?'Avaliação parcial: faltam informações para indicar uma alternativa melhor. ':'Confira as condições da sua área. '}O fim do ciclo de referência não confirma a colheita nem a liberação da área.</p>`;}
+function savedActions(){return `<p class="guide-message success" role="status">${draft.objective==='planning'?'Planejamento salvo':'Alternativa salva'} neste dispositivo.${draft.objective==='adaptation'?' O original foi preservado.':''}</p><div class="guide-links">${draft.objective==='planning'?'<button class="primary" id="simulate-delay">Simular atraso</button>':''}<a class="guide-button" href="?modo=planejamento&plano=${encodeURIComponent(savedPlanId)}">Ver este plano em detalhes</a><button id="save-summary">Baixar resumo</button></div>`;}
+function planningResults(){
+  const s=simulation?.strategies.find(s=>s.strategyId==='PLANO_ATUAL');
+  if(!s)return `<p class="guide-message">${currentCropCatalog().status==='error'?'Não foi possível conferir as culturas. Tente atualizar a consulta.':'Preparando seu calendário…'}</p>${sourcePanel()}`;
+  return `<section class="guide-card"><span class="guide-kicker">SEU PLANO · SEM ATRASO</span><h2>${esc(draft.name||`Planejamento em ${draft.location.municipality}`)}</h2><p>Esta é a sequência que você escolheu. Você pode guardá-la e depois testar mudanças.</p>${calendarList(s.stages)}</section>
+    ${savedPlanId?savedActions():`<div class="guide-links"><button class="primary" id="save-plan" ${pendingPlanSave?'disabled':''}>${pendingPlanSave?'Salvando…':'Salvar planejamento'}</button><button id="save-summary">Baixar resumo</button></div>`}
+    <section class="guide-card"><div class="guide-card-head"><h2>O clima nos períodos planejados</h2>${helpButton('nasa')}</div><p class="guide-small">As datas do calendário determinam os períodos consultados no histórico. ${sources.nasa.status==='loading'?'Consultando a NASA; você já pode salvar o calendário.':''}</p><div class="guide-climate-grid">${s.stages.map(st=>`<div><h3>${esc(st.shortCropName||st.cropId)}</h3>${stageClimate(st)}</div>`).join('')}</div></section>
+    ${limitations()}${strategyDetails(s)}${sourcePanel()}`;
+}
+function differenceText(s){
+  const base=simulation?.strategies.find(x=>x.strategyId==='PLANO_ATUAL');
+  if(!base||s===base)return '';
+  const index=s.stages.findIndex((st,i)=>i>0&&base.stages[i]?.sowDate!==st.sowDate);
+  if(index<0)return '';
+  const delta=diffDaysUTC(s.stages[index].sowDate,base.stages[index].sowDate);
+  return `<p class="calendar-difference"><strong>${Math.abs(delta)} dias ${delta>0?'antes':'depois'}</strong> para começar ${esc(s.stages[index].shortCropName||s.stages[index].cropId)} no calendário simulado.</p>`;
+}
+function strategyCard(s){return `<article class="guide-card ${draft.selectedStrategyId===s.strategyId?'selected':''}"><div class="guide-card-head"><h2>${s.strategyId==='PLANO_ATUAL'?'Manter o plano com atraso':esc(s.title)}</h2>${helpButton('results')}</div><p>${esc(s.changedDescriptions?.join(' ')||'Mesma sequência, com o atraso informado.')}</p>${differenceText(s)}${calendarList(s.stages)}
+  <div class="guide-climate-grid">${s.stages.map(st=>`<div><h3>${esc(st.shortCropName||st.cropId)}</h3>${stageClimate(st)}</div>`).join('')}</div>
+  <div class="guide-action"><button id="strategy-${esc(s.strategyId)}" data-strategy="${esc(s.strategyId)}" aria-pressed="${draft.selectedStrategyId===s.strategyId}">${draft.selectedStrategyId===s.strategyId?'Selecionada':'Escolher esta opção'}</button></div>${strategyDetails(s)}</article>`;}
+function comparisonSummary(){
+  return `<section class="guide-card comparison-overview"><h2>O que muda no calendário?</h2><p class="guide-small">${draft.stages.length>1?'Veja o próximo cultivo em cada opção.':'Veja o cultivo em cada opção.'} A chuva corresponde à duração indicada em cada linha.</p><table><thead><tr><th scope="col">Opção</th><th scope="col">Plantio e duração</th><th scope="col">Chuva média histórica</th></tr></thead><tbody>${simulation.strategies.map(s=>{
+    const st=s.stages[Math.min(1,s.stages.length-1)],c=st.stressTest?.climateSummary;
+    return `<tr><th scope="row">${s.strategyId==='PLANO_ATUAL'?'Manter o plano com atraso':esc(s.title)}</th><td><strong>${formatBRDate(st.sowDate)}</strong><span>${esc(st.shortCropName||st.cropId)} · ${st.cycleDays} dias</span></td><td>${c?.completeYears?`<strong>${c.meanRainMm.toLocaleString('pt-BR',{maximumFractionDigits:1})} mm</strong><span>${c.completeYears} anos completos</span>`:'Histórico pendente'}</td></tr>`;
+  }).join('')}</tbody></table><p class="guide-small">NASA POWER · ${esc(simulation.climatePeriod)}. Histórico não é previsão; mais chuva não confirma uma opção melhor.</p></section>`;
+}
+function adaptationResults(){
+  if(!simulation)return `<p class="guide-message">${currentCropCatalog().status==='error'?'A comparação aguarda as culturas municipais. Atualize a consulta para tentar novamente.':'Preparando a comparação com o atraso informado…'}</p>${sourcePanel()}`;
+  return `<p class="guide-intro">Você está simulando <strong>${esc(draft.delayDays)} dias de atraso</strong>. Compare as datas e as mudanças; o plano original permanece guardado.</p>${comparisonSummary()}${limitations()}
+    <div class="guide-result-grid">${simulation.strategies.map(strategyCard).join('')}</div>
+    ${savedPlanId?savedActions():`<div class="guide-links result-actions"><button class="primary" id="save-alternative" ${!draft.selectedStrategyId||pendingPlanSave?'disabled':''}>${pendingPlanSave?'Salvando…':'Salvar alternativa'}</button>${draft.selectedStrategyId?'<button id="save-summary">Baixar resumo</button>':''}</div>`}
+    <p class="guide-small">A chuva é contexto histórico. Mais chuva não significa, por si só, uma alternativa melhor. As mudanças usam o catálogo municipal e respeitam suas permissões.</p>${sourcePanel()}`;
+}
 function render(focus=true){
   if(!draft)return home();
   const step=draft.step;
-  const body=step===0?locationStep():draft.objective==='discovery'?[null,plantingStep,reviewStep,resultStep,cultureSummary][step]():[null,planStep,changesStep,reviewStep,adaptationResults][step]();
-  const hasNext=draft.objective==='discovery'?step<3:step<4;
-  const nextLabel=step===0?'Usar esta localização':draft.objective==='discovery'&&step===2?'Consultar opções':draft.objective==='adaptation'&&step===3?'Comparar alternativas':'Continuar';
-  frame(`<div class="guide-progress"><span>Etapa ${step+1} de 5</span><progress value="${step+1}" max="5" aria-label="Progresso"></progress><span>${draft.objective==='discovery'?'Descobrir o que plantar':'Adaptar meu planejamento'}</span></div>${draft.example?'<p class="guide-message warning">Demonstração: estes dados são do exemplo de Vilhena, não da sua propriedade.</p>':''}<span class="guide-kicker">${draft.objective==='discovery'?'SUA PRÓXIMA SAFRA':'SEU PLANEJAMENTO'}</span><h1 id="guide-title" tabindex="-1">${titles[draft.objective][step]}</h1>${notice?`<p class="guide-message" role="status">${esc(notice)}</p>`:''}<p id="guide-error" class="guide-message error guide-error" role="alert" tabindex="-1"></p><div id="guide-body">${body}</div><div class="guide-nav"><button type="button" id="guide-back">${step?'← Voltar':'← Início'}</button>${hasNext?`<div class="guide-action"><button type="button" class="primary" id="guide-next" ${step===0&&!draft.location.confirmed?'disabled':''}>${nextLabel}</button>${helpButton(step===0?'location':step===2||step===3?'review':'date')}</div>`:'<button type="button" id="guide-home">Concluir e voltar ao início</button>'}</div><p class="guide-small">Seu preenchimento é salvo automaticamente neste dispositivo.</p>`,step===3&&draft.objective==='discovery'||step===4&&draft.objective==='adaptation');
-  bind();
-  if(draft.objective==='adaptation'&&step>=1)ensureCropCatalog();
-  if(step===0){locationCleanup=mountLocationPicker(document.getElementById('location-picker'),{value:draft.location,onChange:value=>{draft.location=value;draft.example=Boolean(draft.example&&value.latitude===defaultPropertyProfile().latitude&&value.longitude===defaultPropertyProfile().longitude);invalidate();save();document.getElementById('guide-next').disabled=!value.confirmed;},onStatus:()=>{}});}
+  const screens={planning:[locationStep,planStep,reviewStep,planningResults],discovery:[locationStep,plantingStep,reviewStep,resultStep,cultureSummary],adaptation:[locationStep,planStep,changesStep,reviewStep,adaptationResults]};
+  if(!screens[draft.objective]?.[step]){draft.step=0;return render(focus);}
+  const body=screens[draft.objective][step]();
+  const hasNext=step<resultIndex();
+  const nextLabel=step===0?(draft.objective==='adaptation'?'Simular uma mudança':'Usar esta localização'):step===resultIndex()-1?(draft.objective==='planning'?'Ver meu planejamento':draft.objective==='discovery'?'Consultar opções':'Comparar alternativas'):'Continuar';
+  const {total,step:visibleStep}=progressFor(draft);
+  const backLabel=step===0?'← Início':draft.objective==='planning'&&savedPlanId?'Editar uma cópia':'← Voltar';
+  frame(`<div class="guide-progress"><span>Etapa ${visibleStep} de ${total}</span><progress value="${visibleStep}" max="${total}" aria-label="Progresso"></progress><span>${objectiveLabels[draft.objective]}</span></div>
+    ${draft.example?'<p class="guide-message warning">Exemplo de Vilhena · dados demonstrativos. O solo permanece desconhecido; o histórico NASA usa 2013–2024.</p>':''}
+    <span class="guide-kicker">${draft.objective==='discovery'?'OPÇÕES PARA SUA ÁREA':'SEU PLANEJAMENTO'}</span><h1 id="guide-title" tabindex="-1">${titles[draft.objective][step]}</h1>
+    ${notice?`<p class="guide-message" role="status">${esc(notice)}</p>`:''}<p id="guide-error" class="guide-message error guide-error" role="alert" tabindex="-1"></p><div id="guide-body">${body}</div>
+    <div class="guide-nav"><button type="button" id="guide-back">${backLabel}</button>${hasNext?`<div class="guide-action"><button type="button" class="primary" id="guide-next">${nextLabel}</button>${helpButton(step===0?(draft.objective==='adaptation'?'plan':'location'):step===1?'sequence':draft.objective==='adaptation'&&step===2?'changes':'review')}</div>`:'<button type="button" id="guide-home">Concluir e voltar ao início</button>'}</div>
+    <p id="guide-save-status" class="guide-small" role="status"></p>`,isResult());
+  bind();storageStatus();
+  if(isPlan()&&((draft.objective==='planning'&&step>=1)||draft.sourcePlanId))ensureCropCatalog();
+  const picker=document.getElementById('location-picker');
+  if(picker){locationCleanup=mountLocationPicker(picker,{value:draft.location,allowMunicipalityOnly:draft.objective==='discovery',onChange:value=>{draft.location=value;invalidate();save();}});}
   if(focus){document.getElementById('guide-title').focus({preventScroll:true});window.scrollTo({top:0,behavior:'instant'});}
 }
-function error(message){const e=document.getElementById('guide-error');if(e){e.textContent=message;e.focus();}}
+function error(message,fieldId){
+  const e=document.getElementById('guide-error');if(e){e.textContent=message;e.focus();}
+  const field=fieldId&&document.getElementById(fieldId);if(!field)return;
+  field.setAttribute('aria-invalid','true');
+  let detail=document.getElementById(`${fieldId}-error`);
+  if(!detail){detail=document.createElement('p');detail.id=`${fieldId}-error`;detail.className='field-error';field.insertAdjacentElement('afterend',detail);}
+  detail.textContent=message;field.setAttribute('aria-errormessage',detail.id);field.focus();
+}
+function fail(field,message){const e=Error(message);e.field=field;throw e;}
+function validatePlanFields(){
+  try{validDate(draft.date,'Data de plantio');}catch(e){fail('plant-date',e.message);}
+  for(const [index,stage] of draft.stages.entries()){
+    if(!stage.cropId&&!stage.zarcCropId)fail(`crop-${index}`,`Escolha a cultura do cultivo ${index+1}.`);
+    if(!stage.cropId||!stage.groupKey)fail(`cycle-${index}`,`Escolha o ciclo do cultivo ${index+1}. Consulte a ficha da cultivar se ainda não souber.`);
+  }
+  const interval=Number(draft.intervalDays);
+  if(String(draft.intervalDays??'').trim()===''||!Number.isInteger(interval)||interval<0||interval>36500)fail('interval','Informe um intervalo inteiro entre 0 e 36.500 dias. Inclua o tempo de secagem, colheita e preparo.');
+  validateCropSelections();
+  if(draft.objective==='planning')buildGuidedOriginalPlanning(draft,legacy);else buildGuidedPlanning(draft,legacy);
+}
 function validateStep(){
- if(draft.step===0&&!draft.location.confirmed)throw Error('Confirme a localização ou escolha consultar somente o município.');
- if(draft.step===0&&draft.objective==='adaptation'&&!locationKey(draft.location))throw Error('Para adaptar um plano, marque um ponto da propriedade pelo mapa, GPS ou coordenadas. A consulta só por município está disponível em Descobrir o que plantar.');
- if(draft.step===1){validDate(draft.date,'Data de plantio');if(draft.objective==='adaptation'){validateCropSelections();buildGuidedPlanning(draft,legacy);}}
- if(draft.objective==='adaptation'&&draft.step>=2){validateCropSelections();buildGuidedPlanning(draft,legacy);}
+  if(draft.step===0){
+    if(draft.objective==='adaptation'){
+      if(!draft.sourcePlanId)fail('existing-plan','Escolha um planejamento salvo para simular mudanças.');
+      if(!locationKey(draft.location))throw Error('Este plano não tem um ponto válido da propriedade. Confira a área no painel avançado.');
+    }else{
+      if(!draft.location.confirmed)throw Error(draft.objective==='discovery'?'Confirme a localização ou escolha consultar somente o município.':'Confirme o ponto da propriedade e o município antes de continuar.');
+      if(isPlan()&&!locationKey(draft.location))throw Error('Marque um ponto da propriedade pelo mapa, GPS ou coordenadas.');
+    }
+  }
+  if(draft.step>=1&&isPlan())validatePlanFields();
+  if(draft.step===1&&!isPlan()){try{validDate(draft.date,'Data de plantio');}catch(e){fail('plant-date',e.message);}}
+  if(draft.objective==='adaptation'&&draft.step>=2){const v=Number(draft.delayDays);if(String(draft.delayDays??'').trim()===''||!Number.isInteger(v)||v<0||v>36500)fail('delay','Informe quantos dias deseja simular, usando um número inteiro a partir de zero.');}
+}
+function prepareEdit(step){
+  navigationEpoch++;
+  const originalExists=legacy.planningConfig?.id===draft.planId||(legacy.customPlannings||[]).some(plan=>plan.id===draft.planId);
+  if(draft.objective==='planning'&&(savedPlanId||draft.savedPlanId||pendingPlanSave?.owner===draft||originalExists)){
+    draftRevision++;draft.planId=crypto.randomUUID();savedPlanId=null;delete draft.savedPlanId;
+    notice='Você está editando uma cópia. O planejamento salvo permanece guardado.';
+  }
+  if(!keepDiscoveryQuery(draft.objective,draft.step,step))stopQuery();
+  draft.step=step;save();render();
 }
 function onClick(id,handler){const element=document.getElementById(id);if(element)element.onclick=handler;}
+async function loadPlanForAdaptation(id,goToChanges=false){
+  const epoch=++navigationEpoch;
+  const choice=listPlanningChoices(legacy).find(p=>p.id===id);if(!choice){error('Este plano não está mais disponível. Volte ao início e escolha outro.');return;}
+  const previous=draft;await save();if(epoch!==navigationEpoch||draft!==previous)return;
+  if(goToChanges){
+    const previousAdaptation=(choice.isExample?demoDrafts:drafts).adaptation;
+    if(previousAdaptation?.sourcePlanId&&previousAdaptation.sourcePlanId!==id&&!confirm('Substituir o rascunho de adaptação anterior? Os planos salvos serão preservados.'))return;
+  }
+  draft={...fresh('adaptation'),...extractGuidedPlan(choice),objective:'adaptation',location:{...choice.property,confirmed:true},soilProfileId:choice.property?.soilProfileId||'',example:Boolean(choice.isExample),step:goToChanges?2:0};
+  draft.delayDays=goToChanges&&draft.example?12:0;draft.allowCycleChange=false;draft.allowCropChange=false;
+  if(goToChanges&&draft.example)notice='Experimente um atraso de 12 dias e marque a opção de testar ciclos mais curtos.';else notice='';
+  cropCatalogRequest++;cropCatalog={status:'idle'};invalidate();save();render();
+}
+async function persistPlan(alternative){
+  if(pendingPlanSave)return;
+  const owner=draft,selection=draft.selectedStrategyId,revision=draftRevision,id=alternative?'save-alternative':'save-plan';
+  pendingPlanSave={owner,revision};
+  const button=document.getElementById(id);if(button){button.disabled=true;button.textContent='Salvando…';}
+  try{
+    const strategy=simulation?.strategies.find(s=>s.strategyId===selection);
+    if(alternative&&!strategy)throw Error('Escolha uma alternativa antes de salvar.');
+    const saved=alternative?await saveGuidedAlternative(draft,property(),strategy):await saveGuidedPlan(draft,property());
+    try{legacy=await readLegacyState();}catch{
+      // The write already committed. Keep its returned snapshot usable even if refreshing the list fails.
+      const savedProperty=saved.guidedOrigin?.propertySnapshot;
+      legacy={...legacy,customPlannings:[...(legacy.customPlannings||[]).filter(p=>p.id!==saved.id),saved],...(savedProperty?{customProperties:[...(legacy.customProperties||[]).filter(p=>p.id!==savedProperty.id),savedProperty]}:{})};
+      if(draft===owner)notice='O plano foi salvo, mas não foi possível atualizar toda a lista deste dispositivo. Recarregue antes de escolher outro plano.';
+    }
+    if(draft===owner&&draftRevision===revision&&(!alternative||draft.selectedStrategyId===selection)){savedPlanId=saved.id;draft.savedPlanId=saved.id;await save();}
+  }catch(e){if(draft===owner){pendingPlanSave=null;render(false);error(`Não foi possível salvar: ${e.message}`);}return;}
+  finally{pendingPlanSave=null;}
+  if(draft===owner)render(false);
+}
 function bind(){
- document.getElementById('guide-back').onclick=()=>{notice='';if(!keepDiscoveryQuery(draft.objective,draft.step,draft.step-1))stopQuery();if(!draft.step){save();home();}else{draft.step--;save();render();}};
- onClick('guide-home',()=>{save();home();});
- onClick('guide-next',()=>{try{validateStep();notice='';draft.step++;save();render();if((draft.objective==='discovery'&&draft.step===3)||(draft.objective==='adaptation'&&draft.step===4))consult();}catch(e){error(e.message);}});
- app.querySelectorAll('[data-field]').forEach(el=>{el.oninput=()=>{const key=el.dataset.field;draft[key]=el.type==='checkbox'?el.checked:el.value;invalidate();save();};});
- app.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{stopQuery();draft.step=Number(b.dataset.edit);save();render();});
- app.querySelectorAll('[data-stage]').forEach(el=>el.onchange=()=>{
-  const s=draft.stages[Number(el.dataset.stage)];
-  if(el.dataset.key==='zarcCropId'){
-   if(el.value==='previous')return;
-   const culture=currentCropCatalog().value?.cultures.find(c=>c.id===el.value);
-   s.zarcCropId=culture?.id||'';s.zarcCropName=culture?.name||'';s.cropId='';s.groupKey='';delete s.managementCode;
-  }else if(el.dataset.key==='officialCycle'){const [cropId,groupKey]=el.value.split('::');s.cropId=cropId||'';s.groupKey=groupKey||'';const model=cultureForStage(s,currentCropCatalog().value?.cultures||[])?.models.find(m=>m.engineCropId===cropId);s.managementCode=model?.managementCodes?.length===1?model.managementCodes[0]:'';}else s[el.dataset.key]=el.value;
-  invalidate();save();render(false);document.getElementById(el.id)?.focus();
- });
- onClick('retry-crops',()=>ensureCropCatalog(true));
- app.querySelectorAll('[data-discover-from-plan]').forEach(button=>button.onclick=()=>{
-  const previous=draft;save();draft={...fresh('discovery'),location:structuredClone(previous.location),date:previous.date,soilCode:previous.soilCode,soilProfileId:previous.soilProfileId,example:previous.example,step:1};
-  notice='Seu planejamento ficou salvo. Confirme a data para consultar as opções oficiais.';invalidate();save();render();
- });
- app.querySelectorAll('[data-remove-stage]').forEach(b=>b.onclick=()=>{draft.stages.splice(Number(b.dataset.removeStage),1);invalidate();save();render(false);});
- onClick('add-stage',()=>{draft.stages.push({cropId:'',groupKey:''});invalidate();save();render(false);document.getElementById(`crop-${draft.stages.length-1}`)?.focus();});
- document.getElementById('existing-plan')?.addEventListener('change',e=>{const choice=listPlanningChoices(legacy).find(p=>p.id===e.target.value);if(choice){draft={...draft,...extractGuidedPlan(choice),location:{...(choice.property||fresh('adaptation').location),confirmed:false},soilProfileId:choice.property?.soilProfileId||'',example:Boolean(choice.isExample),step:0};}else draft=fresh('adaptation');invalidate();save();render(false);});
- app.querySelectorAll('[data-culture]').forEach(b=>b.onclick=()=>{draft.selectedCultureId=b.dataset.culture;draft.step=4;save();render();});
- app.querySelectorAll('[data-strategy]').forEach(b=>b.onclick=()=>{draft.selectedStrategyId=b.dataset.strategy;savedPlanId=null;save();render(false);document.getElementById(b.id)?.focus();});
- onClick('retry-sources',()=>{analysisCache.clear();if(draft.objective==='adaptation')ensureCropCatalog(true);consult();});
- onClick('save-summary',downloadSummary);
- onClick('save-alternative',async()=>{
-  const button=document.getElementById('save-alternative');button.disabled=true;
-  const savingDraft=draft, savingId=draft.selectedStrategyId;
-  try{const strategy=simulation?.strategies.find(s=>s.strategyId===draft.selectedStrategyId);if(!strategy)throw Error('Escolha uma alternativa antes de salvar.');const saved=await saveGuidedAlternative(draft,property(),strategy);legacy=await readLegacyState()||{};if(draft===savingDraft&&draft.selectedStrategyId===savingId){savedPlanId=saved.id;render(false);}}catch(e){if(draft===savingDraft){button.disabled=false;error(`Não foi possível salvar: ${e.message}`);}}
- });
+  onClick('guide-back',()=>{notice='';if(!draft.step){save();home();}else prepareEdit(draft.objective==='adaptation'&&draft.step===2?0:draft.step-1);});
+  onClick('guide-home',()=>{save();home();});
+  onClick('guide-next',()=>{try{validateStep();navigationEpoch++;notice='';draft.step=draft.objective==='adaptation'&&draft.step===0?2:draft.step+1;save();render();if(isResult())consult();}catch(e){error(e.message,e.field);}});
+  app.querySelectorAll('[data-field]').forEach(el=>{el.oninput=()=>{
+    const key=el.dataset.field;draft[key]=el.type==='checkbox'?el.checked:el.value;
+    el.removeAttribute('aria-invalid');el.removeAttribute('aria-errormessage');document.getElementById(`${el.id}-error`)?.remove();
+    invalidate();save();refreshPreview();
+  };});
+  app.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>prepareEdit(Number(b.dataset.edit)));
+  app.querySelectorAll('[data-stage]').forEach(el=>el.onchange=()=>{
+    const stage=draft.stages[Number(el.dataset.stage)];
+    if(el.dataset.key==='zarcCropId'){
+      if(el.value==='previous')return;
+      const culture=currentCropCatalog().value?.cultures.find(c=>c.id===el.value);
+      stage.zarcCropId=culture?.id||'';stage.zarcCropName=culture?.name||'';stage.cropId='';stage.groupKey='';delete stage.managementCode;
+    }else{
+      const [cropId,groupKey]=el.value.split('::');stage.cropId=cropId||'';stage.groupKey=groupKey||'';
+      const model=cultureForStage(stage,currentCropCatalog().value?.cultures||[])?.models.find(m=>m.engineCropId===cropId);
+      stage.managementCode=model?.managementCodes?.length===1?model.managementCodes[0]:'';
+    }
+    invalidate();save();render(false);document.getElementById(el.id)?.focus();
+  });
+  onClick('retry-crops',()=>ensureCropCatalog(true));
+  app.querySelectorAll('[data-discover-from-plan]').forEach(button=>button.onclick=async()=>{
+    const previous=draft,epoch=++navigationEpoch;await save();if(storageError||epoch!==navigationEpoch||draft!==previous)return;
+    const existing=(previous.example?demoDrafts:drafts).discovery;
+    if(existing&&!confirm('Substituir o rascunho da consulta de culturas? Seu planejamento será preservado.'))return;
+    draft={...fresh('discovery'),location:structuredClone(previous.location),date:previous.date,soilCode:previous.soilCode,soilProfileId:previous.soilProfileId,example:previous.example,step:1};
+    notice='Seu planejamento ficou salvo como rascunho. Confirme a data para consultar opções; depois você pode retomá-lo no início.';invalidate();save();render();
+  });
+  app.querySelectorAll('[data-remove-stage]').forEach(b=>b.onclick=()=>{draft.stages.splice(Number(b.dataset.removeStage),1);invalidate();save();render(false);});
+  onClick('add-stage',()=>{draft.stages.push({cropId:'',groupKey:''});invalidate();save();render(false);document.getElementById(`crop-${draft.stages.length-1}`)?.focus();});
+  document.getElementById('existing-plan')?.addEventListener('change',e=>{if(e.target.value)loadPlanForAdaptation(e.target.value);else{draft=fresh('adaptation');invalidate();save();render(false);}});
+  onClick('use-own-area',()=>{home();requestStart('planning');});
+  onClick('create-first-plan',()=>{home();requestStart('planning');});
+  app.querySelectorAll('[data-culture]').forEach(b=>b.onclick=()=>{draft.selectedCultureId=b.dataset.culture;draft.step=4;save();render();});
+  app.querySelectorAll('[data-strategy]').forEach(b=>b.onclick=()=>{draftRevision++;draft.selectedStrategyId=b.dataset.strategy;savedPlanId=null;delete draft.savedPlanId;save();render(false);document.getElementById(b.id)?.focus();});
+  onClick('retry-sources',()=>{(draft.example?demoAnalysisCache:analysisCache).clear();if(isPlan())ensureCropCatalog(true);consult();});
+  onClick('save-summary',downloadSummary);
+  onClick('save-plan',()=>persistPlan(false));onClick('save-alternative',()=>persistPlan(true));
+  onClick('simulate-delay',()=>loadPlanForAdaptation(savedPlanId,true));
 }
 function updateResults(){
- if(!draft)return;
- // Keep focused elements, open help and expanded conditions intact while sources finish.
- if(draft.objective==='adaptation'&&draft.step===4&&sources.nasa.status!=='loading'&&currentCropCatalog().status==='ready'){
-   try{validateCropSelections();simulation=simulateGuidedPlanning(draft,property(),legacy,{dataset:sources.nasa.value?.dataset||null,officialZarc:currentCropCatalog().value.queryContext,soilCode:draft.soilCode,management:draft.management});}catch(e){error(`${e.message} Volte para editar o plantio.`);return;}
- }
- const body=document.getElementById('guide-body');
- if(body&&((draft.objective==='discovery'&&draft.step>=3)||(draft.objective==='adaptation'&&draft.step===4))){
-   const focused=document.activeElement,focusId=focused?.id;
-   const opened=new Set([...body.querySelectorAll('details[data-condition][open]')].map(d=>d.dataset.condition));
-   body.innerHTML=draft.objective==='discovery'?(draft.step===3?resultStep():cultureSummary()):adaptationResults();
-   body.querySelectorAll('details[data-condition]').forEach(d=>{d.open=opened.has(d.dataset.condition);});bind();
-   if(focusId)document.getElementById(focusId)?.focus({preventScroll:true});
- }
+  if(!draft||!isResult())return;
+  if(isPlan()&&currentCropCatalog().status==='ready'&&(draft.objective==='planning'||sources.nasa.status!=='loading')){
+    try{
+      validateCropSelections();
+      const context={dataset:sources.nasa.value?.dataset||{metadata:{location:{latitude:draft.location.latitude,longitude:draft.location.longitude}},daily:{}},officialZarc:currentCropCatalog().value.queryContext,soilCode:draft.soilCode,management:draft.management};
+      simulation=(draft.objective==='planning'?simulateGuidedOriginalPlanning:simulateGuidedPlanning)(draft,property(),legacy,context);
+    }catch(e){error(`${e.message} Volte para editar o plantio.`);return;}
+  }
+  const body=document.getElementById('guide-body');
+  if(body){
+    const focusId=document.activeElement?.id;
+    const opened=new Set([...body.querySelectorAll('details[data-condition][open]')].map(d=>d.dataset.condition));
+    body.innerHTML=draft.objective==='planning'?planningResults():draft.objective==='discovery'?(draft.step===3?resultStep():cultureSummary()):adaptationResults();
+    body.querySelectorAll('details[data-condition]').forEach(d=>{d.open=opened.has(d.dataset.condition);});bind();
+    if(focusId)document.getElementById(focusId)?.focus({preventScroll:true});
+  }
 }
 function consult(){
- stopQuery();sources=emptySources();simulation=null;savedPlanId=null;sourceReady=false;
- try{query=queryGuidedSources(draft,(key,value)=>{sources[key]=value;if(sourceReady)updateResults();},{},analysisCache);sourceReady=true;updateResults();}catch(e){error(e.message);}
+  stopQuery();sources=emptySources();simulation=null;sourceReady=false;
+  try{query=queryGuidedSources(draft,(key,value)=>{sources[key]=value;if(sourceReady)updateResults();},draft.example?DEMO_SOURCE_DEPENDENCIES:{},draft.example?demoAnalysisCache:analysisCache);sourceReady=true;updateResults();}catch(e){error(e.message);}
 }
 function summaryHTML(){
- const c=selectedCulture(),z=sources.zarc.value,s=simulation?.strategies.find(v=>v.strategyId===draft.selectedStrategyId);
- const content=draft.objective==='discovery'&&c?`<h2>${esc(c.name)}</h2><p>Riscos publicados: ${c.risks.map(v=>`${v}%`).join(' / ')}. Não representam chance de sucesso.</p>${conditionList(c)}<p>Safra ${esc(z.season)}. Atualização da fonte: ${esc(z.sourceUpdated)}. Consulta: ${esc(z.queriedAt)}.</p><p><a href="${RISK_SOURCE}">MAPA / ZARC — Tábua de Risco</a></p>`:s?`<h2>${esc(s.title)}</h2><p>${esc(s.changedDescriptions.join(' ')||'Plano com atraso, sem adaptação.')}</p>${officialIntervalNote(s.stages)}<ol>${s.stages.map(st=>`<li>${esc(st.shortCropName)} · ${st.cycleDays} dias · Plantio: ${formatBRDate(st.sowDate)} · ${cycleEndLabel(st)}: ${formatBRDate(st.harvestDate)}${officialStageDetails(st)}</li>`).join('')}</ol><p>${esc(simulation.noBetterAlternativeMessage||'Compare as condições e confirme a adequação local.')}</p><p>Motor: ${esc(simulation.engineVersion)}. Histórico: ${esc(simulation.climatePeriod)}. ${s.assessment.incomplete?'Avaliação incompleta.':''}</p>`:'';
+ const c=selectedCulture(),z=sources.zarc.value,s=simulation?.strategies.find(v=>v.strategyId===(draft.objective==='planning'?'PLANO_ATUAL':draft.selectedStrategyId));
+ const content=draft.objective==='discovery'&&c?`<h2>${esc(c.name)}</h2><p>Riscos publicados: ${c.risks.map(v=>`${v}%`).join(' / ')}. Não representam chance de sucesso.</p>${conditionList(c)}<p>Safra ${esc(z.season)}. Atualização da fonte: ${esc(z.sourceUpdated)}. Consulta: ${esc(z.queriedAt)}.</p><p><a href="${RISK_SOURCE}">MAPA / ZARC — Tábua de Risco</a></p>`:s?`<h2>${esc(s.title)}</h2><p>${esc(s.changedDescriptions.join(' ')||(draft.objective==='planning'?'Planejamento original, sem atraso.':'Plano com atraso, sem adaptação.'))}</p>${officialIntervalNote(s.stages)}<ol>${s.stages.map(st=>`<li>${esc(st.shortCropName)} · ${st.cycleDays} dias · Plantio: ${formatBRDate(st.sowDate)} · ${cycleEndLabel(st)}: ${formatBRDate(st.harvestDate)}${officialStageDetails(st)}</li>`).join('')}</ol><p>${esc(simulation.noBetterAlternativeMessage||'Compare as condições e confirme a adequação local.')}</p><p>Motor: ${esc(simulation.engineVersion)}. Histórico: ${esc(simulation.climatePeriod)}. ${s.assessment.incomplete?'Avaliação incompleta.':''}</p>`:'';
  return `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Resumo · Rota Adaptada</title><style>body{font:16px/1.6 system-ui;color:#172a31;max-width:850px;margin:40px auto;padding:24px}h1,h2{line-height:1.2}dt{font-weight:bold}dd{margin:0 0 12px}li{margin:8px 0}details{display:block}summary{font-weight:bold}@media print{body{margin:0}}</style><h1>Rota Adaptada · Resumo${draft.example?' de demonstração':''}</h1><p>Emitido em ${new Date().toLocaleString('pt-BR')}. Use Imprimir no navegador para salvar em PDF.</p>${overview()}${content}${climatePanel()}<h2>Condições e limites</h2><p>Solo ZARC: ${esc(SOILS[draft.soilCode]||'não confirmado')}. Solo da simulação: ${esc(rulesPackage.soil_profiles[draft.soilProfileId]?.name||'não confirmado')}. Irrigação: ${draft.management==='1'?'depende da chuva':draft.management==='2'?'informada':'não informada'}.</p><p>Histórico não é previsão; esta consulta não garante produtividade, crédito ou seguro. Confirme solo, grupo de cultivar, manejo e adequação local com assistência técnica. NASA POWER é complementar às indicações oficiais do ZARC.</p><p>Fontes: <a href="https://power.larc.nasa.gov/">NASA POWER</a>; <a href="https://soilgrids.org/">ISRIC SoilGrids</a>. A estimativa de solo por mapa não confirma a classe ZARC.</p><footer>Equipe Interplários · NASA Space Apps</footer></html>`;
 }
 function downloadSummary(){const html=summaryHTML().replaceAll('<details','<details open').replace(/<button[\s\S]*?<\/button>/g,'');const url=URL.createObjectURL(new Blob([html],{type:'text/html;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='rota-adaptada-resumo.html';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 async function init(){
- mountContextHelp();
- try{[drafts,legacy]=await Promise.all([readDrafts(),readLegacyState()]);drafts||={};legacy||={};registerCustomCropsInCatalog(legacy.customCrops||[],legacy.customCycles||[]);listPlanningChoices(legacy);}catch{storageError='O armazenamento deste navegador está indisponível. Você pode usar o aplicativo, mas o progresso pode não ser salvo.';}
- if(new URLSearchParams(location.search).get('modo')==='campo'){if(drafts.discovery){draft=structuredClone(drafts.discovery);if(draft.step>=3)draft.step=2;render();}else start('discovery');}else home();
+  mountContextHelp();
+  try{[drafts,demoDrafts,legacy]=await Promise.all([readDrafts(),readDrafts({example:true}),readLegacyState()]);drafts||={};demoDrafts||={};legacy||={};registerCustomCropsInCatalog(legacy.customCrops||[],legacy.customCycles||[]);listPlanningChoices(legacy);}catch{storageError='O armazenamento deste navegador está indisponível. Você pode usar o aplicativo, mas o progresso pode não ser salvo.';}
+  const params=new URLSearchParams(location.search);
+  if(params.get('demo')==='planejamento'||params.get('demo')==='adaptacao'){home();requestStart('planning',true);}
+  else if(params.get('modo')==='campo'){if(drafts.discovery)resume(drafts.discovery);else start('discovery');}
+  else home();
 }
 await init();

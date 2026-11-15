@@ -4,3 +4,29 @@
 @media print{.guide-header,.guide-nav,.guide-footer,.help-button,.pwa-update{display:none}body{background:white!important;color:#142130!important}.guide-main{max-width:none}.guide-card{break-inside:avoid}}
 
 .help-label{display:flex;align-items:center;justify-content:space-between;gap:10px}.help-label label{flex:1}.guide-main .hint{font-size:13px;line-height:1.5;color:var(--muted)}
+
+/* The calendar and its actions lead; evidence stays close to the dates. */
+.guide-main{font-size:16px}.guide-choice.featured{border-color:var(--leaf);background:linear-gradient(135deg,#1b3542,#142536)}
+.guide-main :focus-visible{outline:3px solid var(--leaf);outline-offset:4px}
+.guide-main button.primary{background:var(--leaf);color:#102018;border-color:var(--leaf)}
+.guide-main summary{min-height:44px;display:flex;align-items:center}
+.resume-heading,.section-heading{margin-top:32px!important}.review-changes{border-top:1px solid var(--line);margin-top:24px;padding-top:8px}
+.guide-button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;border:1px solid var(--line);border-radius:10px;padding:11px 18px;text-decoration:none;background:var(--paper-soft);font-weight:650}
+.guide-timeline{list-style:none;padding:0!important;margin:24px 0;display:grid;gap:24px;color:var(--ink)!important}
+.guide-timeline li{display:grid;grid-template-columns:34px minmax(0,1fr);gap:14px;position:relative}
+.timeline-order{display:flex;width:30px;height:30px;border:1px solid var(--leaf);border-radius:50%;align-items:center;justify-content:center;color:var(--leaf);font-weight:700;font-size:14px}
+.guide-timeline li:not(:last-child):before{content:"";position:absolute;left:14px;top:38px;bottom:-16px;width:1px;background:var(--line)}
+.guide-timeline p{font-size:14px;color:var(--muted);margin:6px 0 12px}
+.timeline-dates{display:flex;gap:12px 28px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.timeline-dates strong{display:block;font-size:17px;color:var(--ink);margin-top:3px}
+.guide-climate-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:22px}
+.guide-climate-grid h3{font-size:16px}.climate-evidence{margin:12px 0 18px;border-left:3px solid #79c2df;padding-left:14px}
+.climate-evidence span,.climate-evidence small{display:block;font-size:13px;color:var(--muted);line-height:1.5}
+.climate-evidence>strong{font-size:27px;display:block;margin-top:8px}.climate-evidence p{font-size:14px;margin:5px 0 10px}
+.calendar-difference{background:#1c342c;padding:16px;border-radius:10px}.calendar-difference strong{display:block;font-size:25px;color:var(--leaf)}
+.result-actions{margin:24px 0}.guide-result-grid .guide-card h2{font-size:22px}.guide-result-grid .guide-climate-grid{grid-template-columns:1fr}
+.field-error{color:var(--danger-ink);font-size:15px;margin:8px 0}.guide-main [aria-invalid=true]{border:2px solid var(--danger-ink)!important}
+.comparison-overview table{width:100%;border-collapse:collapse;margin:20px 0;text-align:left;table-layout:fixed}.comparison-overview th,.comparison-overview td{padding:15px 10px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}.comparison-overview thead th{font-size:13px;color:var(--muted);font-weight:500}.comparison-overview tbody th{font-size:15px;font-weight:600}.comparison-overview td strong{display:block;font-size:21px;color:var(--mint)}.comparison-overview td span{display:block;font-size:13px;line-height:1.5;color:var(--muted);margin-top:5px}.stage-condition{line-height:1.5}
+.guide-links a,.guide-links button{max-width:100%}.guide-main details section{margin:20px 0}.guide-main details h3{font-size:18px}
+@media(max-width:600px){.guide-progress{flex-wrap:wrap}.guide-progress>span:last-child{flex-basis:100%}.guide-nav{position:relative;gap:8px}.guide-nav>.guide-action{flex:1}.guide-nav button{font-size:15px}.guide-result-grid .guide-card{padding:18px}.guide-climate-grid{grid-template-columns:1fr}.guide-links{gap:12px}.guide-links .primary{width:100%}.guide-main details{padding:12px}.guide-timeline{gap:26px}.guide-intro{font-size:17px}}
+@media(max-width:600px){.comparison-overview thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}.comparison-overview table,.comparison-overview tbody{display:block}.comparison-overview tr{display:grid;grid-template-columns:1fr 1fr;margin-top:16px;padding-bottom:16px;border-bottom:1px solid var(--line)}.comparison-overview tbody th{grid-column:1/-1;padding:4px 0 12px;border:0}.comparison-overview td{border:0;padding:5px 12px 0 0}.comparison-overview td:first-of-type:before{content:"Plantio e duração";font-size:12px;color:var(--muted)}.comparison-overview td:last-of-type:before{content:"Chuva média histórica";font-size:12px;color:var(--muted)}.comparison-overview td strong{margin-top:6px}}

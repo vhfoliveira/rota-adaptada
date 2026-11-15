@@ -7,9 +7,10 @@ const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;'
 let pickerNumber=0;
 
 /** All external work belongs to this mount; cleanup invalidates requests and GPS callbacks. */
-export function mountLocationPicker(container, {value={}, onChange=()=>{}, onStatus=()=>{}}={}) {
+export function mountLocationPicker(container, {value={}, onChange=()=>{}, onStatus=()=>{}, allowMunicipalityOnly=true}={}) {
   const id=`guided-location-${++pickerNumber}`;
   let state=initialLocationDraft(value);
+  if(!allowMunicipalityOnly&&!parseLocationPoint(state.latitude,state.longitude))state.confirmed=false;
   let alive=true, options=[], map=null, marker=null, maplibre=null, geoAbort=null, mapRequest=0, inputRevision=0, gpsPending=false, mapOpening=false, pointCityCode=state.municipalityCode;
   const active=()=>alive&&container.isConnected;
   const point=()=>parseLocationPoint(state.latitude,state.longitude);
@@ -17,7 +18,7 @@ export function mountLocationPicker(container, {value={}, onChange=()=>{}, onSta
   const status=(message)=>{if(!active())return;container.querySelector('[data-location-status]').textContent=message;onStatus(message);};
   container.innerHTML=`
     <div class="location-actions"><button type="button" data-location-gps>Usar minha localização</button>${helpButton('location')}</div>
-    <p class="hint">Use o GPS na propriedade. Ele marca um ponto, não seus limites.</p>
+    <p class="hint">Use o GPS na propriedade. Ele marca um ponto, não seus limites.${allowMunicipalityOnly?'':' Para montar o planejamento, precisamos desse ponto para consultar o histórico climático da área. Se você estiver em outro lugar, escolha a propriedade no mapa.'}</p>
     <div class="help-label"><label for="${id}-city">Município / UF</label>${helpButton('map')}</div>
     <input id="${id}-city" data-location-city list="${id}-cities" placeholder="Digite e escolha: Vilhena / RO" autocomplete="off" value="${escapeHTML(state.municipalityQuery)}">
     <datalist id="${id}-cities"></datalist>
@@ -34,8 +35,8 @@ export function mountLocationPicker(container, {value={}, onChange=()=>{}, onSta
     </details>
     <p class="location-point" data-location-point></p>
     <p class="location-status" data-location-status role="status" aria-live="polite">Carregando municípios…</p>
-    <div class="location-confirm"><button type="button" data-location-confirm disabled>Confirmar ponto e município</button><button type="button" data-location-city-only disabled>Usar só o município</button></div>
-    <p class="hint">Só município: sem análise de clima e solo do ponto.</p>
+    <div class="location-confirm"><button type="button" data-location-confirm disabled>Confirmar ponto e município</button>${allowMunicipalityOnly?'<button type="button" data-location-city-only disabled>Usar só o município</button>':''}</div>
+    ${allowMunicipalityOnly?'<p class="hint">Só município: sem análise de clima e solo do ponto.</p>':''}
     <p class="hint">O ponto será enviado às fontes de clima, solo e localização. ${helpButton('privacy')}</p>`;
   const find=selector=>container.querySelector(selector);
   const cityInput=find('[data-location-city]');
@@ -44,7 +45,7 @@ export function mountLocationPicker(container, {value={}, onChange=()=>{}, onSta
     if(!active())return;
     const p=point(),city=cityValue();
     find('[data-location-confirm]').disabled=!city||!p;
-    find('[data-location-city-only]').disabled=!city;
+    if(allowMunicipalityOnly)find('[data-location-city-only]').disabled=!city;
     find('[data-location-map-open]').disabled=!city||mapOpening;
     find('[data-location-gps]').disabled=gpsPending;
     find('[data-location-point]').textContent=p?`Ponto ${state.confirmed?'confirmado':'selecionado'}: ${p.latitude.toFixed(6)}, ${p.longitude.toFixed(6)}${city?` · ${city.label}`:''}.`:(state.confirmed&&city?`Consulta municipal confirmada: ${city.label}.`:'Nenhum ponto de propriedade confirmado.');
@@ -87,7 +88,7 @@ export function mountLocationPicker(container, {value={}, onChange=()=>{}, onSta
       status('Mapa aberto. Marque o ponto da propriedade e confirme abaixo.');
     } catch {
       if(!active()||request!==mapRequest||city.code!==state.municipalityCode)return;
-      status('Não foi possível enquadrar o município. Você pode navegar pelo mapa, usar GPS, informar coordenadas ou consultar só o município.');
+      status(`Não foi possível enquadrar o município. Você pode navegar pelo mapa, usar GPS ou informar coordenadas.${allowMunicipalityOnly?' Também pode consultar só o município.':''}`);
     } finally {clearTimeout(timer);}
   }
   function chooseCity() {
@@ -103,7 +104,7 @@ export function mountLocationPicker(container, {value={}, onChange=()=>{}, onSta
       find('[data-location-lat]').value='';find('[data-location-lon]').value='';
     }
     pointCityCode=selected.code;
-    sync();emit();status('Município selecionado. Marque sua propriedade no mapa ou consulte apenas o município.');
+    sync();emit();status(allowMunicipalityOnly?'Município selecionado. Marque sua propriedade no mapa ou consulte apenas o município.':'Município selecionado. Marque a propriedade no mapa, use o GPS na área ou informe suas coordenadas.');
     if(map)frameMunicipality();
   }
   cityInput.addEventListener('input',chooseCity);
@@ -142,10 +143,10 @@ export function mountLocationPicker(container, {value={}, onChange=()=>{}, onSta
       map.addControl(new maplibre.NavigationControl(),'top-right');
       map.getCanvas().setAttribute('aria-label','Mapa: use as setas para mover e os controles para aproximar. Depois escolha Usar o centro do mapa.');
       map.on('click',event=>setPoint({latitude:event.lngLat.lat,longitude:event.lngLat.lng},'map'));
-      map.on('error',()=>{if(active())status('Parte do mapa não carregou. Tente novamente ou use GPS, coordenadas ou consulta municipal.');});
+      map.on('error',()=>{if(active())status(`Parte do mapa não carregou. Tente novamente ou use GPS ou coordenadas.${allowMunicipalityOnly?' Você também pode consultar só o município.':''}`);});
       const p=point();if(p){marker=new maplibre.Marker({color:'#b5ed64'}).setLngLat([p.longitude,p.latitude]).addTo(map);}
       frameMunicipality();
-    } catch {if(active()){map?.remove();map=null;find('[data-location-map-area]').hidden=true;status('O mapa não pôde ser aberto. Use GPS, coordenadas ou a consulta municipal.');}}
+    } catch {if(active()){map?.remove();map=null;find('[data-location-map-area]').hidden=true;status(`O mapa não pôde ser aberto. Use GPS ou coordenadas.${allowMunicipalityOnly?' Você também pode consultar só o município.':''}`);}}
     finally {mapOpening=false;if(active())sync();}
   };
   find('[data-location-map-center]').onclick=()=>{if(map){const center=map.getCenter();setPoint({latitude:center.lat,longitude:center.lng},'map');}};
@@ -156,7 +157,7 @@ export function mountLocationPicker(container, {value={}, onChange=()=>{}, onSta
   };
   for(const input of [find('[data-location-lat]'),find('[data-location-lon]')])input.addEventListener('input',()=>{inputRevision++;state=manualLocationDraft(state,find('[data-location-lat]').value,find('[data-location-lon]').value);marker?.remove();marker=null;sync();emit();});
   find('[data-location-confirm]').onclick=()=>{if(!cityValue()||!point())return;inputRevision++;state.confirmed=true;sync();emit();status('Ponto e município confirmados. Você pode continuar.');};
-  find('[data-location-city-only]').onclick=()=>{if(!cityValue())return;inputRevision++;state={...state,latitude:null,longitude:null,manualLatitude:'',manualLongitude:'',source:'municipality',confirmed:true};marker?.remove();marker=null;find('[data-location-lat]').value='';find('[data-location-lon]').value='';sync();emit();status('Consulta municipal confirmada. Não serão calculados clima ou solo para um ponto da propriedade.');};
+  if(allowMunicipalityOnly)find('[data-location-city-only]').onclick=()=>{if(!cityValue())return;inputRevision++;state={...state,latitude:null,longitude:null,manualLatitude:'',manualLongitude:'',source:'municipality',confirmed:true};marker?.remove();marker=null;find('[data-location-lat]').value='';find('[data-location-lon]').value='';sync();emit();status('Consulta municipal confirmada. Não serão calculados clima ou solo para um ponto da propriedade.');};
   sync();loadMunicipalities();
   return ()=>{alive=false;inputRevision++;mapRequest++;geoAbort?.abort();marker?.remove();map?.remove();map=null;};
 }

@@ -28,6 +28,7 @@ import {
 } from './vilhena-engine.js';
 import { generateVilhenaReportHTML } from './vilhena-report.js';
 import { read, write } from './db.js';
+import { activateSavedPlanning } from './planning-activation.js';
 
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
@@ -46,8 +47,10 @@ const climateLabel = () => periodLabel(getActiveNasaDataset(appState.propertyPro
 
 const blankProperty = () => ({id:'',propertyName:'',municipality:'',state:'',latitude:'',longitude:'',soilProfileId:'',soilEvidence:{}});
 const blankPlanning = () => ({id:'',propertyId:'',planningName:'',baseSowingDate:'',delayDays:0,operationalIntervalDays:7,successionStages:[]});
-const availableProperties = () => [...(appState.demoEnabled ? [DEFAULT_PROP] : []), ...(appState.customProperties || [])];
-const availablePlannings = () => [...(appState.demoEnabled ? [DEFAULT_PLAN] : []), ...(appState.customPlannings || [])];
+const uniqueItems = items => [...new Map(items.filter(item=>item?.id).map(item=>[item.id,item])).values()];
+const availableProperties = () => uniqueItems([...(appState.demoEnabled ? [DEFAULT_PROP] : []), ...(appState.customProperties || []), appState.propertyProfile]);
+const availablePlannings = () => uniqueItems([...(appState.demoEnabled ? [DEFAULT_PLAN] : []), ...(appState.customPlannings || []), appState.planningConfig]);
+const isExamplePlanning = () => Boolean(appState.planningConfig.isExample || appState.propertyProfile.example || appState.propertyProfile.id === DEFAULT_PROP.id);
 
 let appState = {
   version: 8,
@@ -117,8 +120,7 @@ function createBlankPlanningStages() {
   return Array.from({length:2}, (_,i) => ({cropId:'',groupKey:'',cultivarName:'',plannedSowDate:null,allowCropChange:i>0,allowCycleChange:true}));
 }
 function suggestionStages() {
-  return newPlanningFormState.stages.every(s => s.cropId && s.groupKey)
-    ? newPlanningFormState.stages : getPlanningStagesList(appState.planningConfig);
+  return newPlanningFormState.stages;
 }
 
 let newPlanningFormState = {
@@ -136,6 +138,24 @@ let newPlanningFormState = {
 
 let simResult = null;
 let dbReady = false;
+let storageError = '';
+let storagePending = 0;
+let stateSaveChain = Promise.resolve(true);
+let planningNotice = '';
+let lastSaveSucceeded = false;
+const dirtyEditors = new Set();
+const editorsOpen = () => newPropertyFormState.open || newCropFormState.open || newCycleFormState.open || newPlanningFormState.open;
+document.addEventListener('input', event => {
+  const target = event.target;
+  const id = target.id || '';
+  if (id.startsWith('np-')) dirtyEditors.add('property');
+  else if (id.startsWith('nc-')) dirtyEditors.add('crop');
+  else if (id.startsWith('ncycle-')) dirtyEditors.add('cycle');
+  else if (id.startsWith('nplan-') || target.matches?.('[data-nplan-stage-crop],[data-nplan-stage-group],[data-stage-field]')) dirtyEditors.add('planning');
+}, true);
+document.addEventListener('click', event => {
+  if (event.target.closest?.('[data-nplan-preset],[data-nplan-move-up],[data-nplan-move-down],[data-nplan-remove-stage],#btn-nplan-add-stage')) dirtyEditors.add('planning');
+}, true);
 // Municipal source responses belong to this session, never to persisted plans.
 const officialZarcCache = new Map();
 let officialZarcState = {key:'',status:'idle'};
@@ -145,7 +165,7 @@ const officialZarcKey = property => JSON.stringify([
   String(property?.municipalityCode||''),
   String(property?.municipality||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase()
 ]);
-const needsOfficialZarc = () => getPlanningStagesList(appState.planningConfig).some(isOfficialStage);
+const needsOfficialZarc = () => Boolean(appState.planningConfig.id) && getPlanningStagesList(appState.planningConfig).some(isOfficialStage);
 
 function ensureOfficialZarc(force=false) {
   if(!needsOfficialZarc()){
@@ -239,13 +259,37 @@ function recomputeSimulation() {
   }
 }
 
-async function persistState() {
-  if (!dbReady) return;
-  try {
-    await write(appState);
-  } catch {
-    // Ignore IndexedDB quota/private mode errors
-  }
+function renderStorageStatus() {
+  const status = $('#advanced-storage');
+  if (!status) return;
+  status.innerHTML = storageError
+    ? `<p>${esc(storageError)}</p><button type="button" id="retry-advanced-save">Tentar salvar novamente</button>`
+    : `<p>${storagePending ? 'Salvando alterações neste dispositivo…' : lastSaveSucceeded ? 'Alterações confirmadas salvas neste dispositivo.' : 'Seus planejamentos ficam somente neste navegador e dispositivo.'}</p>`;
+  status.className = storageError ? 'notice error' : 'notice';
+  const retry = $('#retry-advanced-save');
+  if (retry) retry.onclick = async () => { retry.disabled = true; await persistState(); };
+}
+
+function persistState() {
+  const snapshot = structuredClone(appState);
+  storagePending++;
+  renderStorageStatus();
+  stateSaveChain = stateSaveChain.catch(()=>false).then(async () => {
+    try {
+      if (!dbReady) throw Error('Armazenamento indisponível');
+      await write(snapshot);
+      storageError = '';
+      lastSaveSucceeded = true;
+      return true;
+    } catch {
+      storageError = 'Não foi possível salvar neste dispositivo. Seus dados permanecem nesta aba. Tente novamente ou baixe uma cópia antes de sair.';
+      return false;
+    } finally {
+      storagePending--;
+      renderStorageStatus();
+    }
+  });
+  return stateSaveChain;
 }
 
 function toast(msg) {
@@ -308,8 +352,8 @@ function suggestionInputKey() {
     date: newPlanningFormState.baseSowingDate,
     interval: newPlanningFormState.operationalIntervalDays,
     stages: newPlanningFormState.stages,
-    delay: appState.planningConfig.delayDays,
-    decisions: appState.planningConfig.preservedDecisions,
+    delay: 0,
+    decisions: defaultPlanningConfig().preservedDecisions,
     crops: appState.customCrops,
     cycles: appState.customCycles
   });
@@ -547,8 +591,8 @@ function renderShell() {
       </a>
 
       <div class="header-context-strip">
-        <a class="context-chip" href="./">← Experiência guiada</a>
-        ${p.id === DEFAULT_PROP.id ? '<span class="context-chip accent">Demonstração · Vilhena/RO</span>' : ''}
+        <a class="context-chip" href="./" id="advanced-guide-link">← Voltar ao guia</a>
+        ${isExamplePlanning() ? '<span class="context-chip accent">Demonstração · dados de exemplo</span>' : ''}
         <span class="context-chip">
           📍 <strong>${esc(p.propertyName)}</strong> (${esc(p.municipality)}/${esc(p.state)} · ${esc(
     soilFriendly.shortTitle
@@ -576,6 +620,10 @@ function renderShell() {
     </header>
 
     ${missionBanner()}
+    <section id="advanced-storage" role="status" aria-live="polite" class="notice"></section>
+    ${dirtyEditors.size ? '<p class="notice">Há campos de cadastro ainda não confirmados. Use o botão de salvar do cadastro antes de sair.</p>' : ''}
+    ${planningNotice ? `<section class="notice" role="status"><p>${esc(planningNotice)}</p></section>` : ''}
+    ${appState.planningConfig.guidedOrigin ? `<section class="notice"><strong>${esc(appState.planningConfig.planningName || 'Seu planejamento salvo')}</strong><p>${appState.planningConfig.guidedOrigin.sourcePlanId ? 'As datas deste plano já incluem a adaptação que você salvou.' : 'Este é o planejamento que você criou no guia.'} Atraso adicional em simulação: ${esc(appState.planningConfig.delayDays ?? 0)} dias. Use as abas para consultar os detalhes ou volte ao guia.</p></section>` : ''}
     <nav class="screen-tabs" role="tablist" aria-label="Cinco passos do fluxo de decisão">
       ${TABS.map(
         t => `
@@ -613,12 +661,14 @@ function renderShell() {
 
   bindShellEvents();
   renderActiveScreen();
+  renderStorageStatus();
 }
 
 function updateAndRender() {
   recomputeSimulation();
-  persistState();
+  const saving = persistState();
   renderShell();
+  return saving;
 }
 
 /**
@@ -922,10 +972,8 @@ function renderNewCycleFormPanel(availableCrops) {
 function renderSystemSuggestedPlansPanel(allProps) {
   if (!newPlanningFormState.showSuggestions) return '';
 
-  const targetProp =
-    allProps.find(pr => pr.id === newPlanningFormState.propertyId) ||
-    appState.propertyProfile ||
-    DEFAULT_PROP;
+  const targetProp = allProps.find(pr => pr.id === newPlanningFormState.propertyId);
+  if (!targetProp) return '<section class="notice">Escolha a propriedade deste planejamento antes de comparar opções.</section>';
   const targetSoil = SOIL_FRIENDLY[targetProp.soilProfileId] || UNKNOWN_SOIL_LABEL;
 
   if (newPlanningFormState.loadingSuggestions) {
@@ -965,10 +1013,10 @@ function renderSystemSuggestedPlansPanel(allProps) {
       suggestedData = generateSystemSuggestedPlannings({
         propertyProfile: targetProp,
         successionStages: suggestionStages(),
-        preservedDecisions: appState.planningConfig.preservedDecisions,
+        preservedDecisions: defaultPlanningConfig().preservedDecisions,
         baseSowingDate: newPlanningFormState.baseSowingDate,
         operationalIntervalDays: Number(newPlanningFormState.operationalIntervalDays),
-        delayDays: appState.planningConfig.delayDays ?? 0,
+        delayDays: 0,
         customCrops: appState.customCrops || [],
         customCycles: appState.customCycles || []
       });
@@ -1649,7 +1697,7 @@ function renderScreen3Planning() {
         ${allPlannings
           .map(plan => {
             const isPlanActive = plan.id === cfg.id;
-            const linkedProp = allProps.find(pr => pr.id === plan.propertyId) || DEFAULT_PROP;
+            const linkedProp = allProps.find(pr => pr.id === plan.propertyId) || (plan.guidedOrigin?.propertySnapshot?.id === plan.propertyId ? plan.guidedOrigin.propertySnapshot : {propertyName:'Propriedade não encontrada',municipality:'—',state:'—',soilProfileId:''});
             const linkedSoil = SOIL_FRIENDLY[linkedProp.soilProfileId] || UNKNOWN_SOIL_LABEL;
             const stagesList = getPlanningStagesList(plan);
             const resolvedPlanStages = resolveSuccessionSchedule(
@@ -2462,6 +2510,10 @@ function showNasaModal() {
 }
 
 function bindShellEvents() {
+  $('#advanced-guide-link').onclick = async event => {
+    event.preventDefault();
+    if (await persistState()) location.assign('./');
+  };
   $('#brand-home').onclick = e => {
     e.preventDefault();
     appState.activeTab = 0;
@@ -2595,6 +2647,7 @@ function bindScreenEvents() {
       navigator.geolocation.getCurrentPosition(
         pos => {
           if (request !== propertyLookupRequest || !newPropertyFormState.open) return;
+          dirtyEditors.add('property');
           newPropertyFormState.latitude = pos.coords.latitude.toFixed(4);
           newPropertyFormState.longitude = pos.coords.longitude.toFixed(4);
           renderActiveScreen();
@@ -2657,7 +2710,7 @@ function bindScreenEvents() {
 
   const btnSaveNewProp = $('#btn-save-activate-new-prop');
   if (btnSaveNewProp) {
-    btnSaveNewProp.onclick = () => {
+    btnSaveNewProp.onclick = async () => {
       const res = newPropertyFormState.lookupResult;
       if (!res || res.latitude !== Number(newPropertyFormState.latitude) || res.longitude !== Number(newPropertyFormState.longitude)) return;
 
@@ -2701,8 +2754,9 @@ function bindScreenEvents() {
       newPropertyFormState.open = false;
       newPropertyFormState.lookupResult = null;
 
-      updateAndRender();
-      toast(`Propriedade "${createdProp.propertyName}" ativada. Solo: ${SOIL_FRIENDLY[soilId]?.shortTitle || 'Não informado'}.`);
+      dirtyEditors.delete('property');
+      const saved = await updateAndRender();
+      if (saved) toast(`Propriedade "${createdProp.propertyName}" salva neste dispositivo. Solo: ${SOIL_FRIENDLY[soilId]?.shortTitle || 'Não informado'}.`);
     };
   }
 
@@ -2758,7 +2812,7 @@ function bindScreenEvents() {
 
   const btnSaveNewCycle = $('#btn-save-new-cycle');
   if (btnSaveNewCycle) {
-    btnSaveNewCycle.onclick = () => {
+    btnSaveNewCycle.onclick = async () => {
       const invalid = $$('#ncycle-days').find(e=>!e.value || !e.checkValidity());
       if (invalid) { invalid.reportValidity(); toast('Confira os campos de data e duração.'); return; }
       const cycleName = (newCycleFormState.cycleName || '').trim() || 'Ciclo Cadastrado';
@@ -2780,6 +2834,7 @@ function bindScreenEvents() {
         newCycleFormState.targetStageIdx !== null &&
         newPlanningFormState.stages[newCycleFormState.targetStageIdx]
       ) {
+        dirtyEditors.add('planning');
         newPlanningFormState.stages[newCycleFormState.targetStageIdx] = {
           ...newPlanningFormState.stages[newCycleFormState.targetStageIdx],
           cropId,
@@ -2790,8 +2845,9 @@ function bindScreenEvents() {
 
       newCycleFormState.open = false;
       newCycleFormState.targetStageIdx = null;
-      updateAndRender();
-      toast(`Ciclo "${cycleName} (${cycleDays}d)" cadastrado para ${getCropShortDisplay(cropId)}!`);
+      dirtyEditors.delete('cycle');
+      const saved = await updateAndRender();
+      if (saved) toast(`Ciclo "${cycleName} (${cycleDays}d)" salvo para ${getCropShortDisplay(cropId)}.`);
     };
   }
 
@@ -2831,7 +2887,7 @@ function bindScreenEvents() {
 
   const btnSaveNewCrop = $('#btn-save-new-crop');
   if (btnSaveNewCrop) {
-    btnSaveNewCrop.onclick = () => {
+    btnSaveNewCrop.onclick = async () => {
       const invalid = $$('#nc-cycle, #nc-early-cycle, #nc-start, #nc-end').find(e=>!e.value || !e.checkValidity());
       if (invalid) { invalid.reportValidity(); toast('Confira os campos de data e duração.'); return; }
       const name = newCropFormState.commonName.trim();
@@ -2872,10 +2928,9 @@ function bindScreenEvents() {
       newCropFormState.open = false;
       newCropFormState.commonName = '';
 
-      updateAndRender();
-      toast(
-        `Cultura "${createdCrop.common_name}" incluída com Ciclo Precoce (${earlyCycleDays}d) e Ciclo Médio (${cycleDays}d)!`
-      );
+      dirtyEditors.delete('crop');
+      const saved = await updateAndRender();
+      if (saved) toast(`Cultura "${createdCrop.common_name}" salva com seus ciclos neste dispositivo.`);
     };
   }
 
@@ -2898,7 +2953,7 @@ function bindScreenEvents() {
     }
     const request = ++suggestionRequest;
     if (!newPlanningFormState.propertyId) {
-      newPlanningFormState.propertyId = appState.propertyProfile.id || DEFAULT_PROP.id;
+      newPlanningFormState.propertyId = appState.propertyProfile.id || '';
     }
     newPlanningFormState.showSuggestions = true;
     newPlanningFormState.loadingSuggestions = true;
@@ -2907,10 +2962,14 @@ function bindScreenEvents() {
     renderActiveScreen();
 
     const allProps = availableProperties();
-    const targetProp =
-      allProps.find(pr => pr.id === newPlanningFormState.propertyId) ||
-      appState.propertyProfile ||
-      DEFAULT_PROP;
+    const targetProp = allProps.find(pr => pr.id === newPlanningFormState.propertyId);
+    if (!targetProp) {
+      newPlanningFormState.loadingSuggestions = false;
+      newPlanningFormState.showSuggestions = false;
+      renderActiveScreen();
+      toast('Escolha a propriedade deste planejamento.');
+      return;
+    }
 
     // Wait brief visual interval + live NASA POWER if coordinates changed
     const delayPromise = new Promise(resolve => setTimeout(resolve, 420));
@@ -2941,10 +3000,10 @@ function bindScreenEvents() {
       newPlanningFormState.suggestionsResult = generateSystemSuggestedPlannings({
         propertyProfile: targetProp,
         successionStages: suggestionStages(),
-        preservedDecisions: appState.planningConfig.preservedDecisions,
+        preservedDecisions: defaultPlanningConfig().preservedDecisions,
         baseSowingDate: newPlanningFormState.baseSowingDate,
         operationalIntervalDays: Number(newPlanningFormState.operationalIntervalDays),
-        delayDays: appState.planningConfig.delayDays ?? 0,
+        delayDays: 0,
         customCrops: appState.customCrops || [],
         customCycles: appState.customCycles || []
       });
@@ -3012,6 +3071,7 @@ function bindScreenEvents() {
       if (!chosen) return;
 
       newPlanningFormState.planningName = chosen.planningName;
+      dirtyEditors.add('planning');
       newPlanningFormState.stages = structuredClone(chosen.stageDefs);
       newPlanningFormState.showSuggestions = false;
       newPlanningFormState.open = true;
@@ -3021,13 +3081,11 @@ function bindScreenEvents() {
   });
 
   $$('[data-save-suggested-plan]').forEach(btn => {
-    btn.onclick = () => {
+    btn.onclick = async () => {
       const idx = Number(btn.dataset.saveSuggestedPlan);
       const allProps = availableProperties();
-      const targetProp =
-        allProps.find(pr => pr.id === newPlanningFormState.propertyId) ||
-        appState.propertyProfile ||
-        DEFAULT_PROP;
+      const targetProp = allProps.find(pr => pr.id === newPlanningFormState.propertyId);
+      if (!targetProp) { toast('Escolha a propriedade deste planejamento.'); return; }
       const suggestedData = newPlanningFormState.suggestionsResult;
       const chosen = suggestedData?.suggestions?.[idx];
       if (!chosen) return;
@@ -3039,10 +3097,11 @@ function bindScreenEvents() {
         propertyId: targetProp.id,
         isPreRegistered: false,
         baseSowingDate: newPlanningFormState.baseSowingDate,
-        delayDays: appState.planningConfig.delayDays ?? 20,
+        delayDays: 0,
         operationalIntervalDays: days(newPlanningFormState.operationalIntervalDays, 'Intervalo'),
         successionStages: structuredClone(chosen.stageDefs),
-        preservedDecisions: structuredClone(appState.planningConfig.preservedDecisions)
+        preservedDecisions: structuredClone(defaultPlanningConfig().preservedDecisions),
+        isExample: Boolean(targetProp.example || targetProp.id === DEFAULT_PROP.id)
       });
 
       const propChanged = appState.propertyProfile.id !== targetProp.id;
@@ -3053,14 +3112,10 @@ function bindScreenEvents() {
       newPlanningFormState.loadingSuggestions = false;
       newPlanningFormState.open = false;
 
-      if (propChanged) {
-        recomputeSimulation();
-        persistState();
-        refreshLiveNasaForActiveProperty(true);
-      } else {
-        updateAndRender();
-      }
-      toast(`Carta escolhida "${createdPlan.planningName}" incluída e ativada na simulação!`);
+      dirtyEditors.delete('planning');
+      const saved = await updateAndRender();
+      if (propChanged) refreshLiveNasaForActiveProperty(true);
+      if (saved) toast(`Planejamento "${createdPlan.planningName}" salvo neste dispositivo.`);
     };
   });
 
@@ -3068,8 +3123,8 @@ function bindScreenEvents() {
   if (btnToggleNewPlanning) {
     btnToggleNewPlanning.onclick = () => {
       newPlanningFormState.open = !newPlanningFormState.open;
-      if (newPlanningFormState.open) {
-        newPlanningFormState.propertyId = appState.propertyProfile.id || DEFAULT_PROP.id;
+      if (newPlanningFormState.open && !dirtyEditors.has('planning')) {
+        newPlanningFormState.propertyId = appState.propertyProfile.id || '';
         newPlanningFormState.baseSowingDate = appState.planningConfig.baseSowingDate;
         newPlanningFormState.operationalIntervalDays = appState.planningConfig.operationalIntervalDays;
         newPlanningFormState.planningName = '';
@@ -3251,7 +3306,7 @@ function bindScreenEvents() {
 
   const btnSaveNewPlanning = $('#btn-save-new-planning');
   if (btnSaveNewPlanning) {
-    btnSaveNewPlanning.onclick = () => {
+    btnSaveNewPlanning.onclick = async () => {
       const invalid = $$('#nplan-base-date, #nplan-interval').find(e=>!e.value || !e.checkValidity());
       if (invalid) { invalid.reportValidity(); toast('Confira os campos de data e duração.'); return; }
       const incompleteIdx = newPlanningFormState.stages.findIndex(st => !st.cropId || !st.groupKey);
@@ -3263,8 +3318,8 @@ function bindScreenEvents() {
       }
 
       const allProps = availableProperties();
-      const targetProp =
-        allProps.find(pr => pr.id === newPlanningFormState.propertyId) || appState.propertyProfile || DEFAULT_PROP;
+      const targetProp = allProps.find(pr => pr.id === newPlanningFormState.propertyId);
+      if (!targetProp) { toast('Escolha a propriedade deste planejamento.'); return; }
       const chainText = newPlanningFormState.stages
         .map(st => getCropShortDisplay(st.cropId))
         .join(' → ');
@@ -3279,10 +3334,11 @@ function bindScreenEvents() {
         propertyId: targetProp.id,
         isPreRegistered: false,
         baseSowingDate: newPlanningFormState.baseSowingDate,
-        delayDays: appState.planningConfig.delayDays ?? 20,
+        delayDays: 0,
         operationalIntervalDays: days(newPlanningFormState.operationalIntervalDays, 'Intervalo'),
         successionStages: structuredClone(newPlanningFormState.stages),
-        preservedDecisions: structuredClone(appState.planningConfig.preservedDecisions)
+        preservedDecisions: structuredClone(defaultPlanningConfig().preservedDecisions),
+        isExample: Boolean(targetProp.example || targetProp.id === DEFAULT_PROP.id)
       });
 
       const propChanged = appState.propertyProfile.id !== targetProp.id;
@@ -3293,45 +3349,30 @@ function bindScreenEvents() {
       newPlanningFormState.planningName = '';
       newPlanningFormState.stages = createBlankPlanningStages();
 
-      if (propChanged) {
-        recomputeSimulation();
-        persistState();
-        refreshLiveNasaForActiveProperty(true);
-      } else {
-        updateAndRender();
-      }
-      toast(`Planejamento "${createdPlan.planningName}" salvo e ativado!`);
+      dirtyEditors.delete('planning');
+      const saved = await updateAndRender();
+      if (propChanged) refreshLiveNasaForActiveProperty(true);
+      if (saved) toast(`Planejamento "${createdPlan.planningName}" salvo neste dispositivo.`);
     };
   }
 
   $$('[data-switch-planning]').forEach(btn => {
-    btn.onclick = () => {
-      const targetPlanId = btn.dataset.switchPlanning;
-      const allPlannings = availablePlannings();
-      const foundPlan = allPlannings.find(p => p.id === targetPlanId);
-      if (foundPlan) {
-        const allProps = availableProperties();
-        const linkedProp = allProps.find(pr => pr.id === foundPlan.propertyId) || DEFAULT_PROP;
-        const propChanged = appState.propertyProfile.id !== linkedProp.id;
-        const keepDelay = appState.planningConfig.delayDays ?? foundPlan.delayDays ?? 20;
-        const keepPrefs = structuredClone(appState.planningConfig.preservedDecisions);
-
-        appState.planningConfig = syncLegacyPlanningFields({
-          ...structuredClone(foundPlan),
-          delayDays: keepDelay,
-          preservedDecisions: keepPrefs
-        });
-        appState.propertyProfile = structuredClone(linkedProp);
-
-        if (propChanged) {
-        recomputeSimulation();
-          persistState();
-          refreshLiveNasaForActiveProperty(true);
-        } else {
-          updateAndRender();
-        }
-        toast(`Planejamento "${foundPlan.planningName}" ativado.`);
+    btn.onclick = async () => {
+      const activated = activateSavedPlanning(appState, btn.dataset.switchPlanning, {demoPlan:DEFAULT_PLAN,demoProperty:DEFAULT_PROP});
+      if (!activated.ok) {
+        planningNotice = activated.message;
+        renderShell();
+        return;
       }
+      const propChanged = appState.propertyProfile.id !== activated.state.propertyProfile.id;
+      appState = activated.state;
+      planningNotice = '';
+      const url = new URL(location.href);
+      url.searchParams.set('plano', appState.planningConfig.id);
+      history.replaceState(null, '', url);
+      const saved = await updateAndRender();
+      if (propChanged) refreshLiveNasaForActiveProperty(false);
+      if (saved) toast(`Planejamento "${appState.planningConfig.planningName}" aberto com suas próprias datas e preferências.`);
     };
   });
 
@@ -3492,13 +3533,17 @@ function bindScreenEvents() {
   }
 }
 
-// An explicit PWA update must not discard an open advanced editor.
+// An explicit PWA update or navigation must not discard an unfinished editor.
+window.addEventListener('beforeunload', event => {
+  if (!dirtyEditors.size && !storageError && !storagePending) return;
+  event.preventDefault();
+  event.returnValue = '';
+});
 window.addEventListener('rota:before-update', event => {
   if (!event.detail) return;
-  const editing = newPropertyFormState.open || newCropFormState.open || newCycleFormState.open || newPlanningFormState.open;
-  event.detail.promise = editing
+  event.detail.promise = editorsOpen() || dirtyEditors.size
     ? Promise.resolve(false)
-    : write(appState).then(() => true, () => false);
+    : persistState();
 });
 
 (async function init() {
@@ -3514,16 +3559,37 @@ window.addEventListener('rota:before-update', event => {
         customPlannings: saved.customPlannings || [],
         planningConfig: saved.planningConfig
       };
-      if (!appState.demoEnabled) {
+      const savedExample = appState.planningConfig.id && !appState.planningConfig.isPreRegistered && appState.planningConfig.propertyId === appState.propertyProfile.id;
+      if (!appState.demoEnabled && !savedExample) {
         if (appState.propertyProfile.id === DEFAULT_PROP.id) appState.propertyProfile = (appState.customProperties || [])[0] || blankProperty();
         if (appState.planningConfig.id === DEFAULT_PLAN.id) appState.planningConfig = blankPlanning();
       }
-      recomputeSimulation();
+      if (savedExample && appState.propertyProfile.id === DEFAULT_PROP.id) {
+        appState.propertyProfile.example = true;
+        appState.planningConfig.isExample = true;
+      }
+      lastSaveSucceeded = true;
     }
     dbReady = true;
   } catch {
     dbReady = false;
+    storageError = 'O armazenamento deste navegador está indisponível. Mantenha esta aba aberta; os dados preenchidos podem não ser salvos.';
   }
+  for (const plan of [appState.planningConfig, ...(appState.customPlannings || [])]) {
+    for (const [id,crop] of Object.entries(buildOfficialCropCatalog(plan.officialProfiles || []))) if (!rulesPackage.crops_catalog[id]) rulesPackage.crops_catalog[id] = crop;
+  }
+  const requestedPlan = new URLSearchParams(location.search).get('plano');
+  if (requestedPlan) {
+    const activated = activateSavedPlanning(appState, requestedPlan, {demoPlan:DEFAULT_PLAN,demoProperty:DEFAULT_PROP});
+    if (activated.ok) appState = activated.state;
+    else {
+      planningNotice = activated.message;
+      if (appState.planningConfig.id && !appState.planningConfig.isPreRegistered && !appState.customPlannings.some(plan=>plan.id===appState.planningConfig.id)) appState.customPlannings.push(structuredClone(appState.planningConfig));
+      appState.planningConfig = blankPlanning();
+      appState.activeTab = appState.propertyProfile.id ? 2 : 0;
+    }
+  }
+  recomputeSimulation();
   newPropertyFormState.open = !appState.propertyProfile.id;
   newPlanningFormState.open = !appState.planningConfig.id;
   newPlanningFormState.propertyId = appState.propertyProfile.id;

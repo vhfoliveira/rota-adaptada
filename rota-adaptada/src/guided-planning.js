@@ -29,8 +29,8 @@ export function listPlanningChoices(legacy={}) {
   const plans=[...(legacy.planningConfig ? [legacy.planningConfig] : []),...(legacy.customPlannings || [])];
   const seen=new Set();
   return plans.filter(plan=>plan?.id && !plan.isPreRegistered && plan.id!==defaultPlanningConfig().id && !seen.has(plan.id) && seen.add(plan.id)).map(plan=>{
-    const property=properties.find(p=>p.id===plan.propertyId);
-    return {id:plan.id,name:plan.planningName || 'Planejamento salvo',planning:clone(plan),property:property?clone(property):null,isExample:property?.id===defaultProperty.id};
+    const property=properties.find(p=>p.id===plan.propertyId) || (plan.guidedOrigin?.propertySnapshot?.id===plan.propertyId?plan.guidedOrigin.propertySnapshot:null);
+    return {id:plan.id,name:plan.planningName || 'Planejamento salvo',planning:clone(plan),property:property?clone(property):null,isExample:Boolean(plan.isExample || property?.example || property?.isExample || property?.id===defaultProperty.id)};
   });
 }
 
@@ -40,6 +40,7 @@ export function extractGuidedPlan(choice) {
   const stages=getPlanningStagesList(plan);
   return {
     sourcePlanId:plan.id || null,
+    example:Boolean(choice.isExample || plan.isExample || choice.property?.example || choice.property?.isExample),
     name:plan.planningName || '',
     date:plan.baseSowingDate,
     soilCode:plan.soilCode || '',
@@ -106,10 +107,94 @@ export function simulateGuidedPlanning(draft,property,legacy={},suppliedContext=
   return simulateAdaptation(property,plan,customCrops,customCycles,suppliedContext);
 }
 
+/** A new original has no delay or inherited scenario, while stages remain eligible for a later opt-in adjustment. */
+export function buildGuidedOriginalPlanning(draft,legacy={}) {
+  const plan=buildGuidedPlanning({
+    ...draft,sourcePlanId:null,sourcePlanning:null,delayDays:0,
+    allowCropChange:true,allowCycleChange:true
+  },legacy);
+  return {
+    ...plan,id:draft.planId || 'guided-original-draft',delayDays:0,
+    preservedDecisions:{keepFirstCropSoy:true,allowCycleAdjustment:false,allowCommercialSubstitution:false,allowCoverCropTransition:false}
+  };
+}
+
+export function simulateGuidedOriginalPlanning(draft,property,legacy={},suppliedContext={}) {
+  if(!property?.municipality || !property?.state)throw Error('Confirme o município e a UF da sua área.');
+  const plan=buildGuidedOriginalPlanning(draft,legacy);
+  const {customCrops,customCycles}=arrays(legacy);
+  const simulation=simulateAdaptation(property,{
+    ...plan,preservedDecisions:{...plan.preservedDecisions,maxChangesAllowed:0}
+  },customCrops,customCycles,suppliedContext);
+  // Suppression belongs only to this preview; persisting it would prevent later adjustment.
+  simulation.planningConfig.preservedDecisions=clone(plan.preservedDecisions);
+  simulation.noBetterAlternativeMessage=null;
+  return simulation;
+}
+
 function sameProperty(a,b) {
   return ['latitude','longitude','municipality','state','soilProfileId'].every(k=>(a?.[k] ?? '')===(b?.[k] ?? ''));
 }
 const uniqueId=prefix=>`${prefix}-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+
+const isExamplePlan=(draft,property)=>Boolean(draft.example || draft.sourcePlanning?.isExample || property.example || property.isExample || property.id===defaultPropertyProfile().id);
+const officialProfilesFor=stages=>[...new Map(stages.map(stage=>rulesPackage.crops_catalog[stage.cropId]?.officialProfile).filter(Boolean).map(profile=>[`${profile.id}/${profile.source.sha256}`,profile])).values()].map(clone);
+
+function retainProperty(state,property,propertyId,{example=false,newOriginal=false}={}) {
+  const saved=clone(property);
+  const defaultId=defaultPropertyProfile().id;
+  state.customProperties=state.customProperties || [];
+  const known=[...state.customProperties,state.propertyProfile,defaultPropertyProfile()].filter(Boolean);
+  const existing=known.find(p=>p.id===saved.id);
+  const existingExample=Boolean(existing?.example || existing?.isExample || existing?.id===defaultId);
+  if(!saved.id || (existing && (!sameProperty(existing,saved) || existingExample!==example)) || (newOriginal && saved.id===defaultId))saved.id=propertyId;
+  if(!saved.propertyName)saved.propertyName=`Área em ${saved.municipality}`;
+  if(example)saved.example=true;
+  if(state.propertyProfile?.id && !state.customProperties.some(p=>p.id===state.propertyProfile.id))state.customProperties.push(clone(state.propertyProfile));
+  if(!state.customProperties.some(p=>p.id===saved.id))state.customProperties.push(clone(saved));
+  return saved;
+}
+
+function activateCreatedPlan(state,plan,property,savedAt) {
+  state.customPlannings=state.customPlannings || [];
+  if(state.planningConfig?.id && !state.planningConfig.isPreRegistered && !state.customPlannings.some(p=>p.id===state.planningConfig.id))state.customPlannings.push(clone(state.planningConfig));
+  state.customPlannings.push(clone(plan));
+  state.version=Math.max(8,Number.isSafeInteger(state.version)?state.version:8);
+  state.activeTab=2;
+  state.propertyProfile=clone(property);
+  state.planningConfig=clone(plan);
+  state.customCrops=state.customCrops || [];
+  state.customCycles=state.customCycles || [];
+  state.selectedStrategyId='PLANO_ATUAL';
+  state.selectedStageIndex=0;
+  state.inspectedYear=state.inspectedYear ?? new Date(savedAt).getUTCFullYear()-1;
+}
+
+/** Saving an original never promotes calculated dates or an alternative into the user's source plan. */
+export function appendGuidedPlan(legacy,draft,property,{propertyId=uniqueId('prop-guided'),savedAt=new Date().toISOString()}={}) {
+  if(typeof draft?.planId!=='string' || !draft.planId.trim())throw Error('Identifique o rascunho antes de salvar o planejamento.');
+  if(!property?.municipality || !property?.state)throw Error('Confirme o município e a UF antes de salvar.');
+  const state=clone(legacy || {});
+  const original=buildGuidedOriginalPlanning(draft,state);
+  const name=draft.name?.trim() || `Planejamento em ${property.municipality} · ${draft.date.split('-').reverse().join('/')}`;
+  const example=isExamplePlan(draft,property);
+  const previous=[...(state.customPlannings||[]),state.planningConfig].find(plan=>plan?.id===draft.planId);
+  if(previous){
+    const fields=['baseSowingDate','delayDays','operationalIntervalDays','soilCode','management'];
+    const propertySnapshot=previous.guidedOrigin?.propertySnapshot || (state.customProperties||[]).find(p=>p.id===previous.propertyId);
+    const same=previous.guidedOrigin?.kind==='creation' && previous.planningName===name && Boolean(previous.isExample)===example && propertySnapshot && sameProperty(propertySnapshot,property) && fields.every(key=>JSON.stringify(previous[key])===JSON.stringify(original[key])) && JSON.stringify(getPlanningStagesList(previous))===JSON.stringify(getPlanningStagesList(original));
+    if(!same)throw Error('Este planejamento já foi salvo. Comece um novo planejamento para guardar outras escolhas.');
+    return {state,plan:clone(previous)};
+  }
+  const savedProperty=retainProperty(state,property,propertyId,{example,newOriginal:true});
+  const created={
+    ...original,id:draft.planId,planningName:name,propertyId:savedProperty.id,isPreRegistered:false,isExample:example,
+    officialProfiles:officialProfilesFor(original.successionStages),
+    guidedOrigin:{kind:'creation',savedAt,propertySnapshot:clone(savedProperty),limitations:'Calendário de planejamento; histórico não é previsão. Condições não confirmadas permanecem pendentes.'}
+  };
+  activateCreatedPlan(state,created,savedProperty,savedAt);
+  return {state,plan:created};
+}
 
 /** Pure merge used inside an IndexedDB read/write transaction; never mutates the source plan. */
 export function appendGuidedAlternative(legacy,draft,property,strategy,{id=uniqueId('plan-guided'),propertyId=uniqueId('prop-guided'),savedAt=new Date().toISOString()}={}) {
@@ -137,37 +222,22 @@ export function appendGuidedAlternative(legacy,draft,property,strategy,{id=uniqu
       seasonalAnchor:null
     };
   });
-  const savedProperty=clone(property);
-  state.customProperties=state.customProperties || [];
-  const known=[...state.customProperties,state.propertyProfile,defaultPropertyProfile()].filter(Boolean);
-  const existing=known.find(p=>p.id===savedProperty.id);
-  if(!savedProperty.id || (existing && !sameProperty(existing,savedProperty)))savedProperty.id=propertyId;
-  if(!savedProperty.propertyName)savedProperty.propertyName=`Área em ${savedProperty.municipality}`;
-  if(!state.customProperties.some(p=>p.id===savedProperty.id) && savedProperty.id!==defaultPropertyProfile().id)state.customProperties.push(clone(savedProperty));
+  const example=isExamplePlan(draft,property);
+  const savedProperty=retainProperty(state,property,propertyId,{example});
   const created={
     ...source,
     id,
     planningName:draft.name?.trim()?`${draft.name.trim()} · ${strategy.title || 'Alternativa'}`:`${strategy.title || 'Alternativa'} · ${savedProperty.municipality}`,
     propertyId:savedProperty.id,
     isPreRegistered:false,
+    isExample:example,
     baseSowingDate:selectedStages[0].plannedSowDate,
     delayDays:0,
     successionStages:selectedStages,
-    officialProfiles:[...new Map([...source.successionStages,...selectedStages].map(stage=>rulesPackage.crops_catalog[stage.cropId]?.officialProfile).filter(Boolean).map(profile=>[`${profile.id}/${profile.source.sha256}`,profile])).values()].map(clone),
-    guidedOrigin:{sourcePlanId:draft.sourcePlanId || null,savedAt,sourcePlanning:source,propertySnapshot:clone(savedProperty),strategySnapshot:clone(strategy),limitations:'Histórico não é previsão. Dados ou regras ausentes permanecem não avaliados; a escolha não certifica aptidão agrícola.'}
+    officialProfiles:officialProfilesFor([...source.successionStages,...selectedStages]),
+    guidedOrigin:{kind:'adaptation',sourcePlanId:draft.sourcePlanId || null,savedAt,sourcePlanning:source,propertySnapshot:clone(savedProperty),strategySnapshot:clone(strategy),limitations:'Histórico não é previsão. Dados ou regras ausentes permanecem não avaliados; a escolha não certifica aptidão agrícola.'}
   };
   // Horizon originally includes the selected schedule, preserving explicit constraints.
-  state.customPlannings=state.customPlannings || [];
-  if(state.planningConfig?.id && !state.planningConfig.isPreRegistered && !state.customPlannings.some(p=>p.id===state.planningConfig.id))state.customPlannings.push(clone(state.planningConfig));
-  state.customPlannings.push(clone(created));
-  state.version=7;
-  state.activeTab=2;
-  state.propertyProfile=clone(savedProperty);
-  state.planningConfig=clone(created);
-  state.customCrops=state.customCrops || [];
-  state.customCycles=state.customCycles || [];
-  state.selectedStrategyId='PLANO_ATUAL';
-  state.selectedStageIndex=0;
-  state.inspectedYear=state.inspectedYear ?? new Date(savedAt).getUTCFullYear()-1;
+  activateCreatedPlan(state,created,savedProperty,savedAt);
   return {state,plan:created};
 }

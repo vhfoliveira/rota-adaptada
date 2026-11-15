@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {appendGuidedAlternative,buildGuidedPlanning,extractGuidedPlan,listPlanningChoices,simulateGuidedPlanning} from '../src/guided-planning.js';
-import {defaultPlanningConfig,defaultPropertyProfile,registerCustomCropsInCatalog,simulateAdaptation} from '../src/vilhena-engine.js';
+import {appendGuidedAlternative,appendGuidedPlan,buildGuidedPlanning,buildGuidedOriginalPlanning,extractGuidedPlan,listPlanningChoices,simulateGuidedPlanning,simulateGuidedOriginalPlanning} from '../src/guided-planning.js';
+import {defaultPlanningConfig,defaultPropertyProfile,getPlanningStagesList,registerCustomCropsInCatalog,rulesPackage,simulateAdaptation} from '../src/vilhena-engine.js';
 import {readDrafts,saveDraft,readLegacyState,saveGuidedAlternative} from '../src/guided-storage.js';
 const property=defaultPropertyProfile();
 const draft=()=>({date:'2026-11-01',delayDays:20,intervalDays:7,allowCropChange:true,allowCycleChange:true,stages:[{cropId:'SOJA',groupKey:'GRUPO_II_MEDIO'},{cropId:'MILHO_2_SAFRA',groupKey:'GRUPO_II_MEDIO'}]});
@@ -92,21 +92,22 @@ test('storage unavailable rejects explicitly without failing at import or losing
 
 // Minimal transaction queue models IndexedDB's serialized read/write transactions.
 // It verifies concurrent API requests retain both records and snapshot their arguments.
-function memoryDatabase(seed={}) {
+function memoryDatabase(seed={}, {failWrites=false}={}) {
  const records=new Map(Object.entries(structuredClone(seed)));
  let tail=Promise.resolve();
  const database={objectStoreNames:{contains:()=>true},close(){},transaction(){
-  const transaction={};let request,key,pendingWrite,aborted=false;
+  const transaction={};const requests=[],pendingWrites=[];let aborted=false;
   transaction.objectStore=()=>({
-   get(k){key=k;request={};return request;},
-   put(value,k){pendingWrite=[k,structuredClone(value)];}
+   get(key){const request={};requests.push({key,request});return request;},
+   put(value,key){pendingWrites.push([key,structuredClone(value)]);}
   });
   transaction.abort=()=>{aborted=true;};
   tail=tail.then(()=>new Promise(resolve=>queueMicrotask(()=>{
-   request.result=structuredClone(records.get(key));request.onsuccess?.();
+   for(const {key,request} of requests){request.result=structuredClone(records.get(key));request.onsuccess?.();}
    queueMicrotask(()=>{
+    if(failWrites && pendingWrites.length){transaction.error=Error('Armazenamento sem espaço');aborted=true;}
     if(aborted)transaction.onabort?.();
-    else {if(pendingWrite)records.set(...pendingWrite);transaction.oncomplete?.();}
+    else {for(const entry of pendingWrites)records.set(...entry);transaction.oncomplete?.();}
     resolve();
    });
   })));
@@ -135,6 +136,182 @@ test('atomic storage merges concurrent objectives and snapshots edits while savi
  assert.deepEqual(state.customPlannings[0],original);
  assert.ok(state.customPlannings.some(p=>p.id===a.id));assert.ok(state.customPlannings.some(p=>p.id===b.id));
  assert.equal(state.customPlannings.length,3);
+});
+
+const originalDraft=()=>({...draft(),objective:'planning',planId:'original-guided',delayDays:90,allowCropChange:false,allowCycleChange:false,soilCode:'',management:''});
+const ownProperty={...property,id:'my-real-property',propertyName:'Minha propriedade',soilProfileId:''};
+
+test('creating a plan has zero delay and one original calendar without permanently locking future changes',()=>{
+ const input=originalDraft(),before=structuredClone(input);
+ input.sourcePlanning={id:'unrelated-plan',horizonEndDate:'2040-01-01',preservedDecisions:{maxChangesAllowed:0}};
+ const built=buildGuidedOriginalPlanning(input);
+ assert.equal(built.id,input.planId);assert.equal(built.delayDays,0);
+ assert.equal(built.horizonEndDate,undefined);assert.equal(built.preservedDecisions.maxChangesAllowed,undefined);
+ assert(built.successionStages.every(s=>s.allowCycleChange));
+ assert.equal(built.successionStages[0].allowCropChange,false);assert.equal(built.successionStages[1].allowCropChange,true);
+ const simulation=simulateGuidedOriginalPlanning(input,ownProperty,{}, {dataset:null});
+ assert.equal(simulation.strategies.length,1);assert.equal(simulation.strategies[0].strategyId,'PLANO_ATUAL');
+ assert.equal(simulation.strategies[0].stages[0].sowDate,input.date);assert.equal(simulation.delayDays,0);
+ assert.equal(simulation.planningConfig.preservedDecisions.maxChangesAllowed,undefined);
+ assert.equal(simulation.noBetterAlternativeMessage,null);
+ assert.equal(simulation.strategies[0].overallStatus,'NAO_AVALIADO');
+ assert(built.successionStages.every(s=>!s.plannedSowDate));
+ const {sourcePlanning,...unchanged}=input;assert.deepEqual(unchanged,before);
+ assert.throws(()=>buildGuidedOriginalPlanning({...input,stages:[]}),/pelo menos/);
+ assert.doesNotThrow(()=>simulateGuidedOriginalPlanning({...input,stages:input.stages.slice(0,1)},ownProperty,{}, {dataset:null}));
+});
+
+test('saving an original is idempotent, preserves state and permits a later opt-in delay without changing the original',()=>{
+ const input=originalDraft();const legacy={version:9,demoEnabled:false,customPlannings:[{id:'another-plan',note:'keep'}],customProperties:[ownProperty],otherData:{keep:true}};
+ const before=structuredClone(legacy);
+ const saved=appendGuidedPlan(legacy,input,ownProperty,{savedAt:'2026-11-15T00:00:00Z'});
+ assert.deepEqual(legacy,before);assert.equal(saved.state.version,9);assert.equal(saved.state.demoEnabled,false);
+ assert.equal(saved.plan.delayDays,0);assert.equal(saved.plan.guidedOrigin.kind,'creation');assert.equal(saved.plan.guidedOrigin.strategySnapshot,undefined);
+ assert(saved.plan.successionStages.every(s=>!s.plannedSowDate));assert.equal(saved.plan.isExample,false);
+ const repeat=appendGuidedPlan(saved.state,input,ownProperty);
+ assert.deepEqual(repeat.state,saved.state);assert.deepEqual(repeat.plan,saved.plan);assert.equal(repeat.state.customPlannings.length,2);
+ const normalized=structuredClone(saved.state);normalized.customPlannings[1].successionStages=getPlanningStagesList(saved.plan);
+ assert.doesNotThrow(()=>appendGuidedPlan(normalized,input,ownProperty));
+ assert.throws(()=>appendGuidedPlan(saved.state,{...input,date:'2026-12-01'},ownProperty),/já foi salvo/);
+ assert.throws(()=>appendGuidedPlan({}, {...input,planId:''},ownProperty),/Identifique/);
+ const choice=listPlanningChoices({...saved.state,customPlannings:[saved.plan]}).find(p=>p.id===saved.plan.id);
+ const adjustment={...extractGuidedPlan(choice),delayDays:12,allowCycleChange:true,allowCropChange:false};
+ const simulated=simulateGuidedPlanning(adjustment,ownProperty,{}, {dataset:null});
+ assert.equal(simulated.strategies[0].stages[0].sowDate,'2026-11-13');
+ const shorter=simulated.strategies.find(s=>s.stages[0].cycleDays<simulated.strategies[0].stages[0].cycleDays);assert(shorter);
+ const adjusted=appendGuidedAlternative(saved.state,adjustment,ownProperty,shorter,{id:'adjusted-guided'});
+ assert.deepEqual(adjusted.state.customPlannings.find(p=>p.id===input.planId),saved.plan);
+ assert.equal(adjusted.plan.guidedOrigin.sourcePlanId,input.planId);assert.equal(adjusted.state.version,9);
+});
+
+test('originals preserve official sources and explicit stage constraints without using result dates as inputs',()=>{
+ const crop=Object.values(rulesPackage.crops_catalog).find(c=>c.officialProfile && Object.values(c.cultivar_groups).some(g=>g.cycle_days_default===80));
+ assert(crop);const groupKey=Object.keys(crop.cultivar_groups).find(k=>crop.cultivar_groups[k].cycle_days_default===80);
+ const input={...originalDraft(),stages:[{cropId:crop.crop_id,groupKey,managementCode:'1',allowCycleChange:false,intervalDays:9}]};
+ const saved=appendGuidedPlan({},input,ownProperty);
+ assert.equal(saved.plan.successionStages[0].allowCycleChange,false);assert.equal(saved.plan.successionStages[0].intervalDays,9);
+ assert.equal(saved.plan.officialProfiles[0].source.sha256,crop.officialProfile.source.sha256);
+ assert.notEqual(saved.plan.officialProfiles[0],crop.officialProfile);
+ saved.plan.officialProfiles[0].source.title='edited saved copy';assert.notEqual(crop.officialProfile.source.title,'edited saved copy');
+ assert.notEqual(saved.state.planningConfig.officialProfiles[0].source.title,'edited saved copy');
+});
+
+test('demo originals get their own property and keep demo markers through adjustment and reopening',()=>{
+ const input={...originalDraft(),example:true};
+ const saved=appendGuidedPlan({version:8,demoEnabled:false},input,property,{propertyId:'demo-area-saved'});
+ assert.equal(saved.plan.isExample,true);assert.equal(saved.plan.propertyId,'demo-area-saved');
+ assert.equal(saved.state.customProperties[0].example,true);assert.equal(saved.state.demoEnabled,false);
+ const choice=listPlanningChoices(saved.state)[0];assert.equal(choice.isExample,true);
+ const resumed=extractGuidedPlan(choice);assert.equal(resumed.example,true);
+ const simulated=simulateGuidedPlanning({...resumed,delayDays:12,allowCycleChange:true},choice.property);
+ const alternative=appendGuidedAlternative(saved.state,{...resumed,delayDays:12,allowCycleChange:true},choice.property,simulated.strategies[1]);
+ assert.equal(alternative.state.version,8);assert.equal(alternative.state.demoEnabled,false);
+ assert.equal(alternative.plan.isExample,true);assert.equal(alternative.plan.guidedOrigin.propertySnapshot.example,true);
+ assert.equal(listPlanningChoices(alternative.state).find(p=>p.id===alternative.plan.id).isExample,true);
+});
+
+test('saving a plan for a new area retains an existing active-only property and its original plan',()=>{
+ const prior={...buildGuidedOriginalPlanning({...originalDraft(),planId:'prior'}),propertyId:ownProperty.id};
+ const newProperty={...ownProperty,id:'new-area',municipality:'Outra área',latitude:-15};
+ const saved=appendGuidedPlan({propertyProfile:ownProperty,planningConfig:prior},originalDraft(),newProperty);
+ assert.deepEqual(saved.state.customProperties.find(p=>p.id===ownProperty.id),ownProperty);
+ assert.deepEqual(saved.state.customPlannings.find(p=>p.id==='prior'),prior);
+ assert.equal(listPlanningChoices(saved.state).find(p=>p.id==='prior').property.id,ownProperty.id);
+ const snapshotOnly={customPlannings:[saved.plan]};
+ assert.equal(listPlanningChoices(snapshotOnly)[0].property.id,newProperty.id);
+});
+
+test('atomic original saves isolate demo drafts, retain all objectives and do not duplicate concurrent saves',async t=>{
+ const api=await import('../src/guided-storage.js?original-storage-test');
+ const db=memoryDatabase({state:{version:8,demoEnabled:false,customPlannings:[],customProperties:[]}});
+ const previous=globalThis.indexedDB;globalThis.indexedDB=db.indexedDB;t.after(()=>{globalThis.indexedDB=previous;});
+ const input=originalDraft();
+ await Promise.all([
+  api.saveDraft('planning',input),api.saveDraft('discovery',{objective:'discovery',step:1}),api.saveDraft('adaptation',{objective:'adaptation',step:2}),
+  api.saveDraft('planning',{...input,example:true,name:'Demo'},{example:true})
+ ]);
+ const real=await api.readDrafts(),demo=await api.readDrafts({example:true});
+ assert.equal(real.planning.planId,input.planId);assert.equal(real.discovery.step,1);assert.equal(real.adaptation.step,2);
+ assert.equal(real.planning.example,undefined);assert.equal(demo.planning.name,'Demo');assert.equal(demo.discovery,undefined);
+ await api.saveDraft('planning',null,{example:true});assert.equal((await api.readDrafts({example:true})).planning,undefined);assert((await api.readDrafts()).planning);
+ const saving=api.saveGuidedPlan(input,ownProperty);input.date='2040-01-01';
+ const [a,b,c]=await Promise.all([saving,api.saveGuidedPlan(originalDraft(),ownProperty),api.saveGuidedPlan({...originalDraft(),planId:'second-original'},ownProperty)]);
+ assert.equal(a.baseSowingDate,'2026-11-01');assert.deepEqual(a,b);
+ const state=await api.readLegacyState();assert.equal(state.customPlannings.length,2);
+ assert(state.customPlannings.some(p=>p.id===a.id));assert(state.customPlannings.some(p=>p.id===c.id));
+ assert.equal(state.version,8);assert.equal(state.demoEnabled,false);
+});
+
+test('a failed original transaction rejects and leaves the saved state intact',async t=>{
+ const api=await import('../src/guided-storage.js?original-storage-failure-test');
+ const initial={version:8,customPlannings:[],customProperties:[]},db=memoryDatabase({state:initial},{failWrites:true});
+ const previous=globalThis.indexedDB;globalThis.indexedDB=db.indexedDB;t.after(()=>{globalThis.indexedDB=previous;});
+ await assert.rejects(api.saveGuidedPlan(originalDraft(),ownProperty),/sem espaço/);
+ assert.deepEqual(db.records.get('state'),initial);
+});
+
+test('legacy demo drafts move atomically out of real drafts and remain resumable on repeated reads',async t=>{
+ const api=await import('../src/guided-storage.js?legacy-demo-migration-test');
+ const legacyDemo={objective:'discovery',example:true,step:4,date:'2026-11-01',location:{municipality:'Vilhena'},savedAt:'2026-11-14T21:00:00Z'};
+ const realDraft={objective:'adaptation',step:2,sourcePlanId:'real-plan'};
+ const db=memoryDatabase({'guided-drafts-v1':{discovery:legacyDemo,adaptation:realDraft}});
+ const previous=globalThis.indexedDB;globalThis.indexedDB=db.indexedDB;t.after(()=>{globalThis.indexedDB=previous;});
+ const [normal,demo]=await Promise.all([api.readDrafts(),api.readDrafts({example:true})]);
+ assert.deepEqual(normal,{adaptation:realDraft});assert.deepEqual(demo,{discovery:legacyDemo});
+ assert.deepEqual(db.records.get('guided-drafts-v1'),{adaptation:realDraft});
+ assert.deepEqual(db.records.get('guided-demo-drafts-v1'),{discovery:legacyDemo});
+ assert.equal(db.records.has('guided-demo-drafts-legacy-backup-v1'),false);
+ const before=structuredClone([...db.records]);await Promise.all([api.readDrafts(),api.readDrafts({example:true})]);
+ assert.deepEqual([...db.records],before);
+});
+
+test('coexisting demo drafts retain the latest per objective and archive every displaced distinct draft',async t=>{
+ const api=await import('../src/guided-storage.js?legacy-demo-coexist-test');
+ const entry=(objective,name,time)=>({objective,example:true,name,updatedAt:time,step:1});
+ const old={
+  planning:entry('planning','legacy newer','2026-11-15T03:00:00Z'),
+  discovery:entry('discovery','legacy older','2026-11-14T03:00:00Z'),
+  adaptation:entry('adaptation','legacy tied',undefined)
+ };
+ const current={
+  planning:entry('planning','current older','2026-11-14T03:00:00Z'),
+  discovery:{...entry('discovery','current newer','2026-11-13T03:00:00Z'),savedAt:'2026-11-15T03:00:00Z'},
+  adaptation:entry('adaptation','current tied',undefined)
+ };
+ const retainedBackup={sourceKey:'earlier-import',draft:{objective:'planning',example:true,name:'already archived'}};
+ const db=memoryDatabase({'guided-drafts-v1':old,'guided-demo-drafts-v1':current,'guided-demo-drafts-legacy-backup-v1':{planning:[retainedBackup]}});
+ const previous=globalThis.indexedDB;globalThis.indexedDB=db.indexedDB;t.after(()=>{globalThis.indexedDB=previous;});
+ const [normal,demo]=await Promise.all([api.readDrafts(),api.readDrafts({example:true})]);
+ assert.deepEqual(normal,{});
+ assert.deepEqual(demo,{planning:old.planning,discovery:current.discovery,adaptation:current.adaptation});
+ const backup=db.records.get('guided-demo-drafts-legacy-backup-v1');
+ assert.deepEqual(backup.planning,[retainedBackup,{sourceKey:'guided-demo-drafts-v1',draft:current.planning}]);
+ assert.deepEqual(backup.discovery,[{sourceKey:'guided-drafts-v1',draft:old.discovery}]);
+ assert.deepEqual(backup.adaptation,[{sourceKey:'guided-drafts-v1',draft:old.adaptation}]);
+ assert.deepEqual(db.records.get('guided-drafts-v1'),{});
+ await api.readDrafts({example:true});assert.deepEqual(db.records.get('guided-demo-drafts-legacy-backup-v1'),backup);
+});
+
+test('failed legacy demo migration keeps both source records and backup unchanged',async t=>{
+ const api=await import('../src/guided-storage.js?legacy-demo-migration-failure-test');
+ const seed={
+  'guided-drafts-v1':{planning:{objective:'planning',example:true,name:'old',savedAt:'2026-11-14T03:00:00Z'}},
+  'guided-demo-drafts-v1':{planning:{objective:'planning',example:true,name:'new',savedAt:'2026-11-15T03:00:00Z'}}
+ };
+ const db=memoryDatabase(seed,{failWrites:true});
+ const previous=globalThis.indexedDB;globalThis.indexedDB=db.indexedDB;t.after(()=>{globalThis.indexedDB=previous;});
+ await assert.rejects(api.readDrafts(),/sem espaço/);
+ assert.deepEqual(Object.fromEntries(db.records),seed);
+});
+
+test('concurrent migration reads and a new real draft do not overwrite each other',async t=>{
+ const api=await import('../src/guided-storage.js?legacy-demo-migration-concurrency-test');
+ const old={objective:'planning',example:true,name:'legacy demo'},real={objective:'planning',example:false,name:'my real plan'};
+ const db=memoryDatabase({'guided-drafts-v1':{planning:old}});
+ const previous=globalThis.indexedDB;globalThis.indexedDB=db.indexedDB;t.after(()=>{globalThis.indexedDB=previous;});
+ await Promise.all([api.readDrafts(),api.readDrafts({example:true}),api.saveDraft('planning',real)]);
+ assert.equal((await api.readDrafts()).planning.name,'my real plan');
+ assert.deepEqual((await api.readDrafts({example:true})).planning,old);
 });
 
 

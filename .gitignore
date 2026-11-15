@@ -10,3 +10,8 @@ backups/
 !.env.example
 *.log
 .DS_Store
+output/
+__pycache__/
+*.pyc
+.codex-finalizer/
+.chart-data-*/
