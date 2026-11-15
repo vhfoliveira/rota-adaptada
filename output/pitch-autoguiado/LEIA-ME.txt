@@ -1,0 +1,28 @@
+Rota Adaptada — entrega 15/11/2026
+
+Aplicativo: https://deltashift.udisoft.app.br/
+Demonstração: https://deltashift.udisoft.app.br/?demo=planejamento
+Branch: codex/planejamento-autoguiado
+Código publicado: 4834090; documentação final: 9225e60
+Base preservada em versao-vitoria: af32c1b
+
+Arquivos principais
+- rota-adaptada-pitch.pptx: sete slides editáveis.
+- roteiro-pitch-3min.md: roteiro com distribuição de três minutos.
+- rota-adaptada-video-30s.mp4: 30 segundos, 1920x1080, 30 fps, legendado, sem áudio.
+- roteiro-video-30s.md: roteiro de imagem, texto e narração opcional.
+- produzir-video-30s.py e capturas PNG: produção reproduzível do vídeo.
+
+O exemplo mostra 20 dias de diferença no calendário simulado.
+Solo desconhecido e avaliação parcial permanecem explícitos.
+O histórico NASA não é previsão nem prova de produtividade.
+Planos e rascunhos ficam no navegador e dispositivo usados.
+
+Validação: 136 testes JavaScript, 13 Python e build aprovados.
+Fluxos guiado e avançado conferidos em desktop e larguras de celular.
+HTTPS e interface offline instalada conferidos em Chromium temporário.
+O navegador embutido persistente manteve cache antigo; seus dados não foram apagados.
+
+Pendências: rodada com três pessoas pouco digitais e duas avançadas,
+ensaio com apresentador e testes em aparelhos físicos.
+Nenhum resultado de validação humana foi inventado.

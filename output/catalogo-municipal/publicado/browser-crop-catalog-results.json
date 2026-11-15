@@ -1,0 +1,57 @@
+{
+  "testedAt": "2026-11-15T09:35:49.357Z",
+  "base": "https://deltashift.udisoft.app.br",
+  "externalRequests": "blocked",
+  "reports": [
+    {
+      "device": "desktop",
+      "officialCards": 13,
+      "sorgo": [
+        {
+          "id": "ZARC_12016740330011_sorgo-forragem-ro-1-2026-2027_840556a5e73b",
+          "name": "Sorgo Forrageiro"
+        },
+        {
+          "id": "ZARC_12016740330021_sorgo-forragem-ro-1-2026-2027_840556a5e73b",
+          "name": "Sorgo Forrageiro 2ª Safra"
+        },
+        {
+          "id": "ZARC_12016740174011_sorgo-grao-ro-1-2026-2027_b7b8ac300900",
+          "name": "Sorgo Granífero"
+        },
+        {
+          "id": "ZARC_12016740174021_sorgo-grao-ro-1-2026-2027_b7b8ac300900",
+          "name": "Sorgo Granífero 2ª Safra"
+        }
+      ],
+      "propertySwitchPreservedInput": true,
+      "savedPlanPreserved": true,
+      "pageErrors": []
+    },
+    {
+      "device": "mobile",
+      "officialCards": 13,
+      "sorgo": [
+        {
+          "id": "ZARC_12016740330011_sorgo-forragem-ro-1-2026-2027_840556a5e73b",
+          "name": "Sorgo Forrageiro"
+        },
+        {
+          "id": "ZARC_12016740330021_sorgo-forragem-ro-1-2026-2027_840556a5e73b",
+          "name": "Sorgo Forrageiro 2ª Safra"
+        },
+        {
+          "id": "ZARC_12016740174011_sorgo-grao-ro-1-2026-2027_b7b8ac300900",
+          "name": "Sorgo Granífero"
+        },
+        {
+          "id": "ZARC_12016740174021_sorgo-grao-ro-1-2026-2027_b7b8ac300900",
+          "name": "Sorgo Granífero 2ª Safra"
+        }
+      ],
+      "propertySwitchPreservedInput": true,
+      "savedPlanPreserved": true,
+      "pageErrors": []
+    }
+  ]
+}

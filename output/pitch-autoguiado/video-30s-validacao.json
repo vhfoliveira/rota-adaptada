@@ -1,0 +1,26 @@
+{
+  "programs": [],
+  "stream_groups": [],
+  "streams": [
+    {
+      "codec_name": "h264",
+      "width": 1920,
+      "height": 1080,
+      "r_frame_rate": "30/1",
+      "duration": "30.000000",
+      "nb_frames": "900",
+      "nb_read_frames": "900"
+    }
+  ],
+  "format": {
+    "duration": "30.000000",
+    "size": "1244535"
+  },
+  "production": {
+    "source": "Actual application screenshots listed in produzir-video-30s.py",
+    "audio": "None: silent video with burned-in Portuguese captions",
+    "duration_seconds": 30,
+    "frames": 900,
+    "limitations": "Edited screenshot presentation, not a continuous interaction recording. Demonstration only; unknown soil and partial assessment remain explicit."
+  }
+}

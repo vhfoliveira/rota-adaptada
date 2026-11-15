@@ -1,0 +1,115 @@
+{
+  "testedAt": "2026-11-15T04:51:19.732Z",
+  "origin": "https://deltashift.udisoft.app.br",
+  "document": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-cache",
+      "connection": "keep-alive",
+      "content-encoding": "gzip",
+      "content-type": "text/html",
+      "date": "Sun, 15 Nov 2026 04:51:17 GMT",
+      "etag": "W/\"6af93979-385\"",
+      "last-modified": "Sun, 15 Nov 2026 04:47:53 GMT",
+      "server": "nginx/1.30.0",
+      "transfer-encoding": "chunked"
+    },
+    "title": "Rota Adaptada · Planeje e adapte sua safra",
+    "heading": "Planeje sua próxima safra.",
+    "scripts": [
+      "https://deltashift.udisoft.app.br/assets/index-B2ptp1j9.js"
+    ]
+  },
+  "serviceWorker": {
+    "active": "activated",
+    "scriptURL": "https://deltashift.udisoft.app.br/sw.js",
+    "controller": "https://deltashift.udisoft.app.br/sw.js",
+    "caches": [
+      "rota-field-801a3fbf9acffb4b"
+    ],
+    "publishedStatus": 200,
+    "publishedCache": "rota-field-801a3fbf9acffb4b",
+    "publishedHeaders": {
+      "server": "nginx/1.30.0",
+      "date": "Sun, 15 Nov 2026 04:51:20 GMT",
+      "content-type": "application/javascript",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "last-modified": "Sun, 15 Nov 2026 04:47:53 GMT",
+      "etag": "W/\"6af93979-c55\"",
+      "cache-control": "no-cache",
+      "content-encoding": "gzip"
+    },
+    "cacheMatchesPublished": true,
+    "cachedResources": {
+      "rota-field-801a3fbf9acffb4b": [
+        "https://deltashift.udisoft.app.br/icons/icon-192.png",
+        "https://deltashift.udisoft.app.br/icons/icon-512.png",
+        "https://deltashift.udisoft.app.br/index.html",
+        "https://deltashift.udisoft.app.br/assets/guided-0xoopu92.css",
+        "https://deltashift.udisoft.app.br/assets/main-CUoFoHRT.css",
+        "https://deltashift.udisoft.app.br/assets/vilhena-engine-BASzzSkr.css",
+        "https://deltashift.udisoft.app.br/manifest.webmanifest",
+        "https://deltashift.udisoft.app.br/assets/index-B2ptp1j9.js",
+        "https://deltashift.udisoft.app.br/assets/maplibre-gl--S9olhOP.css",
+        "https://deltashift.udisoft.app.br/assets/maplibre-gl-worker-B4rJi8w_.js",
+        "https://deltashift.udisoft.app.br/assets/preload-helper-Ct5FWWRu.js",
+        "https://deltashift.udisoft.app.br/assets/pwa-client-XnXKNR9c.js",
+        "https://deltashift.udisoft.app.br/assets/guided-D0tG50j7.js",
+        "https://deltashift.udisoft.app.br/assets/main-Ircb_BFO.js",
+        "https://deltashift.udisoft.app.br/assets/maplibre-gl-worker-C2Eu3-qi.js",
+        "https://deltashift.udisoft.app.br/assets/maplibre-gl-5qJd4OPz.js",
+        "https://deltashift.udisoft.app.br/assets/vilhena-engine-218tuHUP.js",
+        "https://deltashift.udisoft.app.br/branding/interplarios.png"
+      ]
+    },
+    "finalState": {
+      "active": "activated",
+      "scriptURL": "https://deltashift.udisoft.app.br/sw.js",
+      "controller": "https://deltashift.udisoft.app.br/sw.js",
+      "caches": [
+        "rota-field-801a3fbf9acffb4b"
+      ],
+      "resources": {
+        "rota-field-801a3fbf9acffb4b": [
+          "https://deltashift.udisoft.app.br/icons/icon-192.png",
+          "https://deltashift.udisoft.app.br/icons/icon-512.png",
+          "https://deltashift.udisoft.app.br/index.html",
+          "https://deltashift.udisoft.app.br/assets/guided-0xoopu92.css",
+          "https://deltashift.udisoft.app.br/assets/main-CUoFoHRT.css",
+          "https://deltashift.udisoft.app.br/assets/vilhena-engine-BASzzSkr.css",
+          "https://deltashift.udisoft.app.br/manifest.webmanifest",
+          "https://deltashift.udisoft.app.br/assets/index-B2ptp1j9.js",
+          "https://deltashift.udisoft.app.br/assets/maplibre-gl--S9olhOP.css",
+          "https://deltashift.udisoft.app.br/assets/maplibre-gl-worker-B4rJi8w_.js",
+          "https://deltashift.udisoft.app.br/assets/preload-helper-Ct5FWWRu.js",
+          "https://deltashift.udisoft.app.br/assets/pwa-client-XnXKNR9c.js",
+          "https://deltashift.udisoft.app.br/assets/guided-D0tG50j7.js",
+          "https://deltashift.udisoft.app.br/assets/main-Ircb_BFO.js",
+          "https://deltashift.udisoft.app.br/assets/maplibre-gl-worker-C2Eu3-qi.js",
+          "https://deltashift.udisoft.app.br/assets/maplibre-gl-5qJd4OPz.js",
+          "https://deltashift.udisoft.app.br/assets/vilhena-engine-218tuHUP.js",
+          "https://deltashift.udisoft.app.br/branding/interplarios.png"
+        ]
+      }
+    }
+  },
+  "demo": {
+    "heading": "Meu planejamento",
+    "calendar": "1\nMilho 1ª Safra consorciado com Braquiária\n\n120 dias de referência · Depende da chuva\n\nPlantio\n01/11/2026\nFim do ciclo de referência\n28/02/2027\n\nZARC: 40% · solo/manejo pendente\n\n2\nFeijão 2ª safra\n\n80 dias de referência · Depende da chuva\n\nPlantio\n08/03/2027\nFim do ciclo de referência\n26/05/2027\n\nZARC: 30% / 40% · solo/manejo pendente",
+    "climate": [
+      "NASA POWER · 2013–2024\n823,1 mm\n\nChuva acumulada média no período deste cultivo, em 11 anos completos.\n\nVariação histórica: 334,5 a 1.171 mm. Histórico não é previsão.",
+      "NASA POWER · 2013–2024\n322,6 mm\n\nChuva acumulada média no período deste cultivo, em 12 anos completos.\n\nVariação histórica: 214,1 a 503,4 mm. Histórico não é previsão."
+    ],
+    "savedPlanClicked": false
+  },
+  "offline": {
+    "heading": "Planeje sua próxima safra.",
+    "title": "Rota Adaptada · Planeje e adapte sua safra",
+    "networkMessage": "Você está sem conexão. Seu preenchimento pode continuar; novas consultas dependem da internet.",
+    "controller": "https://deltashift.udisoft.app.br/sw.js"
+  },
+  "pageErrors": [],
+  "failedResponses": [],
+  "ok": true
+}

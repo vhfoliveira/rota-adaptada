@@ -1,0 +1,57 @@
+{
+  "desktop": {
+    "images": [
+      {
+        "name": "01-atlas.png",
+        "loaded": true,
+        "width": 1536,
+        "height": 1024
+      },
+      {
+        "name": "02-tempo.png",
+        "loaded": true,
+        "width": 1536,
+        "height": 1024
+      },
+      {
+        "name": "03-conversa.png",
+        "loaded": true,
+        "width": 1536,
+        "height": 1024
+      },
+      {
+        "name": "04-constelacao.png",
+        "loaded": true,
+        "width": 1536,
+        "height": 1024
+      },
+      {
+        "name": "05-matriz.png",
+        "loaded": true,
+        "width": 1536,
+        "height": 1024
+      },
+      {
+        "name": "06-pulso.png",
+        "loaded": true,
+        "width": 1536,
+        "height": 1024
+      },
+      {
+        "name": "07-caderno.png",
+        "loaded": true,
+        "width": 1536,
+        "height": 1024
+      }
+    ],
+    "noHorizontalOverflow": true,
+    "viewer": "Abrir Atlas → próximo Tempo → seta direita Conversa → zoom 1536 px → ajustar → Escape: OK",
+    "comparison": "Duas seleções, terceira bloqueada, comparação em duas colunas: OK"
+  },
+  "mobile": {
+    "noHorizontalOverflow": true,
+    "viewer": "Abrir Pulso e fechar: OK",
+    "comparison": "Duas imagens empilhadas sem overflow horizontal: OK"
+  },
+  "errors": []
+}

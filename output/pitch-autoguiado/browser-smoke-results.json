@@ -1,0 +1,43 @@
+{
+  "testedAt": "2026-11-15T04:39:34.222Z",
+  "base": "http://127.0.0.1:5178",
+  "externalRequests": "blocked; NASA held until single-stage plan was saved",
+  "advanced": {
+    "ok": true,
+    "cases": [
+      "exact_plan",
+      "delay_preserved",
+      "missing_id",
+      "quota_retry",
+      "editor_guard"
+    ]
+  },
+  "guidedReports": [
+    {
+      "device": "desktop",
+      "createdOriginal": true,
+      "savedAlternative": true,
+      "originalPreserved": true,
+      "pageErrors": []
+    },
+    {
+      "device": "mobile",
+      "createdOriginal": true,
+      "savedAlternative": true,
+      "originalPreserved": true,
+      "pageErrors": []
+    }
+  ],
+  "realReport": {
+    "viewport": 360,
+    "manualCoordinates": true,
+    "fieldErrorsAndFocus": true,
+    "keyboardHelp": true,
+    "reloadedDraft": true,
+    "savedWithNasaPendingAndSoilUnavailable": true,
+    "singleAndTwoStagePlans": true,
+    "originalsPreserved": true,
+    "advancedDelay": 0,
+    "pageErrors": []
+  }
+}

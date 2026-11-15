@@ -1,0 +1,8 @@
+{"schema":"openai.presentation.layout/v5","unit":"px","slide":{"id":"sl/tmhh74","index":0,"layout":{"id":"ly/vals7mdk","name":"Blank"},"backgroundColor":"rgba(9,18,30,1)","position":{"left":0,"top":0,"width":1280,"height":720}},
+"elements":[
+{"id":"sh/ed0v6xon","kind":"textbox","position":{"left":72,"top":145,"width":805,"height":100},"text":"Rota Adaptada","style":{"fontSize":72,"typeface":"Liberation Sans","color":"#B5ED64","bold":true,"alignment":"left"},"geometry":"rect","lineWidth":0},
+{"id":"sh/1gru1cne","kind":"textbox","position":{"left":76,"top":270,"width":790,"height":150},"text":"Planeje sua próxima safra.\nAdapte quando as condições mudarem.","style":{"fontSize":35,"typeface":"Liberation Sans","color":"#EEF4F8","alignment":"left"},"geometry":"rect","lineWidth":0},
+{"id":"sh/gfid876t","kind":"textbox","position":{"left":76,"top":500,"width":780,"height":44},"text":"Equipe Interplários","style":{"fontSize":26,"typeface":"Liberation Sans","color":"#EEF4F8","alignment":"left"},"geometry":"rect","lineWidth":0},
+{"id":"sh/3i9c3m54","kind":"textbox","position":{"left":76,"top":565,"width":1120,"height":48},"text":"Field Shift: Adapting Farms with NASA Data","style":{"fontSize":24,"typeface":"Liberation Sans","color":"#A9B8C8","alignment":"left"},"geometry":"rect","lineWidth":0},
+{"id":"im/7ul0fyp8","kind":"image","position":{"left":930,"top":170,"width":278,"height":278},"fit":"contain","alt":"Identidade da equipe Interplários"}
+]}

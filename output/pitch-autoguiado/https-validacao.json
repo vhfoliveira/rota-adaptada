@@ -1,0 +1,101 @@
+{
+  "checkedAt": "2026-11-15T04:48:17.108434+00:00",
+  "url": "https://deltashift.udisoft.app.br/",
+  "commit": "4834090",
+  "health": "ok",
+  "cache": "rota-field-801a3fbf9acffb4b",
+  "htmlTitle": "Rota Adaptada · Planeje e adapte sua safra",
+  "entryScript": "./assets/index-B2ptp1j9.js",
+  "resources": [
+    {
+      "path": "index.html",
+      "status": 200,
+      "type": "text/html"
+    },
+    {
+      "path": "assets/guided-0xoopu92.css",
+      "status": 200,
+      "type": "text/css"
+    },
+    {
+      "path": "assets/guided-D0tG50j7.js",
+      "status": 200,
+      "type": "application/javascript"
+    },
+    {
+      "path": "assets/index-B2ptp1j9.js",
+      "status": 200,
+      "type": "application/javascript"
+    },
+    {
+      "path": "assets/main-CUoFoHRT.css",
+      "status": 200,
+      "type": "text/css"
+    },
+    {
+      "path": "assets/main-Ircb_BFO.js",
+      "status": 200,
+      "type": "application/javascript"
+    },
+    {
+      "path": "assets/maplibre-gl--S9olhOP.css",
+      "status": 200,
+      "type": "text/css"
+    },
+    {
+      "path": "assets/maplibre-gl-5qJd4OPz.js",
+      "status": 200,
+      "type": "application/javascript"
+    },
+    {
+      "path": "assets/maplibre-gl-worker-B4rJi8w_.js",
+      "status": 200,
+      "type": "application/javascript"
+    },
+    {
+      "path": "assets/maplibre-gl-worker-C2Eu3-qi.js",
+      "status": 200,
+      "type": "application/javascript"
+    },
+    {
+      "path": "assets/preload-helper-Ct5FWWRu.js",
+      "status": 200,
+      "type": "application/javascript"
+    },
+    {
+      "path": "assets/pwa-client-XnXKNR9c.js",
+      "status": 200,
+      "type": "application/javascript"
+    },
+    {
+      "path": "assets/vilhena-engine-218tuHUP.js",
+      "status": 200,
+      "type": "application/javascript"
+    },
+    {
+      "path": "assets/vilhena-engine-BASzzSkr.css",
+      "status": 200,
+      "type": "text/css"
+    },
+    {
+      "path": "manifest.webmanifest",
+      "status": 200,
+      "type": "application/octet-stream"
+    },
+    {
+      "path": "icons/icon-192.png",
+      "status": 200,
+      "type": "image/png"
+    },
+    {
+      "path": "icons/icon-512.png",
+      "status": 200,
+      "type": "image/png"
+    },
+    {
+      "path": "branding/interplarios.png",
+      "status": 200,
+      "type": "image/png"
+    }
+  ]
+}
