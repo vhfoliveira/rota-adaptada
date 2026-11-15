@@ -1,3 +1,4 @@
+import {onLangChange,t} from './i18n.js';
 import {deleteSavedPlanning} from './guided-storage.js';
 import {mountZarcPanel} from './zarc-panel.js';
 import { periodLabel, days, annualDate } from './scenario.js';
@@ -590,19 +591,19 @@ function renderShell() {
   const p = appState.propertyProfile;
   const activeSoil = rulesPackage.soil_profiles[p.soilProfileId] || UNKNOWN_SOIL;
   const soilFriendly = SOIL_FRIENDLY[activeSoil.id] || UNKNOWN_SOIL_LABEL;
-  const moduleNames = ['Propriedade', 'Culturas e ciclos', 'Calendário', 'Simulação e comparação', 'Relatório'];
+  const moduleNames = ['Propriedade', 'Culturas e ciclos', 'Calendário', 'Simulação e comparação', 'Relatório'].map(name => t(name));
   const moduleIcons = ['pin', 'leaf', 'plans', 'change', 'book'];
 
   $('#app').innerHTML = `
     <div class="orbit-workspace advanced-workspace">
       ${workspaceSidebar({active:'advanced'})}
       <div class="orbit-main">
-        ${workspaceTopbar({section:'Ferramentas',title:'Painel avançado'})}
-        <section class="advanced-workspace-heading" aria-label="Contexto do planejamento">
-          <div class="advanced-heading-copy"><span class="eyebrow">SEU CENTRO DE DECISÕES</span><a id="brand-home" href="#screen-container"><h2>Planejamento avançado<span>.</span></h2></a><p>Conecte sua área, organize os cultivos e explore o que pode mudar.</p></div>
+        ${workspaceTopbar({section:t('Ferramentas'),title:t('Painel avançado')})}
+        <section class="advanced-workspace-heading" aria-label="${esc(t('Contexto do planejamento'))}">
+          <div class="advanced-heading-copy"><span class="eyebrow">${esc(t('SEU CENTRO DE DECISÕES'))}</span><a id="brand-home" href="#screen-container"><h2>${esc(t('Planejamento avançado'))}<span>.</span></h2></a><p>${esc(t('Conecte sua área, organize os cultivos e explore o que pode mudar.'))}</p></div>
           <div class="header-actions">
-            <button type="button" id="btn-nasa-info" class="nasa-button">${icon('globe')} Fontes de dados</button>
-            <button type="button" id="btn-open-report" class="primary-header-btn">${icon('book')} Resumo imprimível</button>
+            <button type="button" id="btn-nasa-info" class="nasa-button">${icon('globe')} ${esc(t('Fontes de dados'))}</button>
+            <button type="button" id="btn-open-report" class="primary-header-btn">${icon('book')} ${esc(t('Resumo imprimível'))}</button>
           </div>
         </section>
         <div class="header-context-strip">
@@ -3557,6 +3558,7 @@ window.addEventListener('rota:before-update', event => {
   newPlanningFormState.open = !appState.planningConfig.id;
   newPlanningFormState.propertyId = appState.propertyProfile.id;
   renderShell();
+  onLangChange(() => renderShell());
   mountAdvancedHelp(document);
   refreshLiveNasaForActiveProperty(false);
 })();

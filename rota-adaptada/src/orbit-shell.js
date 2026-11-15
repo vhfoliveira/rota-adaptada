@@ -1,3 +1,5 @@
+import {getLang,setLang,t} from './i18n.js';
+
 const escape = value => String(value ?? '').replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
 
 const paths = {
@@ -30,12 +32,17 @@ const routes = [
 ];
 
 export function workspaceSidebar({active='home'}={}) {
-  const link = route => `<a class="orbit-nav-link ${active===route.id?'is-active':''}" href="${route.href}" data-workspace-route="${route.id}" ${active===route.id?'aria-current="page"':''}>${icon(route.icon)}<span>${route.label}</span>${active===route.id?'<i aria-hidden="true"></i>':''}</a>`;
-  return `<a class="orbit-skip" href="#workspace-content">Ir para o conteúdo</a><aside class="orbit-sidebar" id="workspace-sidebar" aria-label="Menu principal"><a class="orbit-brand" href="./" data-workspace-route="home"><span class="orbit-brand-symbol">${icon('leaf')}</span><span>Rota Adaptada<small>INTELIGÊNCIA PARA CULTIVAR</small></span></a><div class="orbit-workspace-label"><span class="orbit-workspace-dot"></span>Meu espaço de planejamento</div><nav aria-label="Navegação principal"><p class="orbit-nav-caption">ESPAÇO DE TRABALHO</p>${routes.slice(0,2).map(link).join('')}<p class="orbit-nav-caption">DA IDEIA AO CAMPO</p>${routes.slice(2,5).map(link).join('')}<p class="orbit-nav-caption">FERRAMENTAS</p>${link(routes[5])}</nav><div class="orbit-sidebar-bottom"><div class="orbit-science-mark">${icon('globe')}<span>Dados do espaço.<br><strong>Decisões na terra.</strong></span></div><div class="orbit-team"><img src="./branding/interplarios.png" width="28" height="28" alt=""><span>Equipe Interplários<small>NASA Space Apps</small></span><span class="orbit-version">02</span></div></div></aside><button type="button" class="orbit-menu-backdrop" aria-label="Fechar menu" hidden></button>`;
+  const link = route => `<a class="orbit-nav-link ${active===route.id?'is-active':''}" href="${route.href}" data-workspace-route="${route.id}" ${active===route.id?'aria-current="page"':''}>${icon(route.icon)}<span>${escape(t(route.label))}</span>${active===route.id?'<i aria-hidden="true"></i>':''}</a>`;
+  return `<a class="orbit-skip" href="#workspace-content">${escape(t('Ir para o conteúdo'))}</a><aside class="orbit-sidebar" id="workspace-sidebar" aria-label="${escape(t('Menu principal'))}"><a class="orbit-brand" href="./" data-workspace-route="home"><span class="orbit-brand-symbol">${icon('leaf')}</span><span>Rota Adaptada<small>${escape(t('INTELIGÊNCIA PARA CULTIVAR'))}</small></span></a><div class="orbit-workspace-label"><span class="orbit-workspace-dot"></span>${escape(t('Meu espaço de planejamento'))}</div><nav aria-label="${escape(t('Navegação principal'))}"><p class="orbit-nav-caption">${escape(t('ESPAÇO DE TRABALHO'))}</p>${routes.slice(0,2).map(link).join('')}<p class="orbit-nav-caption">${escape(t('DA IDEIA AO CAMPO'))}</p>${routes.slice(2,5).map(link).join('')}<p class="orbit-nav-caption">${escape(t('FERRAMENTAS'))}</p>${link(routes[5])}</nav><div class="orbit-sidebar-bottom"><div class="orbit-science-mark">${icon('globe')}<span>${escape(t('Dados do espaço.'))}<br><strong>${escape(t('Decisões na terra.'))}</strong></span></div><div class="orbit-team"><img src="./branding/interplarios.png" width="28" height="28" alt=""><span>${escape(t('Equipe Interplários'))}<small>NASA Space Apps</small></span><span class="orbit-version">02</span></div></div></aside><button type="button" class="orbit-menu-backdrop" aria-label="${escape(t('Fechar menu'))}" hidden></button>`;
+}
+
+function languageSwitch() {
+  const lang = getLang();
+  return `<div class="orbit-lang-switch" role="group" aria-label="${escape(t('Idioma da página'))}"><button type="button" class="orbit-lang-btn${lang==='pt-BR'?' is-active':''}" data-set-lang="pt-BR" aria-pressed="${lang==='pt-BR'}" title="${escape(t('Português (Brasil)'))}">PT</button><button type="button" class="orbit-lang-btn${lang==='en'?' is-active':''}" data-set-lang="en" aria-pressed="${lang==='en'}" title="${escape(t('Inglês'))}">EN</button></div>`;
 }
 
 export function workspaceTopbar({section='Meu espaço',title='Visão geral',actions=''}={}) {
-  return `<header class="orbit-topbar"><div class="orbit-breadcrumb"><button type="button" class="orbit-menu-button" aria-label="Abrir menu" aria-controls="workspace-sidebar" aria-expanded="false">${icon('menu')}</button><span>${escape(section)}</span><span class="orbit-breadcrumb-divider">/</span><strong>${escape(title)}</strong></div><div class="orbit-top-actions"><button type="button" class="orbit-search-trigger" aria-label="Buscar ações">${icon('search')}<span>Buscar ações</span><kbd>Ctrl K</kbd></button>${actions}<span class="orbit-avatar" aria-label="Espaço local">RA</span></div></header>`;
+  return `<header class="orbit-topbar"><div class="orbit-breadcrumb"><button type="button" class="orbit-menu-button" aria-label="${escape(t('Abrir menu'))}" aria-controls="workspace-sidebar" aria-expanded="false">${icon('menu')}</button><span>${escape(t(section))}</span><span class="orbit-breadcrumb-divider">/</span><strong>${escape(t(title))}</strong></div><div class="orbit-top-actions"><button type="button" class="orbit-search-trigger" aria-label="${escape(t('Buscar ações'))}">${icon('search')}<span>${escape(t('Buscar ações'))}</span><kbd>Ctrl K</kbd></button>${actions}${languageSwitch()}<span class="orbit-avatar" aria-label="${escape(t('Espaço local'))}">RA</span></div></header>`;
 }
 
 let cleanup;
@@ -47,13 +54,19 @@ export function bindWorkspaceShell(root,{navigate}={}) {
   const resize=()=>setMenu(false);mobile.addEventListener('change',resize);setMenu(false);
   toggle?.addEventListener('click',()=>setMenu(toggle.getAttribute('aria-expanded')!=='true'));
   backdrop?.addEventListener('click',()=>{setMenu(false);toggle?.focus();});
+  root.querySelectorAll('[data-set-lang]').forEach(button=>button.addEventListener('click',()=>{
+    const next=button.dataset.setLang;
+    if(next===getLang())return;
+    setLang(next);
+    document.querySelector(`[data-set-lang="${next}"]`)?.focus({preventScroll:true});
+  }));
   if(navigate)root.querySelectorAll('[data-workspace-route]').forEach(link=>link.addEventListener('click',event=>{
     if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
     event.preventDefault();setMenu(false);navigate(link.dataset.workspaceRoute,link.href);
   }));
   const dialog=document.createElement('dialog');
   dialog.className='orbit-command';dialog.setAttribute('aria-labelledby','orbit-command-title');
-  dialog.innerHTML=`<div class="orbit-command-heading"><h2 id="orbit-command-title">O que você quer fazer?</h2><button type="button" data-command-close aria-label="Fechar busca">${icon('close')}</button></div><label class="orbit-command-input">${icon('search')}<input type="search" placeholder="Busque uma ação…" aria-label="Filtrar ações"></label><nav aria-label="Ações disponíveis">${routes.map(route=>`<a href="${route.href}" data-command-route="${route.id}">${icon(route.icon)}<span>${route.label}</span>${icon('arrow')}</a>`).join('')}</nav><p class="orbit-command-empty" hidden>Nenhuma ação encontrada. Tente “planejamento” ou “culturas”.</p><footer>Esc para fechar · Tab para navegar</footer>`;
+  dialog.innerHTML=`<div class="orbit-command-heading"><h2 id="orbit-command-title">${escape(t('O que você quer fazer?'))}</h2><button type="button" data-command-close aria-label="${escape(t('Fechar busca'))}">${icon('close')}</button></div><label class="orbit-command-input">${icon('search')}<input type="search" placeholder="${escape(t('Busque uma ação…'))}" aria-label="${escape(t('Filtrar ações'))}"></label><nav aria-label="${escape(t('Ações disponíveis'))}">${routes.map(route=>`<a href="${route.href}" data-command-route="${route.id}">${icon(route.icon)}<span>${escape(t(route.label))}</span>${icon('arrow')}</a>`).join('')}</nav><p class="orbit-command-empty" hidden>${escape(t('Nenhuma ação encontrada. Tente “planejamento” ou “culturas”.'))}</p><footer>${escape(t('Esc para fechar · Tab para navegar'))}</footer>`;
   root.append(dialog);
   dialog.querySelector('[data-command-close]').onclick=()=>dialog.close();
   const input=dialog.querySelector('input');

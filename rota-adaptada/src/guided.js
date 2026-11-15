@@ -1,3 +1,4 @@
+import {onLangChange,t} from './i18n.js';
 import {removePlanningDrafts} from './planning-deletion.js';
 import './planning-change.css';
 import changeIndicatorStyles from './planning-change.css?inline';
@@ -71,8 +72,8 @@ async function navigateWorkspace(route,href){
 }
 function frame(content,wide=false){
   locationCleanup?.();locationCleanup=null;
-  const title=draft?objectiveLabels[draft.objective]:homeView==='library'?'Meus planejamentos':'Visão geral';
-  app.innerHTML=`<div class="orbit-workspace guided-workspace">${workspaceSidebar({active:draft?.objective||homeView})}<div class="orbit-main">${workspaceTopbar({section:'Meu espaço',title})}<main id="workspace-content" tabindex="-1" class="guide-main orbit-guide ${wide?'wide':''} ${draft?'is-journey':'is-dashboard'}"><p id="guide-storage" class="guide-message warning" role="status"></p><p id="guide-network" class="guide-message warning" role="status"></p>${content}<footer class="orbit-footer"><span>Rota Adaptada · Equipe Interplários</span><span>Seus planos ficam neste dispositivo. ${helpButton('privacy')}</span></footer></main></div></div>`;
+  const title=draft?t(objectiveLabels[draft.objective]):homeView==='library'?t('Meus planejamentos'):t('Visão geral');
+  app.innerHTML=`<div class="orbit-workspace guided-workspace">${workspaceSidebar({active:draft?.objective||homeView})}<div class="orbit-main">${workspaceTopbar({section:t('Meu espaço'),title})}<main id="workspace-content" tabindex="-1" class="guide-main orbit-guide ${wide?'wide':''} ${draft?'is-journey':'is-dashboard'}"><p id="guide-storage" class="guide-message warning" role="status"></p><p id="guide-network" class="guide-message warning" role="status"></p>${content}<footer class="orbit-footer"><span>${esc(t('Rota Adaptada · Equipe Interplários'))}</span><span>${esc(t('Seus planos ficam neste dispositivo.'))} ${helpButton('privacy')}</span></footer></main></div></div>`;
   bindWorkspaceShell(app,{navigate:navigateWorkspace});
   storageStatus();network();
 }
@@ -332,16 +333,16 @@ function render(focus=true){
   if(!screens[draft.objective]?.[step]){draft.step=0;return render(focus);}
   const body=screens[draft.objective][step]();
   const hasNext=step<resultIndex();
-  const nextLabel=step===0?(draft.objective==='adaptation'?'Simular uma mudança':'Usar esta localização'):step===resultIndex()-1?(draft.objective==='planning'?'Ver meu planejamento':draft.objective==='discovery'?'Consultar opções':'Comparar alternativas'):'Continuar';
+  const nextLabel=t(step===0?(draft.objective==='adaptation'?'Simular uma mudança':'Usar esta localização'):step===resultIndex()-1?(draft.objective==='planning'?'Ver meu planejamento':draft.objective==='discovery'?'Consultar opções':'Comparar alternativas'):'Continuar');
   const {total,step:visibleStep}=progressFor(draft);
-  const backLabel=step===0?'← Início':draft.objective==='planning'&&savedPlanId?'Editar uma cópia':'← Voltar';
-  const stepLabels=draft.objective==='discovery'?['Localização','Condições','Revisão','Opções','Resumo']:draft.objective==='adaptation'?['Plano original','Mudanças','Revisão','Comparação']:['Localização','Cultivos e datas','Revisão','Calendário'];
-  frame(`<ol class="orbit-steps" aria-label="Etapas do planejamento">${stepLabels.map((name,index)=>`<li class="${index+1===visibleStep?'is-current':index+1<visibleStep?'is-complete':''}" ${index+1===visibleStep?'aria-current="step"':''}><span>${index+1<visibleStep?icon('check'):String(index+1).padStart(2,'0')}</span><strong>${name}</strong></li>`).join('')}</ol>
-    <div class="orbit-journey ${isResult()?'has-results':''}"><div class="orbit-journey-content"><div class="guide-progress"><span>Etapa ${visibleStep} de ${total}</span><progress value="${visibleStep}" max="${total}" aria-label="Progresso"></progress><span>${objectiveLabels[draft.objective]}</span></div>
-    ${draft.example?'<p class="guide-message warning">Exemplo de Vilhena · dados demonstrativos. O solo permanece desconhecido; o histórico NASA usa 2013–2024.</p>':''}
-    <span class="guide-kicker">${draft.objective==='discovery'?'OPÇÕES PARA SUA ÁREA':'SEU PLANEJAMENTO'}</span><h1 id="guide-title" tabindex="-1">${titles[draft.objective][step]}</h1>
-    ${notice?`<p class="guide-message" role="status">${esc(notice)}</p>`:''}<p id="guide-error" class="guide-message error guide-error" role="alert" tabindex="-1"></p><div id="guide-body">${body}</div>
-    <div class="guide-nav"><button type="button" id="guide-back">${backLabel}</button>${hasNext?`<div class="guide-action"><button type="button" class="primary" id="guide-next">${nextLabel} ${icon('arrow')}</button>${helpButton(step===0?(draft.objective==='adaptation'?'plan':'location'):step===1?'sequence':draft.objective==='adaptation'&&step===2?'changes':'review')}</div>`:'<button type="button" id="guide-home">Concluir e voltar ao início</button>'}</div>
+  const backLabel=t(step===0?'← Início':draft.objective==='planning'&&savedPlanId?'Editar uma cópia':'← Voltar');
+  const stepLabels=(draft.objective==='discovery'?['Localização','Condições','Revisão','Opções','Resumo']:draft.objective==='adaptation'?['Plano original','Mudanças','Revisão','Comparação']:['Localização','Cultivos e datas','Revisão','Calendário']).map(label=>t(label));
+  frame(`<ol class="orbit-steps" aria-label="${esc(t('Etapas do planejamento'))}">${stepLabels.map((name,index)=>`<li class="${index+1===visibleStep?'is-current':index+1<visibleStep?'is-complete':''}" ${index+1===visibleStep?'aria-current="step"':''}><span>${index+1<visibleStep?icon('check'):String(index+1).padStart(2,'0')}</span><strong>${esc(name)}</strong></li>`).join('')}</ol>
+    <div class="orbit-journey ${isResult()?'has-results':''}"><div class="orbit-journey-content"><div class="guide-progress"><span>${esc(t('Etapa {step} de {total}',{step:visibleStep,total}))}</span><progress value="${visibleStep}" max="${total}" aria-label="${esc(t('Progresso'))}"></progress><span>${esc(t(objectiveLabels[draft.objective]))}</span></div>
+    ${draft.example?`<p class="guide-message warning">${esc(t('Exemplo de Vilhena · dados demonstrativos. O solo permanece desconhecido; o histórico NASA usa 2013–2024.'))}</p>`:''}
+    <span class="guide-kicker">${esc(t(draft.objective==='discovery'?'OPÇÕES PARA SUA ÁREA':'SEU PLANEJAMENTO'))}</span><h1 id="guide-title" tabindex="-1">${esc(t(titles[draft.objective][step]))}</h1>
+    ${notice?`<p class="guide-message" role="status">${esc(t(notice))}</p>`:''}<p id="guide-error" class="guide-message error guide-error" role="alert" tabindex="-1"></p><div id="guide-body">${body}</div>
+    <div class="guide-nav"><button type="button" id="guide-back">${esc(backLabel)}</button>${hasNext?`<div class="guide-action"><button type="button" class="primary" id="guide-next">${esc(nextLabel)} ${icon('arrow')}</button>${helpButton(step===0?(draft.objective==='adaptation'?'plan':'location'):step===1?'sequence':draft.objective==='adaptation'&&step===2?'changes':'review')}</div>`:`<button type="button" id="guide-home">${esc(t('Concluir e voltar ao início'))}</button>`}</div>
     <p id="guide-save-status" class="guide-small" role="status"></p></div>${isResult()?'':journeyContext()}</div>`,isResult());
   bind();storageStatus();
   if(isPlan()&&((draft.objective==='planning'&&step>=1)||draft.sourcePlanId))ensureCropCatalog();
@@ -518,3 +519,4 @@ async function init(){
   else home();
 }
 await init();
+onLangChange(()=>{if(draft)render(false);else home();});

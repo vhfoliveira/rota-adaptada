@@ -7,3 +7,9 @@
 @media(max-width:600px){.orbit-search-trigger span,.orbit-breadcrumb>span:first-of-type,.orbit-breadcrumb-divider{display:none}.orbit-search-trigger{width:44px;justify-content:center}.orbit-search-trigger .orbit-icon{width:20px;height:20px}.orbit-top-actions{gap:6px}.orbit-breadcrumb strong{font-size:12px}.orbit-topbar{padding-right:16px}.orbit-footer{flex-direction:column;gap:8px;font-size:10px}.orbit-command{margin-top:8vh}.orbit-command-heading h2{font-size:16px}}
 @media print{.orbit-sidebar,.orbit-topbar,.orbit-menu-backdrop,.orbit-skip,.orbit-command,.orbit-footer{display:none!important}.orbit-workspace{padding:0}body{background:#fff!important}.orbit-main{display:block}}
 .orbit-sidebar{overflow-y:auto;overscroll-behavior:contain}.guided-workspace button.orbit-menu-backdrop:hover{background:#09221a88}
+.orbit-lang-switch{display:inline-flex;align-items:center;gap:2px;padding:3px;border:1px solid var(--line);border-radius:999px;background:var(--paper-soft);flex:none}
+.orbit-lang-btn{border:0;background:transparent;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.04em;min-height:30px;padding:0 10px;border-radius:999px;transition:background .15s,color .15s}
+.orbit-lang-btn:hover:not(.is-active){background:#e7eeea;color:var(--ink)}
+.orbit-lang-btn.is-active{background:var(--leaf);color:#fff}
+@media(max-width:600px){.orbit-breadcrumb strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.orbit-lang-btn{min-height:28px;padding:0 8px;font-size:10px}}
+@media print{.orbit-lang-switch{display:none!important}}

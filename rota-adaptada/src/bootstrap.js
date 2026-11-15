@@ -1,3 +1,5 @@
+import { t } from './i18n.js';
+
 const mode = new URLSearchParams(location.search).get('modo');
 // Dismiss the displayed message without changing the underlying saved state.
 document.addEventListener('click', event => {
@@ -12,7 +14,7 @@ try {
   else await import('./guided.js');
 } catch (error) {
   console.error('Não foi possível abrir o aplicativo.', error);
-  document.querySelector('#app').innerHTML = '<main style="max-width:600px;margin:10vh auto;padding:24px;font-family:system-ui"><h1>Não foi possível abrir o aplicativo</h1><p>Confira a conexão e recarregue a página. Seus dados salvos não serão apagados.</p><button type="button" id="retry-app">Tentar novamente</button></main>';
+  document.querySelector('#app').innerHTML = `<main style="max-width:600px;margin:10vh auto;padding:24px;font-family:system-ui"><h1>${t('Não foi possível abrir o aplicativo')}</h1><p>${t('Confira a conexão e recarregue a página. Seus dados salvos não serão apagados.')}</p><button type="button" id="retry-app">${t('Tentar novamente')}</button></main>`;
   document.getElementById('retry-app').onclick = () => location.reload();
 }
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

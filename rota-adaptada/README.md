@@ -112,6 +112,15 @@ Validação em dispositivo: permitir/negar GPS, conferir ponto e precisão, cons
 com e sem solo, retomar rascunhos, instalar, fechar e reabrir offline. Conferir
 Android/Chrome e iPhone/Safari antes de distribuir.
 
+## Idioma e tradução (PT-BR / EN)
+
+A aplicação usa **PT-BR como projeto principal** e mantém a versão em inglês como uma camada isolada de dicionário em `src/i18n/en.json` via `src/i18n.js`:
+
+- **Detecção e alternância:** na primeira visita, o idioma é detectado pelo navegador (`navigator.languages` / `navigator.language`, ativando `en` somente para localidades `en*` e `pt-BR` nos demais casos). O botão **PT / EN** no cabeçalho alterna o idioma sem recarregar nem perder o rascunho em andamento, salvando a preferência em `localStorage` (`rota-adaptada:lang`).
+- **Como desenvolver (foco 100% em PT-BR):** todo texto exibido na interface em JS deve usar `t('Texto em PT-BR')` (ou `t('Etapa {step} de {total}', { step, total })`) e textos estáticos no `index.html` devem usar `data-i18n` (ou `data-i18n-content` / `data-i18n-placeholder`). Se uma frase ainda não existir em `src/i18n/en.json`, `t()` retorna o próprio texto em PT-BR automaticamente. Nunca envolva IDs internos, chaves do IndexedDB ou parâmetros técnicos em `t(...)`.
+- **Como traduzir:** quem traduz trabalha exclusivamente em `src/i18n/en.json`, mapeando `"Texto em PT-BR": "English text"`. Execute `npm run i18n:check` para listar frases marcadas com `t(...)` / `data-i18n` que ainda não possuem tradução.
+- **Instrução para I.A.:** **não desenvolver, editar nem adicionar entradas em `src/i18n/en.json`** durante tarefas de implementação, ajuste de fluxo ou criação de telas (a menos que o usuário solicite explicitamente traduzir textos). Toda implementação feita por I.A. deve ocorrer apenas em PT-BR usando `t(...)` e `data-i18n`.
+
 ## ServerOS
 
 Na raiz do repositório, `./deploy/serveros.sh` executa build e testes, preserva

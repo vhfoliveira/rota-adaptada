@@ -69,6 +69,14 @@ O painel avançado continua ativo para cadastros, configurações detalhadas e
 relatório imprimível. Histórico climático não é previsão de produtividade;
 presença no catálogo ZARC não confirma todas as condições da propriedade.
 
+## Idioma e tradução (PT-BR principal / EN em camada)
+
+O projeto tem **PT-BR como idioma principal e fonte de verdade**. A detecção inicial lê o idioma do navegador (`navigator.languages`), usando inglês apenas quando o navegador estiver em `en*` e mantendo `pt-BR` como padrão nos demais casos; o botão **PT / EN** no cabeçalho alterna o idioma e salva a escolha no navegador (`localStorage`).
+
+- **Desenvolvimento de telas e fluxos:** sempre feito em **PT-BR** nos módulos JS e no HTML, envolvendo textos visíveis ao usuário com `t('Texto em PT-BR')` (ou `t('Texto {var}', { var })`) no JS e `data-i18n` no HTML. Se não houver tradução em inglês, `t()` faz **fallback automático para o PT-BR** sem quebrar nenhum fluxo.
+- **Tradução para inglês:** mantida exclusivamente no dicionário [rota-adaptada/src/i18n/en.json](rota-adaptada/src/i18n/en.json), sem alterar fluxos, lógica, CSS ou IDs. Para listar textos pendentes de tradução, execute `npm run i18n:check` em `rota-adaptada/`.
+- **Regra obrigatória para I.A.:** ao implementar novas funcionalidades, telas, correções ou refatorações, **a I.A. NÃO deve desenvolver, alterar nem preencher o arquivo `src/i18n/en.json`** (salvo se o usuário pedir explicitamente uma tarefa exclusiva de tradução). A I.A. deve desenvolver 100% em PT-BR usando `t(...)` / `data-i18n`, deixando o `en.json` intocado para o fluxo de tradução.
+
 ## Documentação atual
 
 - [Execução, fontes, armazenamento e PWA](rota-adaptada/README.md)
