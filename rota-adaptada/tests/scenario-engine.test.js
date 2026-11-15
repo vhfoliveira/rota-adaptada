@@ -119,3 +119,15 @@ test('NASA missing fields remain null, configurable period is used',async t=>{
  assert.match(url,/start=20200101&end=20201231/);assert.equal(res.altitudeM,0);
  assert.deepEqual(res.dataset.daily['2020-01-01'],[0,null,null,null,null]);assert.equal(res.meanAnnualRainMm,null);assert.equal(res.meanGwetRoot,null);
 });
+test('NASA default request reaches today and reports only published precipitation dates',async t=>{
+ const original=globalThis.fetch;t.after(()=>globalThis.fetch=original);
+ let url;
+ const today=new Date().toISOString().slice(0,10).replaceAll('-','');
+ globalThis.fetch=async u=>{url=u;return {ok:true,json:async()=>({properties:{parameter:{PRECTOTCORR:{20250101:4,20250102:-999},T2M_MAX:{20250101:30},T2M_MIN:{20250101:20},GWETROOT:{20250101:0.5},GWETTOP:{20250101:0.4}}}})}};
+ const res=await fetchLiveNasaPower(11,11);
+ assert.equal(res.ok,true);assert.ok(url.includes(`end=${today}`));
+ assert.equal(res.startDate,'2025-01-01');assert.equal(res.endDate,'2025-01-01');
+ assert.equal(res.totalYears,1);assert.equal(res.totalDays,1);
+ assert.equal(res.dataset.daily['2025-01-02'],undefined);
+ assert.equal(res.dataset.metadata.period.end_year,2025);
+});
