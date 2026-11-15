@@ -55,9 +55,17 @@ let nasaLiveState = {
   meanGwetRoot: 0.64,
   meanGwetTop: 0.61,
   totalDays: 4383,
+  startYear: 2013,
+  endYear: 2024,
+  totalYears: 12,
+  startDate: '2013-01-01',
+  endDate: '2024-12-31',
   endpoint: '',
   error: null
 };
+
+const nasaPeriodLabel = () => `${nasaLiveState.startYear || 2013}–${nasaLiveState.endYear || 2024}`;
+const nasaYearsCount = () => nasaLiveState.totalYears || 12;
 
 let newPropertyFormState = {
   open: false,
@@ -231,6 +239,11 @@ async function refreshLiveNasaForActiveProperty(forceToast = false) {
     meanGwetRoot: res.meanGwetRoot,
     meanGwetTop: res.meanGwetTop,
     totalDays: res.totalDays,
+    startYear: res.startYear || 2013,
+    endYear: res.endYear || 2024,
+    totalYears: res.totalYears || 12,
+    startDate: res.startDate || '2013-01-01',
+    endDate: res.endDate || '2024-12-31',
     endpoint: res.endpoint,
     error: res.error || null
   };
@@ -244,7 +257,7 @@ async function refreshLiveNasaForActiveProperty(forceToast = false) {
 
   if (forceToast) {
     if (res.isLive) {
-      toast(`Dados da NASA POWER (2013–2024) consultados ao vivo para ${p.latitude}°, ${p.longitude}°!`);
+      toast(`Dados da NASA POWER (${res.startYear}–${res.endYear}) consultados ao vivo para ${p.latitude}°, ${p.longitude}°!`);
     } else {
       toast('Sem conexão com a API ao vivo da NASA no momento; utilizando base local de contingência.');
     }
@@ -680,7 +693,7 @@ function renderScreen1Property() {
         <strong>
           ${
             nasaLiveState.loading
-              ? '🛰️ Buscando série 2013–2024 na NASA...'
+              ? `🛰️ Buscando série 2013–${new Date().getUTCFullYear()} na NASA...`
               : nasaLiveState.isLive
                 ? `✓ NASA POWER Ao Vivo (${num(nasaLiveState.meanAnnualRainMm, 0)} mm/ano)`
                 : `NASA POWER (${num(nasaLiveState.meanAnnualRainMm, 0)} mm/ano)`
@@ -692,7 +705,9 @@ function renderScreen1Property() {
               ? `Requisitando chuva (PRECTOTCORR), temperatura (T2M) e umidade do solo (GWETTOP/GWETROOT) para ${esc(
                   p.latitude
                 )}°, ${esc(p.longitude)}°...`
-              : `12 anos diários (2013–2024 · ${esc(nasaLiveState.totalDays)} dias) · Umidade média nas raízes (GWETROOT): <b>${Math.round(
+              : `${esc(nasaYearsCount())} anos diários (${esc(nasaPeriodLabel())} · ${esc(
+                  nasaLiveState.totalDays
+                )} dias) · Umidade média nas raízes (GWETROOT): <b>${Math.round(
                   (nasaLiveState.meanGwetRoot || 0.64) * 100
                 )}%</b>.`
           }
@@ -712,7 +727,9 @@ function renderAutoLookupResult(res) {
     <div class="lookup-result-box">
       <div class="grid-two-cols">
         <div class="sub-box">
-          <span class="eyebrow">1. DADOS CLIMÁTICOS · NASA POWER API (2013–2024)</span>
+          <span class="eyebrow">1. DADOS CLIMÁTICOS · NASA POWER API (${esc(nasa.startYear || 2013)}–${esc(
+            nasa.endYear || 2024
+          )})</span>
           <h3>${nasa.isLive ? '✓ Dados da NASA Recebidos ao Vivo' : '⚠ Dados Carregados (Modo Contingência)'}</h3>
           <ul class="clean-list">
             <li><strong>Coordenadas:</strong> <code>${esc(newPropertyFormState.latitude)}°, ${esc(
@@ -846,7 +863,7 @@ function renderSystemSuggestedPlansPanel(allProps) {
             targetProp.propertyName
           )} (${esc(targetProp.municipality)}/${esc(targetProp.state)})...</h3>
           <p class="muted" style="max-width:640px;margin:0">
-            Cruzando a série histórica diária da <strong>NASA POWER (2013–2024)</strong>, a retenção hídrica do solo <strong>${esc(
+            Cruzando a série histórica diária da <strong>NASA POWER (${esc(nasaPeriodLabel())})</strong>, a retenção hídrica do solo <strong>${esc(
               targetSoil.shortTitle
             )} (${esc(targetSoil.waterMm)} mm)</strong> e todas as culturas e ciclos disponíveis no catálogo.
           </p>
@@ -892,7 +909,7 @@ function renderSystemSuggestedPlansPanel(allProps) {
     <section class="panel-card new-property-panel section-block" style="border:2px solid var(--green, #1f7a4c)">
       <div class="card-head">
         <div>
-          <span class="eyebrow">🃏 BARALHO DE SUGESTÕES DO SISTEMA · NASA POWER (2013–2024) + ISRIC SOILGRIDS + CULTURAS DISPONÍVEIS</span>
+          <span class="eyebrow">🃏 BARALHO DE SUGESTÕES DO SISTEMA · NASA POWER (${esc(nasaPeriodLabel())}) + ISRIC SOILGRIDS + CULTURAS DISPONÍVEIS</span>
           <h2>Escolha 1 das 3 Cartas de Planejamento Sugeridas pelo Sistema</h2>
           <p class="muted">
             O sistema avaliou <strong>${esc(
@@ -901,7 +918,7 @@ function renderSystemSuggestedPlansPanel(allProps) {
     summary.availableCropsCount || summary.totalCropsAnalyzed || 4
   )} culturas</strong> e <strong>${esc(
     summary.availableCyclesCount || summary.totalCyclesAnalyzed || 8
-  )} ciclos disponíveis</strong> usando os 12 anos da <strong>NASA POWER</strong> e o solo <strong>${esc(
+  )} ciclos disponíveis</strong> usando os ${esc(nasaYearsCount())} anos da <strong>NASA POWER</strong> e o solo <strong>${esc(
     targetSoil.shortTitle
   )}</strong>. Escolha uma das 3 cartas abaixo ou clique em <strong>Cancelar / Sair</strong>.
           </p>
@@ -1098,7 +1115,7 @@ function renderScreen2Crops() {
         <span class="eyebrow">PASSO 2 · CATÁLOGO DE CULTURAS, CICLOS E JANELAS DE SIMULAÇÃO</span>
         <h1>Culturas e Ciclos Disponíveis para o Planejamento e Adaptação</h1>
         <p>
-          Cada cultura e seus <strong>ciclos cadastrados (em dias)</strong> alimentam o <strong>Planejamento (Passo 3)</strong> e o teste histórico de 12 anos da <strong>NASA POWER (2013–2024)</strong>. Você pode cadastrar <strong>novas culturas</strong> (já informando o ciclo médio e o ciclo precoce) ou <strong>cadastrar novos ciclos</strong> para qualquer cultura.
+          Cada cultura e seus <strong>ciclos cadastrados (em dias)</strong> alimentam o <strong>Planejamento (Passo 3)</strong> e o teste histórico de ${esc(nasaYearsCount())} anos da <strong>NASA POWER (${esc(nasaPeriodLabel())})</strong>. Você pode cadastrar <strong>novas culturas</strong> (já informando o ciclo médio e o ciclo precoce) ou <strong>cadastrar novos ciclos</strong> para qualquer cultura.
         </p>
       </div>
       <div class="screen-header-cta">
@@ -1855,7 +1872,7 @@ function renderScreen4Comparison() {
         <h1>Comparação para +${esc(simResult.delayDays)} Dias de Atraso — ${esc(appState.propertyProfile.propertyName)}</h1>
         <p>
           Planejamento ativo: <strong>${esc(cfg.planningName || 'Planejamento Padrão')}</strong> ·
-          Defina abaixo <strong>o que você deseja manter</strong> e compare o <strong>Plano Atual</strong> com as <strong>alternativas de menor mudança</strong> nos <strong>12 anos históricos da NASA (2013–2024)</strong> para <code>${esc(
+          Defina abaixo <strong>o que você deseja manter</strong> e compare o <strong>Plano Atual</strong> com as <strong>alternativas de menor mudança</strong> nos <strong>${esc(nasaYearsCount())} anos históricos da NASA (${esc(nasaPeriodLabel())})</strong> para <code>${esc(
             appState.propertyProfile.latitude
           )}°, ${esc(appState.propertyProfile.longitude)}°</code>.
         </p>
@@ -2002,8 +2019,8 @@ function renderScreen4Comparison() {
             <div class="stress-test-box">
               <div class="stress-box-head">
                 <div class="row">
-                  <span class="eyebrow">DESEMPENHO NOS 12 ANOS DA NASA (2013–2024)</span>
-                  <strong>${stTest.noCriticalYears} de 12 anos sem falha severa</strong>
+                  <span class="eyebrow">DESEMPENHO NOS ${esc(stTest.years.length)} ANOS DA NASA (${esc(nasaPeriodLabel())})</span>
+                  <strong>${stTest.noCriticalYears} de ${stTest.years.length} anos sem falha severa</strong>
                 </div>
                 <p class="stress-headline">
                   ✓ <b>${stTest.okYears} anos</b> favoráveis · ! <b>${stTest.moderateYears}</b> com atenção · ⚠ <b>${stTest.severeYears}</b> com estresse severo
@@ -2101,7 +2118,9 @@ function renderScreen5Explanation() {
         <span class="eyebrow">PASSO 5 · EXPLICAÇÃO CLARA E RESUMO IMPRIMÍVEL</span>
         <h1>Por que esta opção é mais segura? Raio-X por Fase da Planta</h1>
         <p>
-          Clique em qualquer ano entre <strong>2013 e 2024</strong> abaixo para ver como a chuva, a umidade do solo e a temperatura consultadas na <strong>NASA POWER</strong> se comportaram nas <strong>4 fases da cultura</strong>.
+          Clique em qualquer ano entre <strong>${esc(nasaLiveState.startYear || 2013)} e ${esc(
+            nasaLiveState.endYear || 2024
+          )}</strong> abaixo para ver como a chuva, a umidade do solo e a temperatura consultadas na <strong>NASA POWER</strong> se comportaram nas <strong>4 fases da cultura</strong>.
         </p>
       </div>
       <div class="screen-header-cta">
@@ -2141,7 +2160,7 @@ function renderScreen5Explanation() {
 
       <div class="year-selector-strip">
         <div class="row" style="margin-bottom:8px">
-          <span class="eyebrow">CLIQUE EM UM ANO HISTÓRICO (2013–2024) PARA VER O QUE ACONTECEU NO CAMPO:</span>
+          <span class="eyebrow">CLIQUE EM UM ANO HISTÓRICO (${esc(nasaPeriodLabel())}) PARA VER O QUE ACONTECEU NO CAMPO:</span>
           <span class="stress-mini-summary">Chuva total no ciclo em ${esc(yearObj.year)}: <strong>${num(
     yearObj.cycleRainMm,
     0
@@ -2320,7 +2339,7 @@ function showNasaModal() {
   const activeDs = getActiveNasaDataset();
   const meta = activeDs.metadata;
   openModal(
-    'Consulta ao Vivo de Dados da NASA (NASA POWER API 2013–2024)',
+    `Consulta ao Vivo de Dados da NASA (NASA POWER API ${nasaPeriodLabel()})`,
     `
     <p class="muted">
       Coordenada ativa consultada: <strong>${esc(appState.propertyProfile.latitude)}°, ${esc(
@@ -2557,6 +2576,11 @@ function bindScreenEvents() {
         meanGwetRoot: nasaRes.meanGwetRoot,
         meanGwetTop: nasaRes.meanGwetTop,
         totalDays: nasaRes.totalDays,
+        startYear: nasaRes.startYear || 2013,
+        endYear: nasaRes.endYear || 2024,
+        totalYears: nasaRes.totalYears || 12,
+        startDate: nasaRes.startDate || '2013-01-01',
+        endDate: nasaRes.endDate || '2024-12-31',
         endpoint: nasaRes.endpoint,
         error: nasaRes.error || null
       };
@@ -2818,6 +2842,11 @@ function bindScreenEvents() {
           meanGwetRoot: res.meanGwetRoot,
           meanGwetTop: res.meanGwetTop,
           totalDays: res.totalDays,
+          startYear: res.startYear || 2013,
+          endYear: res.endYear || 2024,
+          totalYears: res.totalYears || 12,
+          startDate: res.startDate || '2013-01-01',
+          endDate: res.endDate || '2024-12-31',
           endpoint: res.endpoint
         };
       } catch {

@@ -16,12 +16,16 @@ export function getActiveNasaDataset() {
 }
 
 /**
- * Queries the official NASA POWER API live for a given latitude and longitude (2013-2024).
+ * Queries the official NASA POWER API live for a given latitude and longitude (2013 to current date).
  */
 export async function fetchLiveNasaPower(lat, lon) {
   const cleanLat = Number(Number(lat).toFixed(4));
   const cleanLon = Number(Number(lon).toFixed(4));
-  const endpoint = `https://power.larc.nasa.gov/api/temporal/daily/point?parameters=PRECTOTCORR,T2M_MAX,T2M_MIN,GWETROOT,GWETTOP&community=AG&longitude=${cleanLon}&latitude=${cleanLat}&start=20130101&end=20241231&format=JSON`;
+  const now = new Date();
+  const endYYYYMMDD = `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}${String(
+    now.getUTCDate()
+  ).padStart(2, '0')}`;
+  const endpoint = `https://power.larc.nasa.gov/api/temporal/daily/point?parameters=PRECTOTCORR,T2M_MAX,T2M_MIN,GWETROOT,GWETTOP&community=AG&longitude=${cleanLon}&latitude=${cleanLat}&start=20130101&end=${endYYYYMMDD}&format=JSON`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 14000);
@@ -42,8 +46,12 @@ export async function fetchLiveNasaPower(lat, lon) {
     let validCount = 0;
 
     for (const k of keys) {
+      const rawRain = p.PRECTOTCORR[k];
+      // Skip days where NASA POWER has not yet published precipitation data (uses -999 fill value)
+      if (rawRain == null || rawRain < 0) continue;
+
       const iso = `${k.slice(0, 4)}-${k.slice(4, 6)}-${k.slice(6, 8)}`;
-      const rain = p.PRECTOTCORR[k] >= 0 ? Number(p.PRECTOTCORR[k].toFixed(2)) : 0;
+      const rain = Number(rawRain.toFixed(2));
       const tmax = p.T2M_MAX?.[k] > -90 ? Number(p.T2M_MAX[k].toFixed(2)) : 30.0;
       const tmin = p.T2M_MIN?.[k] > -90 ? Number(p.T2M_MIN[k].toFixed(2)) : 20.0;
       const gwetroot = p.GWETROOT?.[k] >= 0 ? Number(p.GWETROOT[k].toFixed(3)) : 0.55;
@@ -55,10 +63,20 @@ export async function fetchLiveNasaPower(lat, lon) {
       validCount++;
     }
 
+    if (validCount === 0) throw new Error('Nenhum registro diário válido retornado pela NASA POWER API');
+
+    const validDates = Object.keys(daily).sort();
+    const startDate = validDates[0];
+    const endDate = validDates[validDates.length - 1];
+    const startYear = Number(startDate.slice(0, 4));
+    const endYear = Number(endDate.slice(0, 4));
+    const totalYears = Math.max(1, new Set(validDates.map(d => d.slice(0, 4))).size);
+    const effectiveYears = Math.max(1, validCount / 365.25);
+
     const altitudeM = Math.round(Number(raw?.geometry?.coordinates?.[2]) || 600);
-    const meanAnnualRainMm = Math.round(totalRain / 12);
-    const meanGwetRoot = Number((totalGwetRoot / Math.max(1, validCount)).toFixed(2));
-    const meanGwetTop = Number((totalGwetTop / Math.max(1, validCount)).toFixed(2));
+    const meanAnnualRainMm = Math.round(totalRain / effectiveYears);
+    const meanGwetRoot = Number((totalGwetRoot / validCount).toFixed(2));
+    const meanGwetTop = Number((totalGwetTop / validCount).toFixed(2));
 
     const liveDataset = {
       metadata: {
@@ -72,9 +90,11 @@ export async function fetchLiveNasaPower(lat, lon) {
           elevation_m: altitudeM
         },
         period: {
-          start_date: '2013-01-01',
-          end_date: '2024-12-31',
-          total_years: 12,
+          start_date: startDate,
+          end_date: endDate,
+          start_year: startYear,
+          end_year: endYear,
+          total_years: totalYears,
           total_days: validCount
         },
         summary: {
@@ -97,10 +117,21 @@ export async function fetchLiveNasaPower(lat, lon) {
       meanGwetRoot,
       meanGwetTop,
       totalDays: validCount,
+      startDate,
+      endDate,
+      startYear,
+      endYear,
+      totalYears,
       endpoint
     };
   } catch (err) {
     clearTimeout(timeoutId);
+    const fallbackDates = Object.keys(nasaDataset.daily || {}).sort();
+    const fallbackStartYear = nasaDataset.metadata?.period?.start_year || Number((fallbackDates[0] || '2013').slice(0, 4));
+    const fallbackEndYear =
+      nasaDataset.metadata?.period?.end_year || Number((fallbackDates[fallbackDates.length - 1] || '2024').slice(0, 4));
+    const fallbackTotalYears =
+      nasaDataset.metadata?.period?.total_years || Math.max(1, fallbackEndYear - fallbackStartYear + 1);
     // Keep current or default dataset if live network fails, but report status honestly
     return {
       ok: false,
@@ -108,10 +139,15 @@ export async function fetchLiveNasaPower(lat, lon) {
       error: err?.message || 'Falha na conexão ao vivo com a NASA POWER API',
       dataset: nasaDataset,
       altitudeM: nasaDataset.metadata?.location?.elevation_m || 600,
-      meanAnnualRainMm: 1920,
-      meanGwetRoot: 0.64,
-      meanGwetTop: 0.61,
-      totalDays: Object.keys(nasaDataset.daily || {}).length,
+      meanAnnualRainMm: nasaDataset.metadata?.summary?.mean_annual_rain_mm || 1920,
+      meanGwetRoot: nasaDataset.metadata?.summary?.mean_gwetroot || 0.64,
+      meanGwetTop: nasaDataset.metadata?.summary?.mean_gwettop || 0.61,
+      totalDays: fallbackDates.length,
+      startDate: nasaDataset.metadata?.period?.start_date || fallbackDates[0] || '2013-01-01',
+      endDate: nasaDataset.metadata?.period?.end_date || fallbackDates[fallbackDates.length - 1] || '2024-12-31',
+      startYear: fallbackStartYear,
+      endYear: fallbackEndYear,
+      totalYears: fallbackTotalYears,
       endpoint
     };
   }
@@ -504,11 +540,18 @@ function getHistoricalDayObservation(baseYear, month, day, offsetDays) {
   let iso = formatUTCDate(startDt);
   let row = nasaDataset.daily[iso];
   if (!row) {
-    // If a summer crop sown in late 2024 extends into early 2025, wrap to 2024's corresponding Jan/Feb/Mar dates
+    // If a crop extends beyond the latest available date in nasaDataset, wrap to the latest available year with that month/day
     const m = String(startDt.getUTCMonth() + 1).padStart(2, '0');
     const d = String(startDt.getUTCDate() === 29 && m === '02' ? 28 : startDt.getUTCDate()).padStart(2, '0');
-    iso = `2024-${m}-${d}`;
-    row = nasaDataset.daily[iso];
+    const endYear = nasaDataset.metadata?.period?.end_year || 2024;
+    for (let fallbackYear = endYear; fallbackYear >= 2013; fallbackYear--) {
+      const candidateIso = `${fallbackYear}-${m}-${d}`;
+      if (nasaDataset.daily[candidateIso]) {
+        iso = candidateIso;
+        row = nasaDataset.daily[candidateIso];
+        break;
+      }
+    }
   }
   if (!row) return null;
   return {
@@ -554,8 +597,10 @@ export function runHistoricalStressTest(cropId, groupKey, sowDateStr, soilProfil
         : soil.cad_mm.milho_ze_60cm;
 
   const yearsResult = [];
+  const startYear = nasaDataset.metadata?.period?.start_year || 2013;
+  const endYear = nasaDataset.metadata?.period?.end_year || 2024;
 
-  for (let year = 2013; year <= 2024; year++) {
+  for (let year = startYear; year <= endYear; year++) {
     let dayCursor = 0;
     let cycleRainMm = 0;
     const phaseMetrics = [];
@@ -795,13 +840,15 @@ export function runHistoricalStressTest(cropId, groupKey, sowDateStr, soilProfil
   const moderateYears = yearsResult.filter(y => y.status === 'moderado').length;
   const severeYears = yearsResult.filter(y => y.status === 'severo').length;
   const noCriticalYears = okYears + moderateYears;
+  const totalYears = yearsResult.length;
+  const periodLabel = `${startYear}–${endYear}`;
 
   const headline =
     severeYears === 0 && moderateYears === 0
-      ? 'Em 12 anos históricos (2013–2024): 12 anos sem alertas críticos.'
+      ? `Em ${totalYears} anos históricos (${periodLabel}): ${totalYears} anos sem alertas críticos.`
       : severeYears > 0
-        ? `Em 12 anos históricos (2013–2024): ${noCriticalYears} anos sem estresse severo (${okYears} sem alertas; ${moderateYears} moderado(s)); ${severeYears} ano(s) com estresse severo.`
-        : `Em 12 anos históricos (2013–2024): ${okYears} anos sem alertas; ${moderateYears} ano(s) com alerta moderado (0 severos).`;
+        ? `Em ${totalYears} anos históricos (${periodLabel}): ${noCriticalYears} anos sem estresse severo (${okYears} sem alertas; ${moderateYears} moderado(s)); ${severeYears} ano(s) com estresse severo.`
+        : `Em ${totalYears} anos históricos (${periodLabel}): ${okYears} anos sem alertas; ${moderateYears} ano(s) com alerta moderado (0 severos).`;
 
   return {
     cropId,
