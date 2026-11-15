@@ -4,6 +4,7 @@ const topic = (title, what, action, example = '', details = '') => Object.freeze
 // Stable topic IDs are shared by the guided journeys and the advanced workspace.
 // These explanations describe current data and behavior, not the retired prototype.
 export const helpTopics = Object.freeze({
+  sources: topic('fontes de dados', 'O motor combina NASA POWER, ZARC/MAPA, SoilGrids e os dados do produtor. IBGE, Nominatim e OpenFreeMap apoiam a localização.', 'Abra Fontes de dados para conferir o papel de cada fonte e os dados climáticos da propriedade ativa.', '', 'Disponibilidade e abrangência variam por local, cultura e safra. Dados ausentes permanecem não avaliados.'),
   location: topic('localização da área', 'É o lugar que será usado na consulta. Um ponto identifica uma localização; não desenha os limites da propriedade.', 'Use o GPS se estiver na área ou escolha a localização no mapa. Confira o município antes de continuar.', 'Se estiver em casa, não use o GPS para representar uma fazenda distante.', 'As condições ZARC são municipais. Clima e estimativas de solo usam o ponto confirmado. Sem um ponto, essas análises ficam pendentes.'),
   map: topic('escolha no mapa', 'O mapa ajuda a apontar onde fica sua área.', 'Busque o município, mova o mapa e marque a propriedade. Confirme o ponto antes de continuar.', 'O centro de uma cidade não representa automaticamente sua lavoura.', 'As malhas municipais são simplificadas. A seleção não é um levantamento de limites ou uma delimitação de talhão. Você também pode informar coordenadas.'),
   privacy: topic('uso da localização', 'A consulta usa a localização informada para buscar informações públicas da região.', 'Confirme a área que deseja analisar. O GPS só é solicitado quando você escolhe usá-lo.', '', 'Clima e solo são consultados na NASA POWER e no SoilGrids; a identificação do município pode usar OpenStreetMap. Rascunhos e planos ficam no navegador deste dispositivo, sem sincronização entre aparelhos.'),
@@ -149,7 +150,8 @@ const advancedHelp = [
   ['#btn-reset-demo', 'example', 'action'],
   ['#btn-export-state,#btn-download-nasa-json,#btn-download-html-direct,#modal-download-html-btn', 'export', 'action'],
   ['#btn-open-report,#btn-screen4-print,#btn-open-report-bottom,#modal-print-btn', 'save', 'action'],
-  ['#btn-nasa-info,#btn-modal-refresh-nasa', 'nasa', 'action'],
+  ['#btn-nasa-info', 'sources', 'action'],
+  ['#btn-modal-refresh-nasa', 'nasa', 'action'],
   ['.soil-cards-grid,.summary-kpis-grid>.kpi-card:nth-child(2)', 'soil', 'card'],
   ['.summary-kpis-grid>.kpi-card:first-child', 'location', 'card'],
   ['.nasa-live-card', 'nasa', 'card'],

@@ -632,7 +632,7 @@ function renderShell() {
           <img src="./branding/interplarios.png" alt="Brasão Interplários" width="30" height="30">
           <span><small>EQUIPE</small><strong>Interplários</strong></span>
         </button>
-        <button id="btn-nasa-info" class="nasa-button">◎ Fonte NASA</button>
+        <button id="btn-nasa-info" class="nasa-button">◎ Fontes de dados</button>
         <button id="btn-open-report" class="primary-header-btn">⎙ Resumo Imprimível</button>
       </div>
     </header>
@@ -716,20 +716,23 @@ function renderScreen1Property() {
     </div>
 
     ${
-      allProperties.length > 1
+      allProperties.some(prop => prop.id)
         ? `
       <div class="saved-properties-bar">
         <span>Propriedades disponíveis:</span>
-        ${allProperties
+        ${allProperties.filter(prop => prop.id)
           .map(
             prop => `
+          <span class="saved-property-actions ${prop.id === p.id ? 'active' : ''}">
           <button
             type="button"
             class="chip ${prop.id === p.id ? 'active' : ''}"
             data-switch-property="${esc(prop.id)}"
           >
             📍 ${esc(prop.propertyName)} (${esc(prop.municipality)}/${esc(prop.state)})
-          </button>`
+          </button>
+          <button type="button" class="property-remove" data-remove-property="${esc(prop.id)}" aria-label="Excluir propriedade ${esc(prop.propertyName)}" title="Excluir propriedade">×</button>
+          </span>`
           )
           .join('')}
       </div>`
@@ -1645,7 +1648,7 @@ function renderScreen3Planning() {
                     !plan.isPreRegistered
                       ? `<button type="button" class="tiny-refresh-btn" data-remove-planning="${esc(
                           plan.id
-                        )}" title="Excluir planejamento">✕</button>`
+                        )}" aria-label="Excluir planejamento ${esc(plan.planningName || 'sem nome')}">Excluir planejamento</button>`
                       : ''
                   }
                 </div>
@@ -2360,8 +2363,23 @@ function showNasaModal() {
   const activeDs = getActiveNasaDataset(appState.propertyProfile);
   const meta = activeDs?.metadata || {};
   openModal(
-    'Consulta dos dados climáticos da propriedade',
+    'Fontes de dados',
     `
+    <p>O motor combina as fontes abaixo com as culturas, datas e permissões do seu planejamento. A disponibilidade depende da localização e dos dados consultados.</p>
+    <table class="modal-table">
+      <thead><tr><th>Fonte</th><th>Como é utilizada</th></tr></thead>
+      <tbody>
+        <tr><td><strong>NASA POWER</strong></td><td>Histórico de chuva, temperatura e umidade do solo para analisar os ciclos nas coordenadas da propriedade.</td></tr>
+        <tr><td><strong>MAPA · ZARC</strong></td><td>Tábua de Risco municipal e portarias oficiais: culturas, períodos de plantio, classes de solo, manejo, grupos e parâmetros documentados de ciclo. Os registros consideram município e safra.</td></tr>
+        <tr><td><strong>ISRIC · SoilGrids</strong></td><td>Estimativas de textura do solo, como argila e areia, para apoiar a estimativa de retenção de água. Não substituem análise de solo.</td></tr>
+        <tr><td><strong>IBGE</strong></td><td>Malhas municipais para apoiar a localização e a confirmação do município no mapa.</td></tr>
+        <tr><td><strong>OpenStreetMap · Nominatim</strong></td><td>Identificação do município a partir das coordenadas.</td></tr>
+        <tr><td><strong>OpenFreeMap</strong></td><td>Mapa de fundo para selecionar e conferir o ponto da propriedade.</td></tr>
+        <tr><td><strong>Dados do produtor</strong></td><td>Sequência de culturas, ciclos personalizados, datas, intervalos e mudanças aceitas. Parâmetros cadastrados pelo usuário são identificados separadamente dos oficiais.</td></tr>
+      </tbody>
+    </table>
+    <p class="muted">As fontes de localização apoiam a escolha da área. A avaliação usa os dados climáticos e agronômicos disponíveis; ausência de dados permanece indicada como não avaliada. Histórico climático não é previsão de produtividade.</p>
+    <h3>NASA POWER · dados da propriedade ativa</h3>
     <p class="muted">
       Coordenada ativa consultada: <strong>${esc(appState.propertyProfile.latitude)}°, ${esc(
     appState.propertyProfile.longitude
@@ -2525,6 +2543,44 @@ function bindScreenEvents() {
         persistState();
         refreshLiveNasaForActiveProperty(true);
       }
+    };
+  });
+
+  $$('[data-remove-property]').forEach(button => {
+    button.onclick = async () => {
+      const id = button.dataset.removeProperty;
+      const property = availableProperties().find(item => item.id === id);
+      if (!property) return;
+      const linked = availablePlannings().filter(plan => plan.id && plan.propertyId === id);
+      const warning = linked.length
+        ? `A propriedade "${property.propertyName}" possui ${linked.length} planejamento(s) vinculado(s). A propriedade e esses planejamentos serão excluídos deste dispositivo. Esta ação não pode ser desfeita.\n\nExcluir assim mesmo?`
+        : `Excluir a propriedade "${property.propertyName}" deste dispositivo?`;
+      if (!confirm(warning)) return;
+      const removedPlanIds = new Set(linked.map(plan => plan.id));
+      appState.customPlannings = (appState.customPlannings || []).filter(plan => plan.propertyId !== id);
+      if (appState.planningConfig.propertyId === id) {
+        appState.planningConfig = blankPlanning();
+        appState.selectedStrategyId = 'PLANO_ATUAL';
+        appState.selectedStageIndex = 0;
+      }
+      const url = new URL(location.href);
+      if (removedPlanIds.has(url.searchParams.get('plano'))) {
+        url.searchParams.delete('plano');
+        history.replaceState(null, '', url);
+      }
+      appState.customProperties = (appState.customProperties || []).filter(item => item.id !== id);
+      if (id === DEFAULT_PROP.id) appState.demoEnabled = false;
+      if (appState.propertyProfile.id === id) {
+        climateRequest++;
+        appState.propertyProfile = blankProperty();
+        nasaLiveState = {...nasaLiveState,loading:false,isLive:false,lastCoords:null};
+      }
+      if (newPlanningFormState.propertyId === id) {
+        newPlanningFormState.propertyId = '';
+        newPlanningFormState.sourcePlanningConfig = null;
+      }
+      const saved = await updateAndRender();
+      if (saved) toast(linked.length ? 'Propriedade e planejamentos vinculados excluídos deste dispositivo.' : 'Propriedade excluída deste dispositivo.');
     };
   });
 
@@ -3299,15 +3355,24 @@ function bindScreenEvents() {
   });
 
   $$('[data-remove-planning]').forEach(btn => {
-    btn.onclick = () => {
+    btn.onclick = async () => {
       const targetPlanId = btn.dataset.removePlanning;
+      const targetPlan = availablePlannings().find(plan => plan.id === targetPlanId);
+      if (!targetPlan || !window.confirm(`Excluir o planejamento "${targetPlan.planningName || 'sem nome'}"? Esta ação não pode ser desfeita.`)) return;
       appState.customPlannings = (appState.customPlannings || []).filter(p => p.id !== targetPlanId);
       if (appState.planningConfig.id === targetPlanId) {
         appState.planningConfig = blankPlanning();
         newPlanningFormState.open = true;
+        appState.selectedStrategyId = 'PLANO_ATUAL';
+        appState.selectedStageIndex = 0;
       }
-      updateAndRender();
-      toast('Planejamento removido.');
+      const url = new URL(location.href);
+      if (url.searchParams.get('plano') === targetPlanId) {
+        url.searchParams.delete('plano');
+        history.replaceState(null, '', url);
+      }
+      const saved = await updateAndRender();
+      if (saved) toast('Planejamento excluído deste dispositivo.');
     };
   });
 

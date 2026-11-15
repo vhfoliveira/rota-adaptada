@@ -1930,3 +1930,5 @@ code {
 
 }
 .zarc-controls{max-width:620px}.zarc-controls label{display:block;margin:12px 0}.zarc-controls input,.zarc-controls select{display:block;width:100%;padding:10px}.zarc-options{display:grid;gap:12px}.zarc-crop{border:1px solid #cdd9d2;border-radius:12px;padding:16px}.zarc-options details ul{max-height:260px;overflow:auto;padding-left:20px}.zarc-options li{margin-bottom:8px;overflow-wrap:anywhere}#zarc-region-catalog details{margin:12px 0}#zarc-region-catalog summary{cursor:pointer;font-weight:600}
+
+.saved-property-actions{display:inline-flex;align-items:center;max-width:100%;border:1px solid var(--line,#30485b);border-radius:24px;overflow:hidden}.saved-property-actions.active{border-color:var(--green,#b8ed63)}.saved-property-actions .chip{border:0;border-radius:0;margin:0;min-width:0;white-space:normal}.saved-property-actions .property-remove{align-self:stretch;flex-shrink:0;min-width:44px;min-height:44px;padding:4px 10px;border:0;border-left:1px solid var(--line,#30485b);border-radius:0;background:transparent;color:inherit;font-size:22px;cursor:pointer}.saved-property-actions .property-remove:hover{background:#a33a3a33}

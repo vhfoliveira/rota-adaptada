@@ -72,9 +72,23 @@ function home(){
     <section id="start-choice" class="guide-card" hidden aria-live="polite"></section>
     <div class="guide-links"><button data-start="discovery">Ainda não sei o que plantar</button><button id="try-example">Experimentar com um exemplo</button>${helpButton('example')}</div>
     ${resumes.length?'<h2 class="resume-heading">Continue de onde parou</h2>':''}
-    ${resumes.map(d=>`<section class="guide-card guide-resume"><div><strong>${esc(objectiveLabels[d.objective])}${d.example?' · Exemplo':''}</strong><p class="guide-small">${esc(d.location?.municipality||'Local ainda não escolhido')} · etapa ${Math.min(progressFor(d).total,progressFor(d).step)} de ${progressFor(d).total}</p></div><button data-resume="${d.objective}" data-example="${Boolean(d.example)}">Continuar preenchimento</button></section>`).join('')}`);
+    ${resumes.map(d=>`<section class="guide-card guide-resume"><div><strong>${esc(objectiveLabels[d.objective])}${d.example?' · Exemplo':''}</strong><p class="guide-small">${esc(d.location?.municipality||'Local ainda não escolhido')} · etapa ${Math.min(progressFor(d).total,progressFor(d).step)} de ${progressFor(d).total}</p></div><div class="guide-resume-actions"><button data-resume="${d.objective}" data-example="${Boolean(d.example)}">Continuar preenchimento</button><button data-remove-draft="${d.objective}" data-example="${Boolean(d.example)}" aria-label="Remover preenchimento ${esc(objectiveLabels[d.objective])}${d.example?' · Exemplo':''}">Remover preenchimento</button></div></section>`).join('')}`);
   app.querySelectorAll('[data-start]').forEach(b=>b.onclick=()=>requestStart(b.dataset.start));
   app.querySelectorAll('[data-resume]').forEach(b=>b.onclick=()=>resume((b.dataset.example==='true'?demoDrafts:drafts)[b.dataset.resume]));
+  app.querySelectorAll('[data-remove-draft]').forEach(button=>button.onclick=async()=>{
+    const objective=button.dataset.removeDraft,example=button.dataset.example==='true';
+    if(!confirm('Remover este preenchimento da lista? Planejamentos já salvos serão mantidos.'))return;
+    button.disabled=true;
+    try{
+      await saveChain;
+      await saveDraft(objective,null,{example});
+      delete (example?demoDrafts:drafts)[objective];
+      storageError='';home();
+    }catch{
+      storageError='Não foi possível remover o preenchimento. Tente novamente.';
+      button.disabled=false;storageStatus();
+    }
+  });
   document.getElementById('try-example').onclick=()=>requestStart('planning',true);
 }
 function resume(value){
