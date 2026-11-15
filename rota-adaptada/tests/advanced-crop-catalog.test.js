@@ -20,7 +20,7 @@ test('Vilhena shows four distinct official sorghum modalities from its municipal
   assert.deepEqual(sorghum.map(option=>option.commonName),['Sorgo Forrageiro','Sorgo Forrageiro 2ª Safra','Sorgo Granífero','Sorgo Granífero 2ª Safra']);
   assert.equal(new Set(sorghum.map(option=>option.cropId)).size,4);
   assert(options.filter(option=>option.kind==='official').every(option=>option.crop.officialProfile.uf==='RO'));
-  assert(options.some(option=>option.cropId==='SOJA'&&option.kind==='legacy'));
+  assert(options.some(option=>option.crop.zarcCropId==='12016720000011'&&option.kind==='official'));
   assert(!options.some(option=>option.cropId==='SORGO_GRANIFERO'));
   assert.equal(JSON.stringify(engineCatalog),before);
 });

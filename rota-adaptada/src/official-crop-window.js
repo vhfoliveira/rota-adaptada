@@ -5,6 +5,10 @@ export function evaluateOfficialWindow(crop,group,date,context){
  const pending=detail=>({status:'PENDENTE',riskPct:null,badgeLabel:'Condições pendentes',tone:'warning',detail,provenance:'official',source:crop.officialProfile.source});
  const {officialZarc:base,property}=context;
  const profile=crop.officialProfile;
+ if(profile.municipalityCodes&&!profile.municipalityCodes.includes(String(property.municipalityCode)))return pending('A referência desta cultivar ainda não foi validada para este município.');
+ const cultivarWindow=group.officialGroup?.sourceGroup?.sowingMonthDays;
+ if(cultivarWindow&&(date.slice(5)<cultivarWindow.start||date.slice(5)>cultivarWindow.end))return pending('A data está fora da faixa preferencial da ficha desta cultivar usada pelo calendário automático. Consulte outra cultivar ou revise a data.');
+
  if(profile.uf!==property.state||!base||base.city.code!==String(property.municipalityCode))return pending('Consulte a base ZARC do município deste planejamento.');
  if(!officialSourceValid(profile,{uf:property.state,season:base.manifest.season}))return pending('Parâmetros fora da safra ou da publicação consultada.');
  if(date<profile.source.publishedAt)return pending('A fonte ainda não estava publicada na data de plantio informada.');

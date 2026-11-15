@@ -241,7 +241,7 @@ export function appendGuidedAlternative(legacy,draft,property,strategy,{id=uniqu
     delayDays:0,
     successionStages:selectedStages,
     officialProfiles:officialProfilesFor([...source.successionStages,...selectedStages]),
-    guidedOrigin:{kind:'adaptation',sourcePlanId:draft.sourcePlanId || null,savedAt,sourcePlanning:source,propertySnapshot:clone(savedProperty),strategySnapshot:clone(strategy),limitations:'Histórico não é previsão. Dados ou regras ausentes permanecem não avaliados; a escolha não certifica aptidão agrícola.'}
+    guidedOrigin:{kind:'adaptation',sourcePlanId:draft.sourcePlanId || null,savedAt,sourcePlanning:source,propertySnapshot:clone(savedProperty),strategySnapshot:{strategyId:strategy.strategyId,title:strategy.title,stages:strategy.stages.map(({cropId,groupKey,sowDate,harvestDate})=>({cropId,groupKey,sowDate,harvestDate}))},limitations:'Histórico não é previsão. Dados ou regras ausentes permanecem não avaliados; a escolha não certifica aptidão agrícola.'}
   };
   // Horizon originally includes the selected schedule, preserving explicit constraints.
   activateCreatedPlan(state,created,savedProperty,savedAt);

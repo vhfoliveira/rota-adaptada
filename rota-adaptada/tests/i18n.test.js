@@ -38,7 +38,10 @@ test('normalizeLang and detectBrowserLang prioritize browser preference with pt-
   assert.equal(detectBrowserLang({languages: ['fr-FR', 'en-GB']}), 'en');
   assert.equal(detectBrowserLang({languages: ['es-ES']}), DEFAULT_LANG);
   assert.equal(detectBrowserLang({language: 'en'}), 'en');
-  assert.equal(detectBrowserLang(undefined), DEFAULT_LANG);
+  // undefined uses the default navigator, which Node also exposes.
+  // Pass null explicitly to simulate an environment without a navigator.
+  assert.equal(detectBrowserLang(null), DEFAULT_LANG);
+  assert.equal(detectBrowserLang({}), DEFAULT_LANG);
 });
 
 test('resolveInitialLang honors saved user preference over browser locale', () => {

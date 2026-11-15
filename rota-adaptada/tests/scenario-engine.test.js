@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import {defaultPropertyProfile,defaultPlanningConfig,simulateAdaptation,generateSystemSuggestedPlannings,runHistoricalStressTest,createScenarioContext,evaluateZarcWindow,setActiveNasaDataset,getActiveNasaDataset,fetchLiveNasaPower,fetchSoilGridsAndSuggestClass,registerCustomCropsInCatalog,buildCycleGroupObject,rulesPackage,defaultNasaDataset,resolveSuccessionSchedule} from '../src/vilhena-engine.js';
+import {defaultPropertyProfile,defaultPlanningConfig,simulateAdaptation,generateSystemSuggestedPlannings,runHistoricalStressTest,createScenarioContext,evaluateZarcWindow,setActiveNasaDataset,getActiveNasaDataset,fetchLiveNasaPower,fetchSoilGridsAndSuggestClass,registerCustomCropsInCatalog,buildCycleGroupObject,rulesPackage,resolveSuccessionSchedule} from '../src/vilhena-engine.js';
 import {coverageMetrics,annualDate} from '../src/scenario.js';
 import {generateVilhenaReportHTML} from '../src/vilhena-report.js';
 const prop=defaultPropertyProfile();
@@ -54,7 +54,7 @@ test('climate belongs to coordinates and explicit context, not the last lookup',
  const other={...prop,municipality:'Outro',latitude:-15,longitude:-56};
  const foreign=dataset(other);
  setActiveNasaDataset(foreign);
- assert.equal(getActiveNasaDataset(prop),defaultNasaDataset);
+ assert.equal(getActiveNasaDataset(prop),null);
  assert.equal(getActiveNasaDataset(other),foreign);
  const mismatched=createScenarioContext(prop,{dataset:foreign});assert.equal(mismatched.dataset,null);
  const noData=simulateAdaptation({...other,latitude:-16},plan(),[],[],{dataset:foreign});
@@ -76,7 +76,7 @@ test('historical window follows supplied data; incomplete cross-year cycles are 
 test('unknown soil remains unassessed; explicit soil context enables evaluation',()=>{
  const unknown={...prop,soilProfileId:'NEW'};const config=plan({preservedDecisions:locked});
  assert.equal(simulateAdaptation(unknown,config).strategies[0].stages[0].stressTest.evaluatedYears,0);
- assert.ok(simulateAdaptation(unknown,config,[],[],{soilProfile:{available_water_mm:60}}).strategies[0].stages[0].stressTest.evaluatedYears>0);
+ assert.ok(simulateAdaptation(unknown,config,[],[],{dataset:dataset(),soilProfile:{available_water_mm:60}}).strategies[0].stages[0].stressTest.evaluatedYears>0);
 });
 test('regional rules require location and validity; custom windows have no official percentage',()=>{
  const other={...prop,municipality:'Outro',state:'MT'};
@@ -171,4 +171,20 @@ test('NASA default request reaches today and reports only published precipitatio
  assert.equal(res.totalYears,1);assert.equal(res.totalDays,1);
  assert.equal(res.dataset.daily['2025-01-02'],undefined);
  assert.equal(res.dataset.metadata.period.end_year,2025);
+});
+
+
+test('NASA bypasses caches and never reuses a successful response after failure',async t=>{
+ const previous=globalThis.fetch;t.after(()=>globalThis.fetch=previous);
+ let calls=0;
+ globalThis.fetch=async(url,options)=>{
+  calls++;assert.equal(options.cache,'no-store');
+  if(calls>1)throw Error('offline');
+  return {ok:true,json:async()=>({properties:{parameter:{PRECTOTCORR:{20250101:5},T2M_MAX:{20250101:30},T2M_MIN:{20250101:20},GWETROOT:{20250101:0.5},GWETTOP:{20250101:0.4}}}})};
+ };
+ const first=await fetchLiveNasaPower(-12.7405,-60.1458);
+ assert.equal(first.isLive,true);
+ const second=await fetchLiveNasaPower(-12.7405,-60.1458);
+ assert.equal(calls,2);assert.equal(second.dataset,null);assert.equal(second.isLive,false);
+ assert.equal(getActiveNasaDataset({latitude:-12.7405,longitude:-60.1458}),null);
 });

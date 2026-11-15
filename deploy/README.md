@@ -22,7 +22,7 @@ Acesse http://127.0.0.1:8088. O endereço de bind padrão é somente loopback.
 ## ServerOS
 
 - Diretório: `/opt/stacks/rota-adaptada`.
-- URL: https://deltashift.udisoft.app.br.
+- URL: https://rotaadaptada.udisoft.app.br.
 - Acesso auxiliar Tailscale: http://100.112.221.34:8088.
 - Rede externa Docker: `proxy`.
 - Alias exclusivo do serviço: `rota-adaptada-web`.
@@ -50,8 +50,8 @@ executar `up -d --no-build --wait` com os mesmos dois arquivos Compose.
 
 ## HTTPS
 
-`deploy/deltashift.udisoft.app.br.conf` é instalado em
-`/opt/stacks/proxy/conf.d/deltashift.udisoft.app.br.conf`.
+`deploy/rotaadaptada.udisoft.app.br.conf` é instalado em
+`/opt/stacks/proxy/conf.d/rotaadaptada.udisoft.app.br.conf`.
 O certificado é emitido pelo Certbot existente com validação HTTP webroot.
 A renovação usa o agendamento já existente do proxy, diariamente às 03:15
 no horário configurado no servidor, sem novo cron.
@@ -66,10 +66,10 @@ docker exec proxy-nginx nginx -s reload
 ## Verificação e logs
 
 ```bash
-curl -fsS https://deltashift.udisoft.app.br/healthz
+curl -fsS https://rotaadaptada.udisoft.app.br/healthz
 docker compose -f compose.yaml -f compose.serveros.yaml logs --tail=100 web
 docker compose -f compose.yaml -f compose.serveros.yaml logs --tail=100 zarc-updater
-curl -fsS https://deltashift.udisoft.app.br/zarc/update-status.json
+curl -fsS https://rotaadaptada.udisoft.app.br/zarc/update-status.json
 ```
 
 O contêiner web tem healthcheck e filesystem somente leitura. Os dois serviços
@@ -106,3 +106,10 @@ não faz parte desse backup e suas versões são preservadas pelo atualizador.
 ./deploy/serveros.sh --check # Valida sintaxe e pacote, sem acessar o servidor
 ./deploy/serveros.sh --help
 ```
+
+O script mostra o tamanho do pacote e o tempo de empacotamento, envio, build,
+backup, instalação, espera pelo healthcheck e validação pública. O build usa
+saída textual do BuildKit, com testes e Vite em etapas separadas para identificar
+o custo de cada um e as etapas reaproveitadas do cache. O total remoto está
+incluído no total completo; não some os dois valores. `--check` mede apenas a
+validação local, sem publicar.

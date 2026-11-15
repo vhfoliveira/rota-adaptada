@@ -63,10 +63,10 @@ interações e [o contrato do motor](docs/MOTOR_CENARIOS.md) para limites e inte
 
 ## Fontes e armazenamento
 
-As consultas NASA POWER e SoilGrids usam o ponto confirmado. Uma falha climática
-só pode reutilizar histórico da mesma coordenada. O guia consulta até o fim do
+As consultas NASA POWER e SoilGrids usam o ponto confirmado. Cada solicitação consulta a API com cache desativado. Uma falha climática
+não reutiliza respostas anteriores. O guia consulta até o fim do
 ano anterior; o painel avançado pode solicitar até a data atual. O período exibido
-reflete os registros disponíveis. O histórico local de Vilhena cobre 2013–2024.
+reflete os registros disponíveis. Não há série NASA embarcada.
 
 A descoberta municipal pode funcionar sem ponto e sem classe de solo confirmada,
 exibindo as condições pendentes. Criação e adaptação exigem ponto confirmado e ciclos
@@ -89,8 +89,7 @@ permite salvar o calendário enquanto a NASA carrega, mantendo o histórico pend
 
 O exemplo usa milho de primeira safra consorciado com braquiária, ciclo de
 referência de 120 dias, seguido de feijão de segunda safra, 80 dias, com início
-em 01/11/2026 e intervalo demonstrativo de 7 dias. A série NASA embarcada
-2013–2024 é explícita e usa cache separado das consultas reais. O solo permanece
+em 01/11/2026 e intervalo demonstrativo de 7 dias. O exemplo consulta a NASA ao vivo, assim como uma área real. O solo permanece
 desconhecido. Calendário, histórico e condições ZARC não demonstram superioridade
 agronômica; o fim do ciclo não garante a data de colheita.
 

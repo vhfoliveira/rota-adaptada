@@ -73,7 +73,7 @@ slides=[
 ['Integrantes e funções reais: desenvolvimento, dados/agronomia, experiência do usuário e apresentação, conforme a equipe.','O que foi construído: aplicação de planejamento, consulta de opções e comparação de cenários.','Próximo passo: validar uso e critérios com agrônomos e produtores.','Continuidade: incorporar dados reais da propriedade e acompanhar um piloto.','Link ou QR code público do protótipo e do código-fonte.'],
 'Próximo passo: validar no campo, com produtores e agrônomos.',
 'Nomes e papéis em uma área; três próximos passos em outra. Reserve espaço para QR code e URL curta legível.',
-'Feche com um convite concreto a parceiros técnicos e propriedades piloto. A documentação registra https://deltashift.udisoft.app.br como endereço de implantação; conferir disponibilidade antes de gerar o QR code.',
+'Feche com um convite concreto a parceiros técnicos e propriedades piloto. A documentação registra https://rotaadaptada.udisoft.app.br como endereço de implantação; conferir disponibilidade antes de gerar o QR code.',
 'Completar nomes e funções; confirmar acesso público do protótipo e do repositório. Não foram localizados os integrantes nem um endereço público confirmado do código nas fontes usadas para este guia.')]
 for i,(title,time,items,copy,visual,speech,pending) in enumerate(slides,1):
  new();p(f'SLIDE {i:02d} / 07  •  {time}','SubX');p(title,'TitleX');section('Informações necessárias','');bullets(items);p(copy,'QuoteX');section('Visual a preparar',visual);section('O que explicar na fala',speech);section('Antes de finalizar',pending)

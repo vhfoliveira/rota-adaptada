@@ -4,7 +4,9 @@ export function municipalityOptions(manifest) {
   return Object.entries(manifest?.municipalities || {}).map(([code, [state, municipality]]) => ({code, state, municipality, label:`${municipality} / ${state}`})).sort((a,b)=>a.label.localeCompare(b.label, 'pt-BR'));
 }
 export function findMunicipalityOption(options, label) {
-  const matches = options.filter(item => normalizePlace(item.label) === normalizePlace(label));
+  const query = normalizePlace(label);
+  if (!query) return null;
+  const matches = options.filter(item => normalizePlace(item.label) === query || normalizePlace(item.municipality) === query);
   return matches.length === 1 ? matches[0] : null;
 }
 export function parseLocationPoint(latitude, longitude) {
@@ -51,4 +53,9 @@ export function resolveLocationDraft(value, options) {
   if(!selected)return value.confirmed?{...value,confirmed:false}:value;
   if(value.municipalityCode===selected.code&&value.municipality===selected.municipality&&value.state===selected.state&&value.municipalityQuery===selected.label)return value;
   return {...value,municipalityCode:selected.code,municipality:selected.municipality,state:selected.state,municipalityQuery:selected.label};
+}
+
+export function locationReady(value, city, allowMunicipalityOnly=false) {
+  return Boolean(city && (parseLocationPoint(value.latitude,value.longitude) ||
+    (allowMunicipalityOnly && value.source==='municipality' && value.confirmed)));
 }

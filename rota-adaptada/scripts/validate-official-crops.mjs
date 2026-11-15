@@ -27,5 +27,5 @@ export async function validateCollections(files){
 }
 if(process.argv[1]===fileURLToPath(import.meta.url)){
  const files=process.argv.slice(2);
- console.log(JSON.stringify(await validateCollections(files.length?files:['src/data/official-crop-profiles-a.json','src/data/official-crop-profiles-b.json']),null,2));
+ console.log(JSON.stringify(await validateCollections(files.length?files:['src/data/official-crop-profiles-a.json','src/data/official-crop-profiles-b.json','src/data/official-crop-profiles-soy.json']),null,2));
 }

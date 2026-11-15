@@ -1,21 +1,25 @@
+import {mountSuggestionNavigation} from './suggestion-navigation.js';
 import {onLangChange,t} from './i18n.js';
 import {removePlanningDrafts} from './planning-deletion.js';
 import './planning-change.css';
 import changeIndicatorStyles from './planning-change.css?inline';
 import {planningChange} from './planning-change.js';
+import {preferredCultureNotice,suggestionDetails,suggestionPreferences,suggestionCards as renderSuggestionCards} from './guided-suggestion-ui.js';
+import './guided-suggestions.css';
 import {suggestCompletePlans} from './guided-suggestions.js';
 import './space.css';
 import './guided.css';
 import './context-help.css';
 import './orbit.css';
 import './guided-orbit.css';
+import './fluid-ui.css';
 import {workspaceSidebar,workspaceTopbar,bindWorkspaceShell,icon} from './orbit-shell.js';
 import {renderDashboard,renderPlanLibrary} from './orbit-dashboard.js';
 import {helpButton,mountContextHelp} from './context-help.js';
 import {mountLocationPicker} from './guided-location.js';
 import {readDrafts,saveDraft,readLegacyState,deleteSavedPlanning,saveGuidedAlternative,saveGuidedPlan} from './guided-storage.js';
 import {listPlanningChoices,extractGuidedPlan,buildGuidedPlanning,simulateGuidedPlanning,buildGuidedOriginalPlanning,simulateGuidedOriginalPlanning} from './guided-planning.js';
-import {createPlanningDemoDraft,DEMO_SOURCE_DEPENDENCIES} from './guided-demo.js';
+import {createPlanningDemoDraft} from './guided-demo.js';
 import {queryGuidedSources,emptySources} from './guided-discovery.js';
 import {loadGuidedCropCatalog} from './guided-crops.js';
 import {stageDetails} from './official-crop-ui.js';
@@ -211,15 +215,12 @@ function refreshPreview(){const el=document.getElementById('calendar-preview');i
 function planStep(){return `${draft.sourcePlanning?'<p class="guide-message">Você está revisando uma cópia do plano salvo. O original permanece guardado.</p>':''}<section class="guide-card">
   ${draft.objective==='planning'?`${label('plan-name','Nome do planejamento (opcional)','name')}<input id="plan-name" data-field="name" maxlength="120" value="${esc(draft.name||'')}" placeholder="Ex.: Área do sítio · próxima safra">`:''}
   ${label('plant-date','Quando começa o primeiro cultivo?','date')}<input id="plant-date" type="date" data-field="date" required value="${esc(draft.date)}">
-  ${draft.objective==='planning'?`<section class="guide-message"><h3>Planeje a partir da sua área e da data</h3><p>Não precisa escolher culturas ou ciclos antes. Vamos propor um calendário com os perfis oficiais disponíveis para sua localização e data. Revise as hipóteses antes de usar.</p><button type="button" class="primary" id="suggest-guided-plan" aria-expanded="false" aria-controls="suggestion-period">Sugerir planejamento</button><div id="suggestion-period" hidden><label for="planning-horizon">Quantos dias deseja planejar?</label><input id="planning-horizon" type="number" min="1" max="36500" step="1" data-field="horizonDays" value="${esc(draft.horizonDays||'')}" placeholder="Ex.: 90, 180 ou 365" aria-describedby="planning-horizon-hint"><p id="planning-horizon-hint" class="guide-small">Informe o período total a partir da data inicial. Vamos buscar cultivos completos que caibam nele, incluindo os intervalos entre eles.</p><button type="button" class="primary" id="generate-guided-plan">Gerar sugestões para este período</button></div><div id="guided-suggestions" aria-live="polite">${suggestionCards()}</div></section>`:''}
+  ${draft.objective==='planning'?`<section class="guide-message"><h3>Planeje a partir da sua área e da data</h3><p>Não precisa escolher culturas ou ciclos antes. Vamos propor um calendário com os perfis oficiais disponíveis para sua localização e data. Revise as hipóteses antes de usar.</p><button type="button" class="primary" id="suggest-guided-plan" aria-expanded="${guidedSuggestions?'true':'false'}" aria-controls="suggestion-period">Sugerir planejamento</button><div id="suggestion-period" ${guidedSuggestions?'':'hidden'}><label for="planning-horizon">Quantos dias deseja planejar?</label><input id="planning-horizon" type="number" min="1" max="36500" step="1" data-field="horizonDays" value="${esc(draft.horizonDays||'')}" placeholder="Ex.: 90, 180 ou 365" aria-describedby="planning-horizon-hint"><p id="planning-horizon-hint" class="guide-small">Informe o período total a partir da data inicial. Vamos buscar cultivos completos que caibam nele, incluindo os intervalos entre eles.</p><div id="suggestion-preferences">${suggestionPreferences(draft,currentCropCatalog().value?.cultures||[])}</div><button type="button" class="primary" id="generate-guided-plan">Gerar sugestões para este período</button></div><div id="guided-suggestions" aria-live="polite">${suggestionCards()}</div></section>`:''}
   <div class="guide-card-head section-heading"><h2>Sua sequência de cultivos</h2>${helpButton('sequence')}</div><p class="guide-small">Escolha as culturas na ordem em que ocuparão a mesma área. A lista contém registros municipais; cada data e condição será conferida no resultado.</p>
   <div id="guide-crop-fields">${cropFields()}</div><div class="guide-action"><button type="button" id="add-stage">+ Adicionar próximo cultivo</button>${helpButton('sequence')}</div>
   ${label('interval','Dias reservados entre cultivos','interval')}<input id="interval" type="number" required min="0" max="36500" step="1" data-field="intervalDays" value="${esc(draft.intervalDays)}" aria-describedby="interval-hint"><p id="interval-hint" class="guide-small">Inclua secagem, colheita e preparo após o fim do ciclo de referência. Informe 0 se não reservar intervalo.${draft.example?' Os 7 dias são apenas uma hipótese deste exemplo.':''}</p>
   ${soilControls()}<button type="button" data-discover-from-plan>Ainda não sei o que plantar</button></section><section class="guide-card calendar-preview" id="calendar-preview" aria-live="polite">${calendarPreview()}</section>`;}
-function suggestionCards(){
-  if(!guidedSuggestions)return '';
-  return `<p class="guide-small">${esc(guidedSuggestions.analysisSummary.climatePeriod || 'Sem histórico climático disponível')}. As opções não garantem produtividade; confira solo, manejo e condições oficiais.</p>${guidedSuggestions.suggestions.length?guidedSuggestions.suggestions.map((option,index)=>`<article class="guide-card"><h3>${esc(option.title)}</h3><p>${esc(option.rationale)}</p><span class="guide-pill">${esc(option.badge)}</span>${calendarList(option.evaluation.stages)}<button type="button" data-use-guided-suggestion="${index}">Usar esta sugestão</button></article>`).join(''):'<p>Não encontramos um ciclo completo com os parâmetros e janelas disponíveis que caiba nesse período. Aumente a duração, tente outra data ou monte o planejamento manualmente.</p>'}<button type="button" id="close-guided-suggestions">Manter meu planejamento</button>`;
-}
+function suggestionCards(){return renderSuggestionCards(guidedSuggestions);}
 function suggestGuidedPlan(){
   try{
     try{validDate(draft.date,'Data do primeiro plantio');}catch(e){fail('plant-date',e.message);}
@@ -227,12 +228,14 @@ function suggestGuidedPlan(){
     if(!Number.isInteger(horizon)||horizon<1||horizon>36500)fail('planning-horizon','Informe um período inteiro entre 1 e 36500 dias.');
     const catalog=currentCropCatalog();
     if(catalog.status!=='ready')throw Error(catalog.status==='error'?'Não foi possível carregar as culturas. Use Tentar novamente no catálogo.':'Aguarde o carregamento das culturas da sua área e tente novamente.');
-    guidedSuggestions=suggestCompletePlans({catalog:catalog.value,location:draft.location,date:draft.date,horizonDays:Number(draft.horizonDays),intervalDays:String(draft.intervalDays??'').trim()===''?7:Number(draft.intervalDays),soilCode:draft.soilCode,management:draft.management});
+    guidedSuggestions=suggestCompletePlans({preferences:draft.suggestionPreferences||{},preferredCultureId:draft.preferredCultureId||'',catalog:catalog.value,location:draft.location,date:draft.date,horizonDays:Number(draft.horizonDays),intervalDays:String(draft.intervalDays??'').trim()===''?7:Number(draft.intervalDays),soilCode:draft.soilCode,management:draft.management});
     render(false);document.getElementById('guided-suggestions')?.scrollIntoView({behavior:'smooth',block:'start'});
   }catch(e){error(e.message,e.field);}
 }
 function refreshCropFields(){
  if(!isCultivating())return;
+ const preferences=document.getElementById('suggestion-preferences');
+ if(preferences)preferences.innerHTML=suggestionPreferences(draft,currentCropCatalog().value?.cultures||[]);
  const container=document.getElementById('guide-crop-fields');
  if(container){const focusId=document.activeElement?.id;container.innerHTML=cropFields();bind();if(focusId)document.getElementById(focusId)?.focus({preventScroll:true});}
 }
@@ -265,13 +268,13 @@ function validateCropSelections(){
  });
 }
 function changesStep(){return `<section class="guide-card">${label('delay','Quantos dias o plantio atrasou?','delay')}<input id="delay" type="number" min="0" max="36500" step="1" data-field="delayDays" value="${esc(draft.delayDays)}"><div class="guide-card-head"><h2>O que você aceita mudar?</h2>${helpButton('changes')}</div><label class="check"><input type="checkbox" data-field="allowCycleChange" ${draft.allowCycleChange?'checked':''}>Usar ciclos mais curtos</label><label class="check"><input type="checkbox" data-field="allowCropChange" ${draft.allowCropChange?'checked':''}>Testar outras culturas comerciais</label><label class="check"><input type="checkbox" data-field="allowCoverCropChange" ${(draft.allowCoverCropChange??draft.allowCropChange)?'checked':''}>Permitir culturas de cobertura do solo</label><fieldset><legend>Quais etapas devem manter cultura e ciclo?</legend>${draft.stages.map((stage,index)=>`<label class="check"><input type="checkbox" data-lock-stage="${index}" ${draft.lockedStages?.includes(index)?'checked':''}>Manter etapa ${index+1}: ${esc(stage.zarcCropName||rulesPackage.crops_catalog[stage.cropId]?.common_name||'Cultura não informada')}</label>`).join('')}<p class="guide-small">As etapas marcadas não terão cultura ou ciclo alterados. As desmarcadas podem receber as mudanças autorizadas acima, inclusive a primeira. As datas ainda acompanham o atraso e a sequência de cultivos.</p></fieldset><p class="guide-small">As mudanças serão comparadas. Nada será alterado no plano original.</p></section>`;}
-function reviewStep(){return `<section class="guide-card"><div class="guide-card-head"><h2>Confira antes de calcular</h2>${helpButton('review')}</div>${overview()}<button type="button" data-edit="0">${draft.objective==='adaptation'?'Editar escolha do plano':'Editar localização'}</button>
+function reviewStep(){return `<section class="guide-card"><div class="guide-card-head"><h2>${draft.objective==='planning'?'Confira antes de salvar':'Confira antes de calcular'}</h2>${helpButton('review')}</div>${overview()}<button type="button" data-edit="0">${draft.objective==='adaptation'?'Editar escolha do plano':'Editar localização'}</button>
   ${isPlan()?`${sequence()}<p>Intervalo entre cultivos: <strong>${esc(draft.intervalDays)} dias</strong>.</p><ul>${draft.stages.map((stage,i)=>`<li>Cultivo ${i+1}: ${stage.managementCode==='2'?'com irrigação':stage.managementCode==='1'?'depende da chuva':'manejo a conferir na opção escolhida'}.</li>`).join('')}</ul><button type="button" data-edit="1">Editar cultivos e datas</button>`:`<p>Irrigação: ${draft.management==='1'?'depende da chuva':draft.management==='2'?'informada pelo usuário':'ainda não informada'}.</p><button type="button" data-edit="1">Editar data e condições</button>`}
   ${draft.objective==='adaptation'?`<div class="review-changes"><p>Atraso a simular: <strong>${esc(draft.delayDays)} dias</strong>.</p><p>${draft.allowCycleChange?'Aceita testar ciclos mais curtos.':'Mantém os ciclos.'} ${draft.allowCropChange?'Aceita outras culturas comerciais.':'Não aceita substituições comerciais.'} ${(draft.allowCoverCropChange??draft.allowCropChange)?'Aceita cobertura do solo.':'Não aceita cobertura do solo.'} ${draft.lockedStages?.length?`Etapas com cultura e ciclo protegidos: ${draft.lockedStages.map(i=>i+1).join(', ')}.`:''}</p><button type="button" data-edit="2">Editar atraso e permissões</button></div>`:''}</section>
   <p class="guide-message warning">${!draft.soilProfileId||!draft.soilCode?'Solo não confirmado para uma ou mais análises. Você pode montar o calendário e conferir as pendências depois. ':''}Histórico climático não é previsão de safra.</p>`;}
 const statusLabel=s=>({idle:'Aguardando consulta',loading:'Consultando…',ready:'Disponível',error:'Indisponível',unavailable:'Ponto não informado'}[s.status]);
 function sourcePanel(){return `<details data-condition="sources"><summary>Fontes e andamento das consultas</summary><section class="guide-card"><div class="guide-card-head"><h2>Dados da consulta</h2>${helpButton('results')}</div>${[['zarc','Opções oficiais · ZARC'],['nasa','Histórico climático · NASA'],['soil','Estimativa de solo']].map(([key,name])=>`<div class="guide-source" role="status"><strong>${name}</strong><span>${statusLabel(sources[key])}${sources[key].message?`<br>${esc(sources[key].message)}`:''}</span></div>`).join('')}<p class="guide-small">As fontes são independentes. Uma falha não apaga os dados das outras.</p><button id="retry-sources" type="button">Atualizar consulta</button></section></details>`;}
-function climatePanel(){const v=sources.nasa.value,s=v?.summary;return s?`<section class="guide-card"><div class="guide-card-head"><h2>Clima no mês do plantio</h2>${helpButton('nasa')}</div><p>${s.years.length} anos completos · ${v.isDemo?'histórico de demonstração 2013–2024':v.isLive?'consulta atual':'histórico em cache para este ponto'}.</p><dl class="guide-data"><div><dt>Chuva média no mês</dt><dd>${Math.round(s.meanRainMm)} mm</dd></div><div><dt>Variação entre os anos</dt><dd>${Math.round(s.minRainMm)} a ${Math.round(s.maxRainMm)} mm</dd></div></dl><p class="guide-small">É histórico climático, não previsão. Não define sozinho qual cultura plantar.</p></section>`:'';}
+function climatePanel(){const v=sources.nasa.value,s=v?.summary;return s?`<section class="guide-card"><div class="guide-card-head"><h2>Clima no mês do plantio</h2>${helpButton('nasa')}</div><p>${s.years.length} anos completos · consulta atual à NASA POWER.</p><dl class="guide-data"><div><dt>Chuva média no mês</dt><dd>${Math.round(s.meanRainMm)} mm</dd></div><div><dt>Variação entre os anos</dt><dd>${Math.round(s.minRainMm)} a ${Math.round(s.maxRainMm)} mm</dd></div></dl><p class="guide-small">É histórico climático, não previsão. Não define sozinho qual cultura plantar.</p></section>`:'';}
 function conditionList(c){return `<details data-condition="${esc(c.id)}"><summary>Ver condições de plantio</summary><ul>${[...new Set(c.conditions.map(zarcConditionText))].map(row=>`<li>${esc(row)}</li>`).join('')}</ul></details>`;}
 function resultStep(){
  const z=sources.zarc.value,cultures=z?.cultures||[];
@@ -291,9 +294,9 @@ function savedActions(){return `<p class="guide-message success" role="status">$
 function planningResults(){
   const s=simulation?.strategies.find(s=>s.strategyId==='PLANO_ATUAL');
   if(!s)return `<p class="guide-message">${currentCropCatalog().status==='error'?'Não foi possível conferir as culturas. Tente atualizar a consulta.':'Preparando seu calendário…'}</p>${sourcePanel()}`;
-  return `<section class="guide-card"><span class="guide-kicker">SEU PLANO · SEM ATRASO</span><h2>${esc(draft.name||`Planejamento em ${draft.location.municipality}`)}</h2><p>Esta é a sequência que você escolheu. Você pode guardá-la e depois testar mudanças.</p>${calendarList(s.stages)}</section>
-    ${savedPlanId?savedActions():`<div class="guide-links"><button class="primary" id="save-plan" ${pendingPlanSave?'disabled':''}>${pendingPlanSave?'Salvando…':'Salvar planejamento'}</button><button id="save-summary">Baixar resumo</button></div>`}
-    <section class="guide-card"><div class="guide-card-head"><h2>O clima nos períodos planejados</h2>${helpButton('nasa')}</div><p class="guide-small">As datas do calendário determinam os períodos consultados no histórico. ${sources.nasa.status==='loading'?'Consultando a NASA; você já pode salvar o calendário.':''}</p><div class="guide-climate-grid">${s.stages.map(st=>`<div><h3>${esc(st.shortCropName||st.cropId)}</h3>${stageClimate(st)}</div>`).join('')}</div></section>
+  return `<section class="guide-card"><span class="guide-kicker">SEU PLANO · SEM ATRASO</span><h2>${esc(draft.name||`Planejamento em ${draft.location.municipality}`)}</h2><p>Esta é a sequência que você escolheu. Confira o calendário e explore mudanças quando precisar.</p>${calendarList(s.stages)}</section>
+    ${savedPlanId?savedActions():`<div class="guide-links"><button type="button" data-edit="2">Revisar e salvar planejamento</button><button id="save-summary">Baixar resumo</button></div>`}
+    <section class="guide-card"><div class="guide-card-head"><h2>O clima nos períodos planejados</h2>${helpButton('nasa')}</div><p class="guide-small">As datas do calendário determinam os períodos consultados no histórico. ${sources.nasa.status==='loading'?'Consultando a NASA; o calendário permanece disponível.':''}</p><div class="guide-climate-grid">${s.stages.map(st=>`<div><h3>${esc(st.shortCropName||st.cropId)}</h3>${stageClimate(st)}</div>`).join('')}</div></section>
     ${limitations()}${strategyDetails(s)}${sourcePanel()}`;
 }
 function differenceText(s){
@@ -333,13 +336,13 @@ function render(focus=true){
   if(!screens[draft.objective]?.[step]){draft.step=0;return render(focus);}
   const body=screens[draft.objective][step]();
   const hasNext=step<resultIndex();
-  const nextLabel=t(step===0?(draft.objective==='adaptation'?'Simular uma mudança':'Usar esta localização'):step===resultIndex()-1?(draft.objective==='planning'?'Ver meu planejamento':draft.objective==='discovery'?'Consultar opções':'Comparar alternativas'):'Continuar');
+  const nextLabel=t(step===0?(draft.objective==='adaptation'?'Simular uma mudança':'Usar esta localização'):step===resultIndex()-1?(draft.objective==='planning'?'Confirmar e salvar':draft.objective==='discovery'?'Consultar opções':'Comparar alternativas'):'Continuar');
   const {total,step:visibleStep}=progressFor(draft);
   const backLabel=t(step===0?'← Início':draft.objective==='planning'&&savedPlanId?'Editar uma cópia':'← Voltar');
   const stepLabels=(draft.objective==='discovery'?['Localização','Condições','Revisão','Opções','Resumo']:draft.objective==='adaptation'?['Plano original','Mudanças','Revisão','Comparação']:['Localização','Cultivos e datas','Revisão','Calendário']).map(label=>t(label));
   frame(`<ol class="orbit-steps" aria-label="${esc(t('Etapas do planejamento'))}">${stepLabels.map((name,index)=>`<li class="${index+1===visibleStep?'is-current':index+1<visibleStep?'is-complete':''}" ${index+1===visibleStep?'aria-current="step"':''}><span>${index+1<visibleStep?icon('check'):String(index+1).padStart(2,'0')}</span><strong>${esc(name)}</strong></li>`).join('')}</ol>
     <div class="orbit-journey ${isResult()?'has-results':''}"><div class="orbit-journey-content"><div class="guide-progress"><span>${esc(t('Etapa {step} de {total}',{step:visibleStep,total}))}</span><progress value="${visibleStep}" max="${total}" aria-label="${esc(t('Progresso'))}"></progress><span>${esc(t(objectiveLabels[draft.objective]))}</span></div>
-    ${draft.example?`<p class="guide-message warning">${esc(t('Exemplo de Vilhena · dados demonstrativos. O solo permanece desconhecido; o histórico NASA usa 2013–2024.'))}</p>`:''}
+    ${draft.example?`<p class="guide-message warning">${esc(t('Exemplo de Vilhena · planejamento demonstrativo. Clima e solo são consultados nas APIs ao abrir o calendário.'))}</p>`:''}
     <span class="guide-kicker">${esc(t(draft.objective==='discovery'?'OPÇÕES PARA SUA ÁREA':'SEU PLANEJAMENTO'))}</span><h1 id="guide-title" tabindex="-1">${esc(t(titles[draft.objective][step]))}</h1>
     ${notice?`<p class="guide-message" role="status">${esc(t(notice))}</p>`:''}<p id="guide-error" class="guide-message error guide-error" role="alert" tabindex="-1"></p><div id="guide-body">${body}</div>
     <div class="guide-nav"><button type="button" id="guide-back">${esc(backLabel)}</button>${hasNext?`<div class="guide-action"><button type="button" class="primary" id="guide-next">${esc(nextLabel)} ${icon('arrow')}</button>${helpButton(step===0?(draft.objective==='adaptation'?'plan':'location'):step===1?'sequence':draft.objective==='adaptation'&&step===2?'changes':'review')}</div>`:`<button type="button" id="guide-home">${esc(t('Concluir e voltar ao início'))}</button>`}</div>
@@ -376,7 +379,8 @@ function validateStep(){
       if(!draft.sourcePlanId)fail('existing-plan','Escolha um planejamento salvo para simular mudanças.');
       if(!locationKey(draft.location))throw Error('Este plano não tem um ponto válido da propriedade. Confira a área no painel avançado.');
     }else{
-      if(!draft.location.confirmed)throw Error(draft.objective==='discovery'?'Confirme a localização ou escolha consultar somente o município.':'Confirme o ponto da propriedade e o município antes de continuar.');
+      if(!draft.location.municipalityCode)throw Error('Falta escolher o município: digite o nome e selecione a opção Município / UF na lista.');
+      if(!draft.location.confirmed)throw Error(draft.objective==='discovery'?'Marque sua propriedade no mapa ou clique em “Usar só o município” para uma consulta sem clima e solo.':'Falta marcar o ponto da propriedade: clique na sua área no mapa, use o GPS se estiver nela ou informe latitude e longitude.');
       if(isPlan()&&!locationKey(draft.location))throw Error('Marque um ponto da propriedade pelo mapa, GPS ou coordenadas.');
     }
   }
@@ -408,9 +412,9 @@ async function loadPlanForAdaptation(id,goToChanges=false){
   if(goToChanges&&draft.example)notice='Experimente um atraso de 12 dias e marque a opção de testar ciclos mais curtos.';else notice='';
   cropCatalogRequest++;cropCatalog={status:'idle'};invalidate();save();render();
 }
-async function persistPlan(alternative){
+async function persistPlan(alternative,advanceToCalendar=false){
   if(pendingPlanSave)return;
-  const owner=draft,selection=draft.selectedStrategyId,revision=draftRevision,id=alternative?'save-alternative':'save-plan';
+  const owner=draft,selection=draft.selectedStrategyId,revision=draftRevision,id=alternative?'save-alternative':advanceToCalendar?'guide-next':'save-plan';
   pendingPlanSave={owner,revision};
   const button=document.getElementById(id);if(button){button.disabled=true;button.textContent='Salvando…';}
   try{
@@ -426,24 +430,47 @@ async function persistPlan(alternative){
     if(draft===owner&&draftRevision===revision&&(!alternative||draft.selectedStrategyId===selection)){savedPlanId=saved.id;draft.savedPlanId=saved.id;await save();}
   }catch(e){if(draft===owner){pendingPlanSave=null;render(false);error(`Não foi possível salvar: ${e.message}`);}return;}
   finally{pendingPlanSave=null;}
-  if(draft===owner)render(false);
+  if(draft===owner&&draftRevision===revision&&advanceToCalendar&&savedPlanId){
+    navigationEpoch++;draft.step=resultIndex();save();render();consult();
+  }else if(draft===owner)render(false);
 }
 function bind(){
+  app.querySelectorAll('[data-plan-preference]').forEach(el=>el.onchange=()=>{
+    draft.suggestionPreferences={...draft.suggestionPreferences,[el.dataset.planPreference]:el.checked};
+    invalidate();save();
+  });
+  mountSuggestionNavigation(app);
   onClick('suggest-guided-plan',()=>{document.getElementById('suggestion-period').hidden=false;document.getElementById('suggest-guided-plan').setAttribute('aria-expanded','true');document.getElementById('planning-horizon').focus();});
   onClick('generate-guided-plan',suggestGuidedPlan);
   onClick('close-guided-suggestions',()=>{guidedSuggestions=null;render(false);document.getElementById('suggest-guided-plan')?.focus();});
-  app.querySelectorAll('[data-use-guided-suggestion]').forEach(button=>button.onclick=()=>{
-    const option=guidedSuggestions?.suggestions[Number(button.dataset.useGuidedSuggestion)];if(!option)return;
+  const applySuggestion=index=>{
+    const option=guidedSuggestions?.suggestions[index];if(!option)return;
+    document.getElementById('suggestion-dialog')?.close();
     draft.stages=structuredClone(option.stageDefs);draft.intervalDays=option.intervalDays;
     invalidate();notice='Sugestão aplicada ao rascunho. Confira os cultivos e as datas antes de salvar.';save();render(false);
     document.getElementById('calendar-preview')?.scrollIntoView({behavior:'smooth',block:'start'});
+  };
+  app.querySelectorAll('[data-use-guided-suggestion]').forEach(button=>button.onclick=()=>applySuggestion(Number(button.dataset.useGuidedSuggestion)));
+  app.querySelectorAll('[data-suggestion-details]').forEach(button=>button.onclick=()=>{
+    const index=Number(button.dataset.suggestionDetails),option=guidedSuggestions?.suggestions[index];
+    const dialog=document.getElementById('suggestion-dialog');if(!option||!dialog)return;
+    dialog.innerHTML=suggestionDetails(option,guidedSuggestions.analysisSummary,index);
+    dialog.querySelectorAll('[data-close-suggestion]').forEach(close=>close.onclick=()=>dialog.close());
+    dialog.querySelector('[data-use-guided-suggestion]').onclick=()=>applySuggestion(index);
+    dialog.onclick=event=>{if(event.target===dialog){const box=dialog.getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)dialog.close();}};
+    dialog.onclose=()=>{if(button.isConnected)button.focus({preventScroll:true});};
+    dialog.showModal();
   });
   onClick('guide-back',()=>{notice='';if(!draft.step){save();home();}else prepareEdit(draft.objective==='adaptation'&&draft.step===2?0:draft.step-1);});
   onClick('guide-home',()=>{save();home();});
-  onClick('guide-next',()=>{try{validateStep();navigationEpoch++;notice='';draft.step=draft.objective==='adaptation'&&draft.step===0?2:draft.step+1;save();render();if(isResult())consult();}catch(e){error(e.message,e.field);}});
+  onClick('guide-next',()=>{try{if(pendingPlanSave)return;validateStep();if(draft.objective==='planning'&&draft.step===resultIndex()-1){persistPlan(false,true);return;}navigationEpoch++;notice='';draft.step=draft.objective==='adaptation'&&draft.step===0?2:draft.step+1;save();render();if(isResult())consult();}catch(e){error(e.message,e.field);}});
   app.querySelectorAll('[data-lock-stage]').forEach(el=>el.onchange=()=>{const index=Number(el.dataset.lockStage);draft.lockedStages=(draft.lockedStages||[]).filter(i=>i!==index);if(el.checked)draft.lockedStages.push(index);invalidate();save();});
   app.querySelectorAll('[data-field]').forEach(el=>{el.oninput=()=>{
     const key=el.dataset.field;draft[key]=el.type==='checkbox'?el.checked:el.value;
+    if(key==='preferredCultureId'||key==='management'){
+      const hint=document.getElementById('preferred-culture-notice');
+      if(hint)hint.innerHTML=preferredCultureNotice(draft,currentCropCatalog().value?.cultures||[]);
+    }
     el.removeAttribute('aria-invalid');el.removeAttribute('aria-errormessage');document.getElementById(`${el.id}-error`)?.remove();
     invalidate();save();refreshPreview();refreshJourneyContext();
   };});
@@ -501,7 +528,7 @@ function updateResults(){
 }
 function consult(){
   stopQuery();sources=emptySources();simulation=null;sourceReady=false;
-  try{query=queryGuidedSources(draft,(key,value)=>{sources[key]=value;if(sourceReady)updateResults();},draft.example?DEMO_SOURCE_DEPENDENCIES:{},draft.example?demoAnalysisCache:analysisCache);sourceReady=true;updateResults();}catch(e){error(e.message);}
+  try{query=queryGuidedSources(draft,(key,value)=>{sources[key]=value;if(sourceReady)updateResults();},{},draft.example?demoAnalysisCache:analysisCache);sourceReady=true;updateResults();}catch(e){error(e.message);}
 }
 function summaryHTML(){
  const c=selectedCulture(),z=sources.zarc.value,s=simulation?.strategies.find(v=>v.strategyId===(draft.objective==='planning'?'PLANO_ATUAL':draft.selectedStrategyId));

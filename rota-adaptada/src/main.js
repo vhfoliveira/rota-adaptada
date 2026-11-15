@@ -7,6 +7,7 @@ import './space.css';
 import './context-help.css';
 import './orbit.css';
 import './advanced-orbit.css';
+import './fluid-ui.css';
 import {helpButton, mountAdvancedHelp, annotateAdvancedHelp} from './context-help.js';
 import {workspaceSidebar,workspaceTopbar,bindWorkspaceShell,icon} from './orbit-shell.js';
 import {buildOfficialCropCatalog} from './official-crop-registry.js';
@@ -608,7 +609,7 @@ function renderShell() {
         </section>
         <div class="header-context-strip">
           <div class="advanced-property-context">${icon('pin')}<span><small>ÁREA DE TRABALHO</small><strong>${p.id ? esc(p.propertyName || 'Minha propriedade') : 'Sua propriedade começa aqui'}</strong>${p.id ? `<span>${esc(p.municipality)} / ${esc(p.state)} · ${esc(soilFriendly.shortTitle)}</span>` : '<span>Cadastre uma área para começar o planejamento.</span>'}</span></div>
-          <span class="context-chip ${nasaLiveState.loading ? 'accent' : nasaLiveState.isLive ? 'live-ok' : ''}">${icon('globe')}${nasaLiveState.loading ? 'Consultando histórico NASA…' : nasaLiveState.isLive ? `NASA POWER · consulta de ${esc(nasaLiveState.fetchedAt)}` : getActiveNasaDataset(p) ? 'NASA POWER · histórico local' : 'Clima ainda não consultado'}</span>
+          <span class="context-chip ${nasaLiveState.loading ? 'accent' : nasaLiveState.isLive ? 'live-ok' : ''}">${icon('globe')}${nasaLiveState.loading ? 'Consultando histórico NASA…' : nasaLiveState.isLive ? `NASA POWER · consulta de ${esc(nasaLiveState.fetchedAt)}` : getActiveNasaDataset(p) ? 'NASA POWER · consulta desta sessão' : 'Clima ainda não consultado'}</span>
           ${isExamplePlanning() ? '<span class="context-chip accent">Demonstração · dados de exemplo</span>' : ''}
           <a class="advanced-guide-link" href="./" id="advanced-guide-link">Voltar ao guia ${icon('arrow')}</a>
         </div>
@@ -1060,7 +1061,7 @@ function renderSystemSuggestedPlansPanel(allProps) {
       </div>
 
       <!-- Raio-X das Fontes de Dados Usadas na Sugestão -->
-      <div class="lookup-result-box" style="margin-bottom:14px">
+      <details class="suggestion-analysis lookup-result-box" style="margin-bottom:14px"><summary>Conferir fontes e indicadores da análise</summary>
         <div class="lookup-grid" style="margin-top:0">
           <div class="lookup-item">
             <small>1. Clima NASA POWER (${esc(climateLabel())})</small>
@@ -1086,7 +1087,7 @@ function renderSystemSuggestedPlansPanel(allProps) {
             )} sequências</b> testadas em safras com dados completos</span>
           </div>
         </div>
-      </div>
+      </details>
 
       <!-- Alternativas permitidas para a sequência informada -->
       <div class="playing-deck-stage" role="list" aria-label="Alternativas de planejamento">
@@ -1117,7 +1118,7 @@ function renderSystemSuggestedPlansPanel(allProps) {
 
                 <span class="tag custom-tag" style="margin-bottom:6px;display:inline-block">${esc(sug.badge)}</span>
                 <h3 style="margin:4px 0 8px;font-size:1.05rem;color:var(--forest)">${esc(sug.title)}</h3>
-                <p class="muted" style="margin:0 0 12px;font-size:0.84rem;line-height:1.45">${esc(sug.rationale)}</p>
+                <details class="suggestion-card-detail"><summary>Ver análise e sequência</summary><p class="muted" style="margin:0 0 12px;font-size:0.84rem;line-height:1.45">${esc(sug.rationale)}</p>
 
                 <div class="planning-prop-meta" style="margin-bottom:10px">
                   <span>🌧 <strong>Segurança NASA:</strong> ${esc(
@@ -1154,6 +1155,7 @@ function renderSystemSuggestedPlansPanel(allProps) {
                       .join('')}
                   </div>
                 </div>
+              </details>
               </div>
 
               <div class="playing-card-actions">
@@ -2918,7 +2920,7 @@ function bindScreenEvents() {
 
     // Wait brief visual interval + live NASA POWER if coordinates changed
     const delayPromise = new Promise(resolve => setTimeout(resolve, 420));
-    if (targetProp && nasaLiveState.lastCoords !== `${targetProp.latitude}, ${targetProp.longitude}`) {
+    if (targetProp) {
       try {
         const res = await fetchLiveNasaPower(targetProp.latitude, targetProp.longitude);
         if (!newPlanningFormState.showSuggestions || request !== suggestionRequest) return;
@@ -2934,7 +2936,7 @@ function bindScreenEvents() {
           endpoint: res.endpoint
         };
       } catch {
-        // Only a cached series for the same coordinates can support the evaluation.
+        // Failed requests leave climate unavailable.
       }
     }
     await delayPromise;

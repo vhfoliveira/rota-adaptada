@@ -1,7 +1,8 @@
 import sourceA from './data/official-crop-profiles-a.json' with {type:'json'};
 import sourceB from './data/official-crop-profiles-b.json' with {type:'json'};
 
-export const officialProfiles=[...sourceA.profiles,...sourceB.profiles];
+import sourceSoy from './data/official-crop-profiles-soy.json' with {type:'json'};
+export const officialProfiles=[...sourceA.profiles,...sourceB.profiles,...sourceSoy.profiles];
 const integer=value=>Number.isInteger(value)&&value>0&&value<=36500;
 const roman={'20':'I','21':'II','22':'III','24':'IV','25':'V','26':'VI'};
 export const managementLabel=code=>({'1':'Sequeiro','2':'Irrigado','3':'Irrigado com controle de geada'}[code]||`Manejo ${code}`);
@@ -33,6 +34,9 @@ export function resolveOfficialCycle(group){
   const emergence=group.emergenceDaysRange;
   if(!integer(emergence?.max)||!integer(emergence?.min)||emergence.min>emergence.max)return {available:false,reason:'Falta um intervalo documentado entre semeadura e emergência.'};
   calendarDays+=emergence.max;basis='upper-bound';reason+=` + até ${emergence.max} dias para emergência`;
+ }else if(group.cycleStart==='unspecified'&&group.cycleSource?.sha256&&integer(group.calendarPaddingDays)&&group.calendarPaddingSourceSection){
+  calendarDays+=group.calendarPaddingDays;basis='upper-bound';
+  reason+=` + ${group.calendarPaddingDays} dias de margem conservadora do aplicativo; início da contagem não explicitado na ficha. Confirme o ciclo da cultivar.`;
  }else if(group.cycleStart!=='sowing')return {available:false,reason:'A referência inicial do ciclo não está documentada.'};
  if(!integer(calendarDays))return {available:false,reason:'Duração de planejamento fora do intervalo suportado.'};
  let phases=null;
@@ -71,6 +75,7 @@ export function officialModelsForCulture(cultureId,{manifest,shard,uf,asOf},prof
  const scenarios=shard.rows.filter(([,periods])=>/[234]/.test(periods)).map(([i])=>manifest.scenarios[i]).filter(s=>String(s.Cod_Cultura)===String(cultureId)&&`${s.SafraIni}/${s.SafraFin}`===manifest.season);
  const models=[],pending=[];
  for(const profile of profiles.filter(p=>p.zarcCropIds?.includes(String(cultureId))&&p.uf===uf)){
+  if(profile.municipalityCodes&&!profile.municipalityCodes.includes(String(shard.code||shard.municipalityCode||'')))continue;
   if(!Array.isArray(profile.managementCodes)||!Array.isArray(profile.groups))continue;
   const matching=scenarios.filter(s=>profile.managementCodes.includes(String(s.Cod_Outros_Manejos))&&officialSourceValid(profile,{uf,season:manifest.season,ordinance:s.Portaria,asOf}));
   if(!matching.length)continue;

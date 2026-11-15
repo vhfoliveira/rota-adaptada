@@ -3,7 +3,8 @@ WORKDIR /app
 COPY rota-adaptada/package*.json ./
 RUN npm ci
 COPY rota-adaptada/ ./
-RUN npm test && npm run build
+RUN npm test
+RUN npm run build
 
 FROM nginx:stable-alpine
 COPY deploy/nginx.conf /etc/nginx/nginx.conf

@@ -50,3 +50,34 @@ Atualizar consulta limpa o cache para uma nova tentativa.
 
 A falha de solo não bloqueia calendário, NASA, ZARC ou salvamento, e não preenche
 uma classe automaticamente. A integração não utiliza WCS/WebDAV.
+
+
+## Soja em Vilhena — integração de 15/11/2026
+
+O suplemento `official-crop-profiles-soy.json` habilita a cultivar BRS 1075IPRO
+para Vilhena (1100304), RO, safra 2026/2027, sequeiro. Ele é carregado junto
+às coleções A/B e validado pelo comando habitual; a atualização automática de A/B
+preserva o suplemento, que requer revisão própria das três fontes abaixo.
+
+- Portaria SPA/MAPA 207, publicação 03/07/2026, versão retificada com atualização
+  de cultivares: BRS 1075IPRO no Grupo I, macrorregião 4.
+- Planilha municipal do MAPA: Vilhena pertence à REC 402.
+- Ficha Embrapa/Fundação Meridional, páginas 52–53: GMR 7,5; ciclo regional
+  93–104 dias para REC 402, sudeste de RO.
+
+A ficha não explicita o início da contagem. O calendário adota **104 + 10 = 114 dias**
+como hipótese conservadora do aplicativo. Os dez dias são uma margem inspirada no
+intervalo de emergência da seção 3.1 da portaria, não uma duração adicional comprovada
+para a cultivar. Essa hipótese aparece no seletor/detalhes; não é uma duração oficial
+de 114 dias. Não são criadas fases fenológicas, produtividade ou conversão GMR/dias.
+
+A busca restringe a cultivar a 08/10–21/11, interseção conservadora da faixa
+preferencial da ficha nas duas faixas de altitude. Ainda consulta as condições ZARC
+para cada data e solo. O recorte é mais estreito que o calendário sanitário estadual.
+Não transfere a referência a outros municípios, cultivares ou manejo irrigado.
+Datas de outras safras continuam sujeitas aos mecanismos de cobertura/projeção
+existentes e exigem nova validação.
+
+URLs, datas de coleta e hashes estão no suplemento. Para conferir novamente os
+arquivos-fonte: `python3 scripts/verify-soy-sources.py PORTARIA.pdf CULTIVAR.pdf REGIOES.xlsx`.
+Os testes cobrem sugestões em novembro, ciclo conservador, janela, município e manejo.

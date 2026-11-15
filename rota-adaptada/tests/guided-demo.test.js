@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {gunzipSync} from 'node:zlib';
 import {loadGuidedCropCatalog} from '../src/guided-crops.js';
-import {createPlanningDemoDraft,fetchDemoClimate,DEMO_SOURCE_DEPENDENCIES} from '../src/guided-demo.js';
+import {createPlanningDemoDraft} from '../src/guided-demo.js';
 import {simulateGuidedPlanning} from '../src/guided-planning.js';
 import {queryGuidedSources} from '../src/guided-discovery.js';
 import {rulesPackage} from '../src/vilhena-engine.js';
@@ -34,21 +34,6 @@ test('planning example resolves official regional cycles, preserves unknown soil
   }
 });
 
-test('demo source dependencies produce only local ZARC and labeled fixed NASA, leaving soil pending',async()=>{
-  const draft=await createPlanningDemoDraft({loadCatalog});
-  const states={};
-  await queryGuidedSources(draft,(source,state)=>states[source]=state,{...localSources,...DEMO_SOURCE_DEPENDENCIES}).done;
-  assert.equal(states.zarc.status,'ready');assert.equal(states.nasa.status,'ready');
-  assert.equal(states.nasa.value.isLive,false);assert.equal(states.nasa.value.isDemo,true);
-  assert.match(states.nasa.value.sourceLabel,/NASA POWER.*2013–2024/);
-  assert.deepEqual(states.nasa.value.summary.years,[2013,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024]);
-  assert.equal(states.soil.status,'error');assert.equal(states.soil.errorCode,'DEMO_SOIL_UNCONFIRMED');
-  await assert.rejects(fetchDemoClimate(-15,-56),/somente ao ponto de Vilhena/);
-  const originalValue=states.nasa.value.dataset.daily['2013-01-01'][0];
-  states.nasa.value.dataset.daily['2013-01-01'][0]=9999;
-  assert.equal((await fetchDemoClimate(-12.7405,-60.1458)).dataset.daily['2013-01-01'][0],originalValue);
-});
-
 test('example calendars and NASA context reproduce the original, delay and shorter-cycle story without declaring a winner',async()=>{
   const draft=await createPlanningDemoDraft({loadCatalog});
   const catalog=await loadCatalog(draft.location);
@@ -58,7 +43,7 @@ test('example calendars and NASA context reproduce the original, delay and short
     groupKeysByCrop:Object.fromEntries(models.filter(model=>model.groupKeys).map(model=>[model.engineCropId,model.groupKeys])),
     managementCodesByCrop:Object.fromEntries(models.map(model=>[model.engineCropId,model.managementCodes||[]]))
   };
-  const {dataset}=await fetchDemoClimate(draft.location.latitude,draft.location.longitude);
+  const dataset=null;
   const context={dataset,officialZarc:catalog.queryContext,soilCode:'',management:'1'};
   const original=simulateGuidedPlanning(draft,draft.location,{},context);
   assert.equal(original.strategies.length,1);
@@ -69,10 +54,6 @@ test('example calendars and NASA context reproduce the original, delay and short
   const shorter=delayed.strategies.find(strategy=>strategy.stages[0].cycleDays===100);
   assert(shorter);
   assert.deepEqual(dates(shorter),[['2026-11-13','2027-02-20'],['2027-02-28','2027-05-18']]);
-  const oldClimate=delayed.strategies[0].stages[1].stressTest.climateSummary;
-  const newClimate=shorter.stages[1].stressTest.climateSummary;
-  assert.equal(oldClimate.meanRainMm,236.6);assert.equal(newClimate.meanRainMm,383.6);
-  assert.equal(oldClimate.completeYears,12);assert.equal(newClimate.completeYears,12);
   assert.equal(delayed.validAlternativesCount,0);
   assert(delayed.strategies.every(strategy=>strategy.assessment.incomplete&&strategy.overallStatus==='NAO_AVALIADO'));
   assert.equal(draft.delayDays,0);

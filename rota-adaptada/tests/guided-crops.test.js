@@ -15,7 +15,8 @@ test('real municipal catalog includes official crops throughout the season witho
   assert.equal(catalog.season,manifest.season);
   assert.equal(catalog.sourceUpdated,manifest.sourceUpdated);
   const crops=new Map(catalog.cultures.map(c=>[c.name,c]));
-  assert.equal(crops.get('Soja').engineCropId,'SOJA');
+  assert.match(crops.get('Soja').engineCropId,/^ZARC_12016720000011_/);
+  assert(crops.get('Soja').models.every(model=>!model.legacy));
   for(const name of ['Milho 1ª Safra','Milho 2ª Safra','Sorgo Granífero 2ª Safra','Sorgo Granífero','Milho 1ª Safra consorciado com Braquiária','Milho 2ª Safra consorciado com Braquiária','Arroz','Feijão 2ª Safra']){
     const crop=crops.get(name);
     assert(crop.engineCropId.startsWith(`ZARC_${crop.id}_`));

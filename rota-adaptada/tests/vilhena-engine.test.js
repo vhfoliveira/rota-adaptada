@@ -31,11 +31,10 @@ describe('Motor Determinístico Vilhena/RO (vilhena-engine)', () => {
     assert.equal(cornFeb15.status, 'ZARC_20');
   });
 
-  it('executa Teste de Estresse Histórico real (2013-2024) sobre os 12 anos do NASA POWER', () => {
+  it('não calcula histórico sem uma consulta NASA disponível', () => {
     const stressLateCorn = runHistoricalStressTest('MILHO_2_SAFRA', 'GRUPO_II_MEDIO', '2027-03-22');
-    assert.equal(stressLateCorn.years.length, 12);
-    assert.ok(stressLateCorn.severeYears >= 8);
-    assert.equal(stressLateCorn.years[0].phases.length, 4);
+    assert.equal(stressLateCorn.years.length, 0);
+    assert.equal(stressLateCorn.evaluatedYears, 0);
   });
 
   it('simula o efeito dominó (+20d) e gera o plano atual e as 3 estratégias alternativas', () => {

@@ -28,12 +28,7 @@
     },
     "nasa_data_sources": {
       "provider": "NASA POWER API (Prediction Of Worldwide Energy Resources)",
-      "endpoint_template": "https://power.larc.nasa.gov/api/temporal/daily/point?parameters=IMERG_PRECTOT,PRECTOTCORR,T2M_MAX,T2M_MIN,T2M,GWETROOT,GWETTOP&community=AG&longitude=-60.1458&latitude=-12.7405&start=20130101&end=20241231&format=JSON",
-      "historical_window": {
-        "start_year": 2013,
-        "end_year": 2024,
-        "total_years": 12
-      },
+      "endpoint_template": "https://power.larc.nasa.gov/api/temporal/daily/point",
       "parameters_used": {
         "IMERG_PRECTOT": {
           "unit": "mm/day",
