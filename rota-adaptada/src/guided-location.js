@@ -18,7 +18,7 @@ export function mountLocationPicker(container, {value={}, onChange=()=>{}, onSta
   const status=(message)=>{if(!active())return;container.querySelector('[data-location-status]').textContent=message;onStatus(message);};
   container.innerHTML=`
     <div class="location-actions"><button type="button" data-location-gps>Usar minha localização</button>${helpButton('location')}</div>
-    <p class="hint">Escolha o município e clique no mapa para marcar sua propriedade, ou use o GPS se estiver nela. O município sozinho não indica o ponto da área.${allowMunicipalityOnly?'':' Para montar o planejamento, precisamos desse ponto para consultar o histórico climático da área. Se você estiver em outro lugar, escolha a propriedade no mapa.'}</p>
+    <p class="hint">Digite o município para marcar automaticamente um ponto de referência no mapa. Ajuste o pino para sua propriedade clicando no mapa, ou use o GPS se estiver nela. O ponto inicial é aproximado.</p>
     <div class="help-label"><label for="${id}-city">Município / UF</label>${helpButton('map')}</div>
     <input id="${id}-city" data-location-city list="${id}-cities" placeholder="Digite o município: Vilhena" autocomplete="off" value="${escapeHTML(state.municipalityQuery)}">
     <datalist id="${id}-cities"></datalist>
@@ -48,7 +48,7 @@ export function mountLocationPicker(container, {value={}, onChange=()=>{}, onSta
     if(allowMunicipalityOnly)find('[data-location-city-only]').disabled=!city;
     find('[data-location-map-open]').disabled=!city||mapOpening;
     find('[data-location-gps]').disabled=gpsPending;
-    find('[data-location-point]').textContent=p?`Ponto ${state.confirmed?'confirmado':'selecionado'}: ${p.latitude.toFixed(6)}, ${p.longitude.toFixed(6)}${city?` · ${city.label}`:''}.`:(state.confirmed&&city?`Consulta municipal confirmada: ${city.label}.`:`${city?`Município selecionado: ${city.label}. `:''}Falta marcar a propriedade: clique no mapa, use o GPS na área ou informe latitude e longitude.`);
+    find('[data-location-point]').textContent=p?`${state.source==='municipality-reference'?'Referência aproximada do município':`Ponto ${state.confirmed?'confirmado':'selecionado'}`}: ${p.latitude.toFixed(6)}, ${p.longitude.toFixed(6)}${city?` · ${city.label}`:''}.${state.source==='municipality-reference'?' Ajuste o pino para a posição da propriedade.':''}`:(state.confirmed&&city?`Consulta municipal confirmada: ${city.label}.`:`${city?`Município selecionado: ${city.label}. `:''}Falta marcar a propriedade: clique no mapa, use o GPS na área ou informe latitude e longitude.`);
   }
   function setPoint(p, source, message) {
     inputRevision++;
@@ -79,15 +79,21 @@ export function mountLocationPicker(container, {value={}, onChange=()=>{}, onSta
   }
   async function frameMunicipality() {
     const city=cityValue();if(!map||!city)return;
-    geoAbort?.abort();geoAbort=new AbortController();const controller=geoAbort,request=++mapRequest;
+    geoAbort?.abort();geoAbort=new AbortController();const controller=geoAbort,request=++mapRequest,revision=inputRevision;
     const timer=setTimeout(()=>controller.abort(),12000);
     try {
       const response=await fetch(`https://servicodados.ibge.gov.br/api/v3/malhas/municipios/${city.code}?formato=application/vnd.geo+json&qualidade=minima`,{signal:controller.signal});
       if(!response.ok)throw Error('Malha indisponível');
       const geo=await response.json();const bounds=municipalityBounds(geo);
       if(!active()||request!==mapRequest||city.code!==state.municipalityCode||!map)return;
-      const p=point();if(p)map.jumpTo({center:[p.longitude,p.latitude],zoom:13});else map.fitBounds(bounds,{padding:35,duration:0});
-      status(point()?'Localização pronta. Confira o pino no mapa e continue.':'Falta marcar a propriedade: clique na posição da sua área no mapa.');
+      if(revision!==inputRevision)return;
+      const p=point();
+      if(p)map.jumpTo({center:[p.longitude,p.latitude],zoom:13});
+      else if(!state.confirmed&&!state.manualLatitude&&!state.manualLongitude){
+        const [[west,south],[east,north]]=bounds;
+        setPoint({latitude:(south+north)/2,longitude:(west+east)/2},'municipality-reference','Coordenada do município marcada. O ponto é aproximado; ajuste o pino para sua propriedade.');
+        map.fitBounds(bounds,{padding:35,duration:0});
+      }else map.fitBounds(bounds,{padding:35,duration:0});
     } catch {
       if(!active()||request!==mapRequest||city.code!==state.municipalityCode)return;
       status(`Não foi possível enquadrar o município. Você pode navegar pelo mapa, usar GPS ou informar coordenadas.${allowMunicipalityOnly?' Também pode consultar só o município.':''}`);

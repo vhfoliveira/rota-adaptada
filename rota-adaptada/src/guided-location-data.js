@@ -1,4 +1,4 @@
-/** Municipality selection never supplies a farm coordinate. */
+/** Municipality reference points are approximate and can be adjusted to the farm. */
 export const normalizePlace = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleUpperCase('pt-BR');
 export function municipalityOptions(manifest) {
   return Object.entries(manifest?.municipalities || {}).map(([code, [state, municipality]]) => ({code, state, municipality, label:`${municipality} / ${state}`})).sort((a,b)=>a.label.localeCompare(b.label, 'pt-BR'));
