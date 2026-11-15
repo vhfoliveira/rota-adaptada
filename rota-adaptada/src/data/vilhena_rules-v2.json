@@ -1,5 +1,6 @@
 {
   "metadata": {
+    "example_validity": {"from": "2026-01-01", "to": "2027-12-31", "note": "Escopo temporal do exemplo 2026/2027; não extrapolar para outros anos."},
     "package_id": "BR-RO-VILHENA-2026-2027",
     "package_name": "Vilhena/RO - Grãos de Sequeiro (Safra 2026/2027)",
     "schema_version": "2.0.0", "package_file": "vilhena_rules-v2.json",
@@ -454,6 +455,7 @@
   "crops_catalog": {
     "SOJA": {
       "crop_id": "SOJA",
+      "soil_water_key": "soja_ze_60cm",
       "common_name": "Soja (1ª Safra - Verão)",
       "scientific_name": "Glycine max (L.) Merr.",
       "botanical_family": "Fabaceae (Leguminosa)",
@@ -646,6 +648,7 @@
     },
     "MILHO_2_SAFRA": {
       "crop_id": "MILHO_2_SAFRA",
+      "soil_water_key": "milho_ze_60cm",
       "common_name": "Milho 2ª Safra (Safrinha - Solteiro ou Consorciado c/ Braquiária)",
       "scientific_name": "Zea mays L.",
       "botanical_family": "Poaceae (Gramínea C4)",
@@ -820,6 +823,7 @@
     },
     "MILHO_1_SAFRA": {
       "crop_id": "MILHO_1_SAFRA",
+      "soil_water_key": "milho_ze_60cm",
       "common_name": "Milho 1ª Safra (Verão - Rotação de Safra Principal)",
       "scientific_name": "Zea mays L.",
       "botanical_family": "Poaceae (Gramínea C4)",
@@ -934,6 +938,7 @@
     },
     "SORGO_GRANIFERO": {
       "crop_id": "SORGO_GRANIFERO",
+      "soil_water_key": "sorgo_ze_50cm",
       "common_name": "Sorgo Granífero (2ª Safra - Alternativa Comercial Resiliente)",
       "scientific_name": "Sorghum bicolor (L.) Moench",
       "botanical_family": "Poaceae (Gramínea C4)",
@@ -1081,6 +1086,7 @@
     },
     "MILHETO": {
       "crop_id": "MILHETO",
+      "soil_water_key": "milho_ze_60cm",
       "common_name": "Milheto (Alternativa de Cobertura e Ciclagem no Fechamento das Chuvas)",
       "scientific_name": "Pennisetum glaucum (L.) R. Br.",
       "botanical_family": "Poaceae (Gramínea C4 anual)",

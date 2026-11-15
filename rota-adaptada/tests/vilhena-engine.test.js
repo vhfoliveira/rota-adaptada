@@ -47,11 +47,13 @@ describe('Motor Determinístico Vilhena/RO (vilhena-engine)', () => {
     assert.equal(sim.delayedSafrinhaDate, '2027-03-26');
     assert.equal(sim.strategies[0].strategyId, 'PLANO_ATUAL');
     assert.equal(sim.strategies[0].criticalStage.zarc.status, 'FORA_DE_JANELA');
-    assert.equal(sim.strategies[1].strategyId, 'AJUSTE_CALENDARIO_CICLO');
-    assert.equal(sim.strategies[1].criticalStage.zarc.status, 'ZARC_30');
-    assert.equal(sim.strategies[2].strategyId, 'ALTERNATIVA_COMERCIAL_SORGO');
-    assert.equal(sim.strategies[2].criticalStage.zarc.status, 'ZARC_20');
-    assert.equal(sim.strategies[3].strategyId, 'ALTERNATIVA_COBERTURA_MILHETO');
+    assert.ok(sim.allStrategies.some(s => s.strategyId.startsWith('CICLO_')));
+    assert.ok(sim.allStrategies.some(s => s.stages[1].cropId === 'SORGO_GRANIFERO'));
+    assert.ok(sim.allStrategies.some(s => s.stages[1].cropId === 'MILHETO'));
+    for (const strategy of sim.allStrategies.slice(1)) {
+      const changes = strategy.stages.filter((s,i) => s.cropId !== sim.strategies[0].stages[i].cropId || s.groupKey !== sim.strategies[0].stages[i].groupKey);
+      assert.equal(changes.length, 1);
+    }
   });
 
   it('informa explicitamente quando não encontra alternativa melhor dentro das restrições', () => {
@@ -63,7 +65,7 @@ describe('Motor Determinístico Vilhena/RO (vilhena-engine)', () => {
 
     const sim = simulateAdaptation(prop, cfg);
     assert.equal(sim.noBetterAlternativeMessage,
-      'Nenhuma das opções marcadas reduz o risco em relação ao Plano Atual. Marque outras adaptações acima.'
+      'Comparação parcial: faltam dados ou regras para indicar uma alternativa melhor.'
     );
   });
 });

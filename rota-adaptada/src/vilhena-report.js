@@ -6,13 +6,13 @@ const esc = v =>
 export function generateVilhenaReportHTML(simResult, selectedStrategyId = null, inspectedYear = 2023) {
   const p = simResult.propertyProfile;
   const cfg = simResult.planningConfig;
-  const soil = rulesPackage.soil_profiles[p.soilProfileId] || rulesPackage.soil_profiles.AD4_ARGILOSA;
+  const soil = rulesPackage.soil_profiles[p.soilProfileId] || {name:'Não informado',available_water_mm:'—'};
   const selected =
     simResult.strategies.find(s => s.strategyId === selectedStrategyId) ||
     simResult.strategies[2] ||
     simResult.strategies[0];
   const critStage = selected.criticalStage;
-  const yearDetail = critStage.stressTest.years.find(y => y.year === Number(inspectedYear)) || critStage.stressTest.years[0];
+  const yearDetail = critStage.stressTest.years.find(y => y.year === Number(inspectedYear)) || critStage.stressTest.years[0] || {year:'—',phases:[],status:'nao_avaliado'};
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -69,13 +69,13 @@ export function generateVilhenaReportHTML(simResult, selectedStrategyId = null, 
   </header>
 
   <section>
-    <h2>1. Propriedade, Solo (ISRIC SoilGrids) e Clima (NASA POWER 2013–2024)</h2>
+    <h2>1. Propriedade, Solo (ISRIC SoilGrids) e Clima (NASA POWER ${esc(simResult.climatePeriod || 'não disponível')})</h2>
     <div class="grid-2">
       <div class="card">
         <h3>Coordenadas e Clima (NASA POWER API)</h3>
         <p><strong>Propriedade:</strong> ${esc(p.propertyName)} (${esc(p.municipality)}/${esc(p.state)})</p>
         <p><strong>Coordenadas:</strong> ${esc(p.latitude)}°, ${esc(p.longitude)}° · Altitude: ${esc(p.altitudeM)} m</p>
-        <p><strong>Série Histórica NASA:</strong> 2013–2024 (Chuva <code>PRECTOTCORR</code>, Umidade do Solo <code>GWETTOP</code>/<code>GWETROOT</code> e Temperatura <code>T2M_MAX</code>/<code>T2M_MIN</code>)</p>
+        <p><strong>Série Histórica NASA:</strong> ${esc(simResult.climatePeriod || 'não disponível')} (Chuva <code>PRECTOTCORR</code>, Umidade do Solo <code>GWETTOP</code>/<code>GWETROOT</code> e Temperatura <code>T2M_MAX</code>/<code>T2M_MIN</code>)</p>
       </div>
       <div class="card">
         <h3>Retenção de Água do Solo e Atraso Simulado</h3>
@@ -95,7 +95,7 @@ export function generateVilhenaReportHTML(simResult, selectedStrategyId = null, 
           <th>Mudança Aplicada</th>
           <th>Sucessão Avaliada</th>
           <th>Janela de Plantio</th>
-          <th>Desempenho NASA (2013–2024)</th>
+          <th>Desempenho NASA (${esc(simResult.climatePeriod || 'não disponível')})</th>
           <th>Proteção do Solo</th>
         </tr>
       </thead>
@@ -107,7 +107,7 @@ export function generateVilhenaReportHTML(simResult, selectedStrategyId = null, 
           <td>${esc(s.changedDescriptions.join(' '))}</td>
           <td><strong>${esc(s.criticalStage.shortCropName)}</strong> (${esc(s.criticalStage.cycleDays)}d)<br>${formatBRDate(s.criticalStage.sowDate)} a ${formatBRDate(s.criticalStage.harvestDate)}</td>
           <td><span class="badge ${esc(s.statusTone)}">${esc(s.criticalStage.zarc.badgeLabel)}</span></td>
-          <td><strong>${esc(s.criticalStage.stressTest.noCriticalYears)}/12 anos sem falha severa</strong><br><small>${esc(s.criticalStage.stressTest.okYears)} favoráveis · ${esc(s.criticalStage.stressTest.moderateYears)} atenção · ${esc(s.criticalStage.stressTest.severeYears)} críticos</small></td>
+          <td><strong>${esc(s.criticalStage.stressTest.noCriticalYears)}/${esc(s.criticalStage.stressTest.evaluatedYears)} anos sem falha severa</strong><br><small>${esc(s.criticalStage.stressTest.okYears)} favoráveis · ${esc(s.criticalStage.stressTest.moderateYears)} atenção · ${esc(s.criticalStage.stressTest.severeYears)} críticos</small></td>
           <td><strong>${esc(s.soilMetrics.protectedDays)} dias coberto</strong><br><small>${esc(s.soilMetrics.bareSoilDays)} dias exposto</small></td>
         </tr>`
           )
@@ -126,7 +126,7 @@ export function generateVilhenaReportHTML(simResult, selectedStrategyId = null, 
           <th>Cultura e Ciclo</th>
           <th>Plantio → Colheita</th>
           <th>Status da Janela</th>
-          <th>Histórico NASA (2013–2024)</th>
+          <th>Histórico NASA (${esc(simResult.climatePeriod || 'não disponível')})</th>
         </tr>
       </thead>
       <tbody>
@@ -144,6 +144,7 @@ export function generateVilhenaReportHTML(simResult, selectedStrategyId = null, 
       </tbody>
     </table>
 
+    <p class="notice">${esc(critStage.stressTest.headline)} ${esc(selected.soilMetrics.method)} ${esc(selected.statusLabel)}</p>
     <h3>Diagnóstico Fase por Fase com Dados da NASA (Ano ${esc(yearDetail.year)}) — ${esc(critStage.shortCropName)}</h3>
     <table>
       <thead>

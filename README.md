@@ -5,12 +5,17 @@
 
 Aplicação web de apoio à decisão agrícola para planejamento de safras e adaptação de sucessões, combinando **12 anos de dados diários reais da NASA POWER (`2013–2024`)** com **APIs abertas de solo e localização (`ISRIC SoilGrids v2.0` + `OpenStreetMap Nominatim` + `GPS`)** e um catálogo extensível de **culturas e ciclos**.
 
+
+O motor agora aceita sequências, datas e intervalos por cenário. Vilhena permanece
+como exemplo; clima, solo ou regras regionais ausentes aparecem como **não avaliados**.
+Veja [o contrato e os limites do motor](rota-adaptada/docs/MOTOR_CENARIOS.md).
+
 ---
 
 ## Executar localmente e gerar build estático
 
 ```bash
-cd rota-adaptada-novo
+cd rota-adaptada
 npm install
 npm run dev      # Inicia o servidor local do Vite
 ```
@@ -22,11 +27,11 @@ npm test
 npm run build
 ```
 
-O pacote final fica em `rota-adaptada-novo/dist/`, 100% compatível com hospedagem estática (**GoDaddy Registry + SSL**).
+O pacote final fica em `rota-adaptada/dist/`, 100% compatível com hospedagem estática (**GoDaddy Registry + SSL**).
 
 ---
 
-## Fluxo Enxuto de 5 Telas (`rota-adaptada-novo/src/main.js`)
+## Fluxo Enxuto de 5 Telas (`rota-adaptada/src/main.js`)
 
 A aplicação mantém exclusivamente as informações utilizadas pelos dados da **NASA POWER** e das **APIs de terceiros**, organizada em 5 passos diretos:
 
@@ -42,6 +47,6 @@ A aplicação mantém exclusivamente as informações utilizadas pelos dados da 
 
 - [Contexto do Projeto — Implementações, Remoções, Alterações e Decisões (`CONTEXTO_DO_PROJETO.md`)](CONTEXTO_DO_PROJETO.md)
 - [Documentação do Plano e Proposta de Software (`rota_adaptada_proposta_de_software.md`)](rota_adaptada_proposta_de_software.md)
-- [Instruções da Aplicação (`rota-adaptada-novo/README.md`)](rota-adaptada-novo/README.md)
+- [Instruções da Aplicação (`rota-adaptada/README.md`)](rota-adaptada/README.md)
 - [Mapeamento de Conexões de API e Fontes de Dados (`DADOS_CONEXAO_APIS.md`)](DADOS_CONEXAO_APIS.md)
 - [Escopo Técnico (`docs/ESCOPO_RONDONIA.md`)](docs/ESCOPO_RONDONIA.md)
