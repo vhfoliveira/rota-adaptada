@@ -136,8 +136,9 @@ O relatório e as capturas ficam em
 `output/pitch-autoguiado/browser-smoke-results.json` e
 `output/pitch-autoguiado/`, na raiz do repositório. O roteiro com participantes
 leigos e avançados continua pendente. Também permanecem pendentes os testes em
-aparelhos físicos, a instalação/atualização PWA em HTTPS e a verificação das
-fontes externas em condições reais de rede; não houve publicação no servidor.
+aparelhos físicos e a verificação das fontes externas em condições reais de
+rede. Esta rodada usou o servidor local; a publicação foi verificada depois,
+conforme o registro abaixo.
 
 ### Executar o smoke opcional
 
@@ -166,6 +167,41 @@ node tests/browser-smoke.mjs
 `ROTA_SMOKE_OUTPUT` permite escolher outro diretório para o relatório e as
 capturas. O smoke é separado de `npm test`; sua inclusão não adiciona dependências
 ao projeto nem utiliza um perfil persistente do navegador.
+
+## Publicação HTTPS — 15/11/2026
+
+Publicado em <https://deltashift.udisoft.app.br/> o código do commit `4834090`,
+na branch `codex/planejamento-autoguiado`. A base anterior foi registrada em
+`versao-vitoria` no commit `af32c1b`; `main` e `teste-visual` foram preservadas.
+O script de publicação criou backup da versão anterior e confirmou a saúde do
+serviço e a igualdade entre o HTML público e o HTML da imagem publicada.
+
+- O build no servidor aprovou **136 testes JavaScript**, incluindo um build real
+  que confere todos os arquivos do cache offline. Também passaram os **13 testes
+  Python**, o build local e a checagem de empacotamento.
+- A lista de cache passou a ser gerada após a finalização dos arquivos pelo Vite.
+  Os **18 recursos** publicados retornaram HTTP 200; o cache é
+  `rota-field-801a3fbf9acffb4b`. A mudança conserva a ativação explícita de
+  atualizações e o salvamento prévio dos rascunhos.
+- Em Chromium temporário, a raiz abriu **Planeje sua próxima safra**, com a
+  entrada `index-B2ptp1j9.js`. O Service Worker ficou ativo e controlando a página.
+  O exemplo, percorrido pela interface, calculou milho de 01/11/2026 a 28/02/2027
+  e feijão de 08/03/2027 a 26/05/2027. Não houve erros de página ou HTTP >= 400.
+- Com a rede desligada no contexto de teste, a navegação para a raiz abriu a
+  interface já instalada e exibiu o aviso de ausência de conexão. Isso verifica
+  o shell offline, não novas consultas de dados sem rede.
+- O navegador embutido persistente usado na revisão ainda apresentou uma
+  interface antiga em cache. Seus dados não foram limpos. A publicação nova foi
+  confirmada por HTTP e pelo Chromium temporário; a migração desse perfil legado
+  específico não foi concluída nesta sessão.
+
+Evidências locais: `output/pitch-autoguiado/production-verification.json`,
+`https-validacao.json` e capturas `publicado-*.png`, na raiz. O pitch tem sete
+slides; o vídeo tem 30 segundos exatos, com capturas reais e legendas, sem áudio.
+Foram preparados roteiros de apresentação e vídeo. Continuam pendentes a rodada
+com três pessoas pouco digitais e duas avançadas, o ensaio com o apresentador e
+os testes em aparelhos físicos. Não foram atribuídos resultados a participantes
+que não testaram o aplicativo.
 
 ## Histórico da revisão — 14/11/2026, antes da nova criação
 
