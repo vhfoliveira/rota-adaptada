@@ -15,6 +15,8 @@ CROPS={'ARROZ DE SEQUEIRO':('arroz',['12010900000011'],'Arroz','1'), 'ARROZ IRRI
 def norm(s):
  s=s.translate(str.maketrans({'\uf03c':'<','\uf03e':'>','\uf0a3':'<=','\uf0b3':'>=','≤':'<=','≥':'>='}))
  return re.sub(r'\s+',' ',unicodedata.normalize('NFKD',s).encode('ascii','ignore').decode()).strip()
+CROPS.update({'MILHO 1ª SAFRA':('milho-1',['12015080000011'],'Milho 1ª Safra','1'),
+ 'MILHO 2ª SAFRA':('milho-2',['12015080000021'],'Milho 2ª Safra','1')})
 CROPS={norm(k).upper():v for k,v in CROPS.items()}
 class Links(HTMLParser):
  def __init__(self):super().__init__();self.events=[];self.link=None
@@ -66,7 +68,7 @@ def parse(item,text,raw,as_of):
  if not re.search(r'ano[- ]safra\s+2026\s*/\s*2027',low):raise ValueError('Source does not cover season 2026/2027')
  state=re.search(r'(?:no estado d[aeo] (.+?)|no (distrito federal)),? ano[- ]\s*safra',low[:900])
  if not state or next(s for s in state.groups() if s)!=STATES[item['uf']].replace('-',' '):raise ValueError('State not confirmed in official heading')
- expected_crop={'arroz':'arroz','arroz-irrigado':'arroz','sorgo-grao':'sorgo granifero','sorgo-forragem':'sorgo forrageiro','aveia':'aveia','cevada':'cevada','trigo':'trigo'}.get(family,'milho consorciado com braquiaria - '+family[-1]+'a safra')
+ expected_crop={'arroz':'arroz','arroz-irrigado':'arroz','sorgo-grao':'sorgo granifero','sorgo-forragem':'sorgo forrageiro','aveia':'aveia','cevada':'cevada','trigo':'trigo','milho-1':'milho 1a safra','milho-2':'milho 2a safra'}.get(family,'milho consorciado com braquiaria - '+family[-1]+'a safra')
  if not re.search(r'cultura d[oa] '+re.escape(expected_crop)+r'\b',low[:900]):raise ValueError('Crop not confirmed in official heading')
  pub=re.search(r'Portaria publicada no D\.O\.U\. do dia ([^.]+)',text,re.I)
  if not pub:raise ValueError('Publication date not found')
@@ -82,7 +84,20 @@ def parse(item,text,raw,as_of):
   else:raise ValueError('Management not confirmed')
  if management=='1' and 'cultivo irrigado' in low[:900]:raise ValueError('Unexpected irrigated scope')
  if management=='2' and 'cultivo irrigado' not in low[:900]:raise ValueError('Irrigated management not confirmed')
- if family.startswith('milho-consorcio'):
+ if family in ('milho-1','milho-2'):
+  if 'consorciado' in low[:900] or 'direcionado ao cultivo de sequeiro' not in low:raise ValueError('Maize management not confirmed')
+  if 'numero de dias da semeadura a maturacao fisiologica' not in low:raise ValueError('Maize cycle start not confirmed')
+  sec='Anexo 1.11' if family=='milho-1' else 'Anexo 1.12'
+  risk_sec='Anexo 1.13' if family=='milho-1' else 'Anexo 1.14'
+  if not re.search(re.escape(sec.removeprefix('Anexo '))+r'\. As cultivares de milho',n,re.I) or not re.search(re.escape(risk_sec.removeprefix('Anexo '))+r'\. Os periodos de plantio',n,re.I):raise ValueError('Unreviewed maize sections')
+  for row in [r'Grupo I\s+ate 110\s+90 e 110\s+20\s+30\s+30\s+20',r'Grupo II\s+110 a 130\s+111 e 130\s+20\s+40\s+40\s+20',r'Grupo III\s+>\s*130\s+131 e 160\s+20\s+50\s+50\s+20']:
+   if not re.search(row,n,re.I):raise ValueError('Unreviewed maize phase table')
+  groups=[group(20,rng(None,110),sec,phases=[20,30,30,20],cycle_start='sowing'),group(21,rng(110,130),sec,phases=[20,40,40,20],cycle_start='sowing'),group(22,rng(130,None,False),sec,phases=[20,50,50,20],cycle_start='sowing')]
+  sections=[sec,risk_sec]
+  if re.search(r'temperaturas minimas menores que 2\s*C.*?fases 1, 2 e 3',n,re.I):
+   for phase in PHASES[:3]:thermal.append({'id':'frost-'+phase,'label':'Temperatura mínima abaixo de 2 °C','metric':'T2M_MIN','operator':'lt','thresholdC':2,'scope':{'phaseId':phase},'sourceSection':risk_sec+' c','evidence':'Critério publicado para as fases 1, 2 e 3.'})
+  if re.search(r'temperatura media menor que 18\s*C na fase 3',n,re.I):thermal.append({'id':'cool-f3','label':'Temperatura média abaixo de 18 °C na fase 3','metric':'T2M','operator':'lt','thresholdC':18,'scope':{'phaseId':PHASES[2]},'sourceSection':risk_sec+' b','evidence':'Exige temperatura média; não substituir por média de Tmax e Tmin.'})
+ elif family.startswith('milho-consorcio'):
   if 'consorciado com braquiaria' not in low[:2500]:raise ValueError('Consortium not confirmed')
   if 'numero de dias da semeadura a maturacao fisiologica' not in low:raise ValueError('Maize cycle start not confirmed')
   if not re.search(r'Grupo I\s+ate 110\s+90 e 110\s+20\s+30\s+30\s+20',n,re.I):raise ValueError('Unreviewed maize group I phase table')

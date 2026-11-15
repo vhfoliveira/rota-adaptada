@@ -10,7 +10,7 @@ import {workspaceSidebar,workspaceTopbar,bindWorkspaceShell,icon} from './orbit-
 import {buildOfficialCropCatalog} from './official-crop-registry.js';
 import {loadGuidedCropCatalog} from './guided-crops.js';
 import {buildAdvancedCropCatalog, createMunicipalCatalogStore, municipalCatalogKey} from './advanced-crop-catalog.js';
-import {officialStageDetails} from './official-crop-ui.js';
+import {stageDetails} from './official-crop-ui.js';
 import {
   rulesPackage,
   getActiveNasaDataset,
@@ -2172,7 +2172,7 @@ function renderScreen5Explanation() {
         </span>
       </div>
 
-      ${officialStageDetails(inspectedStage)}
+      ${stageDetails(inspectedStage)}
       <p class="muted">${esc(yearObj.reason || stTest.headline)}</p>
       <div class="phases-cards-grid">
         ${yearObj.phases

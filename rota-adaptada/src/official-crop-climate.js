@@ -131,6 +131,17 @@ function aggregateClimate(years){
     interpretation:'Histórico dos ciclos completos; não prevê a próxima safra nem calcula adequação da cultura.'};
 }
 
+/** Descriptive weather for any calendar, independent of model/soil support. */
+export function summarizeHistoricalCycle(dataset,sowDate,cycleDays){
+  validDate(sowDate);
+  if(!isInteger(cycleDays))return null;
+  return aggregateClimate(historicalYears(dataset).map(year=>{
+    const monthDay=sowDate.slice(5);
+    const start=monthDay==='02-29'&&new Date(Date.UTC(year,1,29)).getUTCMonth()!==1?`${year}-02-28`:`${year}-${monthDay}`;
+    return {year,climate:summarizeRows(Array.from({length:cycleDays},(_,i)=>dataset?.daily?.[addDays(start,i)]))};
+  }));
+}
+
 /**
  * Historical context using explicit official cycle/phase durations or a clearly
  * labelled calendar scenario normalized from a finite published cycle bound.

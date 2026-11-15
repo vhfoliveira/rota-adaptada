@@ -48,8 +48,10 @@ export function extractGuidedPlan(choice) {
     stages:clone(stages),
     delayDays:plan.delayDays ?? 0,
     intervalDays:plan.operationalIntervalDays ?? 7,
-    allowCropChange:plan.preservedDecisions?.allowCommercialSubstitution!==false || plan.preservedDecisions?.allowCoverCropTransition!==false,
+    allowCropChange:plan.preservedDecisions?.allowCommercialSubstitution!==false,
     allowCycleChange:plan.preservedDecisions?.allowCycleAdjustment!==false,
+    allowCoverCropChange:plan.preservedDecisions?.allowCoverCropTransition!==false,
+    lockedStages:clone(plan.guidedLockedStages??(plan.preservedDecisions?.keepFirstCropSoy===false?[]:[0])),
     sourcePlanning:clone(plan)
   };
 }
@@ -68,13 +70,16 @@ export function buildGuidedPlanning(draft,legacy={}) {
     ? [...new Set(draft.zarcCatalog.engineCropIds)].filter(id=>!Array.isArray(source.allowedCropIds) || source.allowedCropIds.includes(id))
     : null;
   const groupKeysByCrop=draft.zarcCatalog?.groupKeysByCrop?Object.fromEntries(Object.entries(draft.zarcCatalog.groupKeysByCrop).map(([id,keys])=>[id,keys.filter(key=>!source.allowedGroupKeysByCrop?.[id]||source.allowedGroupKeysByCrop[id].includes(key))])):null;
+  const allowFirst=Array.isArray(draft.lockedStages)?!draft.lockedStages.includes(0):draft.allowFirstCropChange===true;
   const stages=draft.stages.map((stage,index)=>{
     const crop=rulesPackage.crops_catalog[stage.cropId];
     if(!crop)throw Error(`Escolha a cultura da etapa ${index+1}.`);
     if(!crop.cultivar_groups?.[stage.groupKey])throw Error(`Escolha o ciclo da etapa ${index+1}. Se ainda não souber, salve o rascunho para continuar depois.`);
     if(stage.plannedSowDate)validDate(stage.plannedSowDate,`Data da etapa ${index+1}`);
     if(stage.intervalDays!==undefined && stage.intervalDays!==null)requiredDays(stage.intervalDays,`Intervalo da etapa ${index+1}`);
-    return {...clone(stage),cropId:stage.cropId,groupKey:stage.groupKey,allowCropChange:index>0 && draft.allowCropChange===true && stage.allowCropChange!==false,allowCycleChange:draft.allowCycleChange===true && stage.allowCycleChange!==false};
+    const locked=draft.lockedStages?.includes(index);
+    const allowCover=draft.allowCoverCropChange??draft.allowCropChange;
+    return {...clone(stage),cropId:stage.cropId,groupKey:stage.groupKey,allowCropChange:!locked && (index>0||allowFirst) && (draft.allowCropChange===true||allowCover===true) && (index===0?allowFirst:stage.allowCropChange!==false),allowCycleChange:!locked && draft.allowCycleChange===true && stage.allowCycleChange!==false};
   });
   return {
     ...source,
@@ -90,12 +95,13 @@ export function buildGuidedPlanning(draft,legacy={}) {
     delayDays,
     operationalIntervalDays:intervalDays,
     successionStages:stages,
+    guidedLockedStages:clone(draft.lockedStages||[]),
     preservedDecisions:{
       ...(source.preservedDecisions || {}),
-      keepFirstCropSoy:true,
+      keepFirstCropSoy:!allowFirst,
       allowCycleAdjustment:draft.allowCycleChange===true,
       allowCommercialSubstitution:draft.allowCropChange===true,
-      allowCoverCropTransition:draft.allowCropChange===true
+      allowCoverCropTransition:(draft.allowCoverCropChange??draft.allowCropChange)===true
     }
   };
 }

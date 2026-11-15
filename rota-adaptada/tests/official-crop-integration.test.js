@@ -228,3 +228,20 @@ test('clearing soil or management in a resumed plan keeps the information unknow
  const rebuilt=buildGuidedPlanning(restored,state);
  assert.equal(rebuilt.soilCode,'');assert.equal(rebuilt.management,'');
 });
+
+test('ordinary maize now has official parameters, climate and sources in either succession position',()=>{
+ for(const names of [['Arroz','Milho 2ª Safra'],['Milho 2ª Safra','Arroz'],['Milho 1ª Safra','Milho 2ª Safra']]){
+  const selected=simulateGuidedPlanning(draftFor(names,{date:'2026-11-01',delayDays:0}),property,{},context()).strategies[0];
+  for(const stage of selected.stages){
+   assert(stage.officialSource,stage.shortCropName);
+   assert.equal(stage.zarc.provenance,'official');
+   assert.equal(stage.stressTest.evaluatedYears,0);
+   assert(stage.stressTest.climateSummary.completeYears>0);
+   if(stage.shortCropName.includes('Milho')){
+    assert.equal(stage.cycleDays,100);
+    assert.deepEqual(stage.stressTest.years[0].phases.map(p=>p.days),[20,30,30,20]);
+    assert.equal(stage.stressTest.thermalSummary.length,4);
+   }
+  }
+ }
+});

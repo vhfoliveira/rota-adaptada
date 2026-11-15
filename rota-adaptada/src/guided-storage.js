@@ -90,14 +90,14 @@ export async function readDrafts({example=false}={}){
   });
 }
 export async function readLegacyState(){return await get('state') || {};}
-export function saveDraft(objective,draft,{example=false}={}){
+export function saveDraft(objective,draft,{example=false,draftKey=objective}={}){
   if(!['discovery','adaptation','planning'].includes(objective))return Promise.reject(Error('Objetivo de preenchimento inválido.'));
   const snapshot=draft===null?null:structuredClone(draft);
   return update(example?DEMO_DRAFTS:DRAFTS,current=>{
     const value={...(current || {})};
-    if(snapshot===null)delete value[objective];
-    else value[objective]={...snapshot,savedAt:new Date().toISOString()};
-    return {value,result:value[objective] || null};
+    if(snapshot===null)delete value[draftKey];
+    else value[draftKey]={...snapshot,savedAt:new Date().toISOString()};
+    return {value,result:value[draftKey] || null};
   });
 }
 export function saveGuidedPlan(draft,property){

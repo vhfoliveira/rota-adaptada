@@ -3,7 +3,7 @@ import { validDate, days, locationKey, matchesLocation, historicalYears, periodL
 import rulesPackage from './data/vilhena_rules-v2.json' with { type: 'json' };
 import defaultNasaDataset from './data/nasa-vilhena-2013-2024.json' with { type: 'json' };
 import {buildOfficialCropCatalog} from './official-crop-registry.js';
-import {evaluateOfficialCropClimate} from './official-crop-climate.js';
+import {evaluateOfficialCropClimate,summarizeHistoricalCycle} from './official-crop-climate.js';
 import {evaluateOfficialWindow} from './official-crop-window.js';
 
 Object.assign(rulesPackage.crops_catalog,buildOfficialCropCatalog());
@@ -877,6 +877,7 @@ export function runHistoricalStressTest(cropId, groupKey, sowDateStr, soilProfil
     noCriticalYears,
     headline,
     evaluatedYears, unassessedYears, period: periodLabel(dataset), estimated: Boolean(crop.is_custom || group.is_custom_cycle),
+    climateSummary:summarizeHistoricalCycle(dataset,sowDateStr,totalCycleDays),
     years: yearsResult
   };
 }
@@ -955,6 +956,8 @@ function buildStrategyEvaluation({
       calendarBasis:group.calendarBasis||null,
       calendarExplanation:group.calendarExplanation||null,
       officialSource:crop.officialProfile?.source||null,
+      modelSource:crop.source_details?structuredClone(crop.source_details):null,
+      parameterOrigin:crop.officialProfile?'official':crop.is_custom||group.is_custom_cycle?'user':'prototype',
       stressTest
     });
   }

@@ -9,6 +9,15 @@ de solo do ISRIC SoilGrids e localização por GPS, mapa ou município. A interf
 informa o período e as condições efetivamente avaliados. Vilhena/RO é uma
 demonstração explícita; dados ausentes aparecem como **não avaliados**.
 
+## Maturidade e continuidade
+
+O escopo atual é apoio ao planejamento agrícola. Fertilidade medida do solo,
+qualidade dos lotes de sementes, sanidade e variabilidade dentro dos talhões
+ainda não são avaliadas de forma integrada. A evolução para decisões de
+agricultura de precisão depende de dados da propriedade e validação em campo.
+Veja as [lacunas, etapas de evolução e argumento para parcerias](docs/ESCOPO_RONDONIA.md#maturidade-agronômica-e-continuidade-do-projeto)
+e o [roteiro de validação com agrônomos](docs/ROTEIRO_AGRONOMO.md).
+
 ## Executar e validar
 
 ```bash

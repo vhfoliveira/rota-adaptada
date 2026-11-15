@@ -114,7 +114,7 @@ class PublishedDatasetTest(unittest.TestCase):
             self.assertRegex(p['source']['sha256'], r'^[a-f0-9]{64}$')
             for g in p['groups']:
                 if g['phases']:
-                    self.assertTrue(p['id'].startswith('milho-consorcio'))
+                    self.assertTrue(p['id'].startswith(('milho-consorcio', 'milho-1-', 'milho-2-')))
                     self.assertEqual(g['representativeDays'], sum(f['days'] for f in g['phases']))
                     self.assertEqual(g['cycleStart'], 'sowing')
                     self.assertIsNone(g['emergenceDaysRange'])

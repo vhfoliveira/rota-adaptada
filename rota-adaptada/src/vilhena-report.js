@@ -1,4 +1,4 @@
-import {officialStageDetails} from './official-crop-ui.js';
+import {stageDetails} from './official-crop-ui.js';
 import { formatBRDate, rulesPackage } from './vilhena-engine.js';
 
 const esc = v =>
@@ -147,7 +147,7 @@ export function generateVilhenaReportHTML(simResult, selectedStrategyId = null, 
       </tbody>
     </table>
 
-    ${hasOfficial?`<p class="notice">O fim do ciclo de referência pode indicar maturação fisiológica. O intervalo entre cultivos deve incluir secagem, colheita e preparo.</p>${selected.stages.filter(st=>st.officialSource).map(st=>`<h3>${esc(st.shortCropName)} — fontes e condições</h3>${officialStageDetails(st).replace('<details ', '<details open ')}`).join('')}`:''}
+    ${hasOfficial?'<p class="notice">O fim do ciclo de referência pode indicar maturação fisiológica. O intervalo entre cultivos deve incluir secagem, colheita e preparo.</p>':''}${selected.stages.map(st=>`<h3>${esc(st.shortCropName)} — fontes e condições</h3>${stageDetails(st).replace('<details ', '<details open ')}`).join('')}
     <p class="notice">${esc(critStage.stressTest.headline)} ${esc(selected.soilMetrics.method)} ${esc(selected.statusLabel)}</p>
     <h3>Diagnóstico Fase por Fase com Dados da NASA (Ano ${esc(yearDetail.year)}) — ${esc(critStage.shortCropName)}</h3>
     <table>

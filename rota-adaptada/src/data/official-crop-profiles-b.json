@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "validatedAsOf": "2026-11-14",
+  "validatedAsOf": "2026-11-15",
   "profiles": [
     {
       "id": "arroz-ac-1-2026-2027",
@@ -3334,6 +3334,354 @@
         "A portaria não publica durações das fases; alertas por fase permanecem não avaliados.",
         "A fonte informa faixas, não um ciclo exato. Um cenário pelo limite superior deve ser identificado como hipótese de planejamento.",
         "O cenário corresponde exclusivamente ao cultivo irrigado; disponibilidade e manejo da irrigação não são avaliados."
+      ]
+    },
+    {
+      "id": "milho-1-ro-1-2026-2027",
+      "name": "Milho 1ª Safra",
+      "zarcCropIds": [
+        "12015080000011"
+      ],
+      "uf": "RO",
+      "season": "2026/2027",
+      "managementCodes": [
+        "1"
+      ],
+      "source": {
+        "url": "https://www.gov.br/agricultura/pt-br/assuntos/riscos-seguro/programa-nacional-de-zoneamento-agricola-de-risco-climatico/portarias/safra-vigente/rondonia/PO12FB1.PDF",
+        "title": "PORTARIA SPA/MAPA No 233, DE 30 DE JUNHO DE 2026",
+        "ordinance": "233",
+        "publishedAt": "2026-07-10",
+        "signedAt": "2026-06-30",
+        "retrievedAt": "2026-11-15",
+        "sha256": "6c0fe1464526803733cdbb4bfcc313e7fe34d4e89e81fa44f60c008b6222f070",
+        "sections": [
+          "Anexo 1.11",
+          "Anexo 1.13"
+        ]
+      },
+      "groups": [
+        {
+          "code": "20",
+          "representativeDays": 100,
+          "cycleRange": {
+            "min": null,
+            "max": 110,
+            "minInclusive": true,
+            "maxInclusive": true
+          },
+          "cycleStart": "sowing",
+          "emergenceDaysRange": null,
+          "phases": [
+            {
+              "id": "F1_estabelecimento",
+              "days": 20
+            },
+            {
+              "id": "F2_vegetativo",
+              "days": 30
+            },
+            {
+              "id": "F3_floracao_enchimento",
+              "days": 30
+            },
+            {
+              "id": "F4_maturacao",
+              "days": 20
+            }
+          ],
+          "evidence": "Anexo 1.11 — duração de referência calculada pela soma das fases publicadas."
+        },
+        {
+          "code": "21",
+          "representativeDays": 120,
+          "cycleRange": {
+            "min": 110,
+            "max": 130,
+            "minInclusive": true,
+            "maxInclusive": true
+          },
+          "cycleStart": "sowing",
+          "emergenceDaysRange": null,
+          "phases": [
+            {
+              "id": "F1_estabelecimento",
+              "days": 20
+            },
+            {
+              "id": "F2_vegetativo",
+              "days": 40
+            },
+            {
+              "id": "F3_floracao_enchimento",
+              "days": 40
+            },
+            {
+              "id": "F4_maturacao",
+              "days": 20
+            }
+          ],
+          "evidence": "Anexo 1.11 — duração de referência calculada pela soma das fases publicadas."
+        },
+        {
+          "code": "22",
+          "representativeDays": 140,
+          "cycleRange": {
+            "min": 130,
+            "max": null,
+            "minInclusive": false,
+            "maxInclusive": true
+          },
+          "cycleStart": "sowing",
+          "emergenceDaysRange": null,
+          "phases": [
+            {
+              "id": "F1_estabelecimento",
+              "days": 20
+            },
+            {
+              "id": "F2_vegetativo",
+              "days": 50
+            },
+            {
+              "id": "F3_floracao_enchimento",
+              "days": 50
+            },
+            {
+              "id": "F4_maturacao",
+              "days": 20
+            }
+          ],
+          "evidence": "Anexo 1.11 — duração de referência calculada pela soma das fases publicadas."
+        }
+      ],
+      "thermalCriteria": [
+        {
+          "id": "frost-F1_estabelecimento",
+          "label": "Temperatura mínima abaixo de 2 °C",
+          "metric": "T2M_MIN",
+          "operator": "lt",
+          "thresholdC": 2,
+          "scope": {
+            "phaseId": "F1_estabelecimento"
+          },
+          "sourceSection": "Anexo 1.13 c",
+          "evidence": "Critério publicado para as fases 1, 2 e 3."
+        },
+        {
+          "id": "frost-F2_vegetativo",
+          "label": "Temperatura mínima abaixo de 2 °C",
+          "metric": "T2M_MIN",
+          "operator": "lt",
+          "thresholdC": 2,
+          "scope": {
+            "phaseId": "F2_vegetativo"
+          },
+          "sourceSection": "Anexo 1.13 c",
+          "evidence": "Critério publicado para as fases 1, 2 e 3."
+        },
+        {
+          "id": "frost-F3_floracao_enchimento",
+          "label": "Temperatura mínima abaixo de 2 °C",
+          "metric": "T2M_MIN",
+          "operator": "lt",
+          "thresholdC": 2,
+          "scope": {
+            "phaseId": "F3_floracao_enchimento"
+          },
+          "sourceSection": "Anexo 1.13 c",
+          "evidence": "Critério publicado para as fases 1, 2 e 3."
+        },
+        {
+          "id": "cool-f3",
+          "label": "Temperatura média abaixo de 18 °C na fase 3",
+          "metric": "T2M",
+          "operator": "lt",
+          "thresholdC": 18,
+          "scope": {
+            "phaseId": "F3_floracao_enchimento"
+          },
+          "sourceSection": "Anexo 1.13 b",
+          "evidence": "Exige temperatura média; não substituir por média de Tmax e Tmin."
+        }
+      ],
+      "limitations": [
+        "Parâmetros extraídos e conferidos contra portaria oficial; isto não reproduz o modelo completo do ZARC.",
+        "ISNA e balanço hídrico não são substituídos por limiares de chuva ou umidade NASA."
+      ]
+    },
+    {
+      "id": "milho-2-ro-1-2026-2027",
+      "name": "Milho 2ª Safra",
+      "zarcCropIds": [
+        "12015080000021"
+      ],
+      "uf": "RO",
+      "season": "2026/2027",
+      "managementCodes": [
+        "1"
+      ],
+      "source": {
+        "url": "https://www.gov.br/agricultura/pt-br/assuntos/riscos-seguro/programa-nacional-de-zoneamento-agricola-de-risco-climatico/portarias/safra-vigente/rondonia/PO26B71.PDF",
+        "title": "PORTARIA SPA/MAPA No 331, DE 28 DE JULHO DE 2026",
+        "ordinance": "331",
+        "publishedAt": "2026-07-30",
+        "signedAt": "2026-07-28",
+        "retrievedAt": "2026-11-15",
+        "sha256": "111df75e90355be158b675cd7aa5c0f71148f32f3589d875ab68c71b148dea4d",
+        "sections": [
+          "Anexo 1.12",
+          "Anexo 1.14"
+        ]
+      },
+      "groups": [
+        {
+          "code": "20",
+          "representativeDays": 100,
+          "cycleRange": {
+            "min": null,
+            "max": 110,
+            "minInclusive": true,
+            "maxInclusive": true
+          },
+          "cycleStart": "sowing",
+          "emergenceDaysRange": null,
+          "phases": [
+            {
+              "id": "F1_estabelecimento",
+              "days": 20
+            },
+            {
+              "id": "F2_vegetativo",
+              "days": 30
+            },
+            {
+              "id": "F3_floracao_enchimento",
+              "days": 30
+            },
+            {
+              "id": "F4_maturacao",
+              "days": 20
+            }
+          ],
+          "evidence": "Anexo 1.12 — duração de referência calculada pela soma das fases publicadas."
+        },
+        {
+          "code": "21",
+          "representativeDays": 120,
+          "cycleRange": {
+            "min": 110,
+            "max": 130,
+            "minInclusive": true,
+            "maxInclusive": true
+          },
+          "cycleStart": "sowing",
+          "emergenceDaysRange": null,
+          "phases": [
+            {
+              "id": "F1_estabelecimento",
+              "days": 20
+            },
+            {
+              "id": "F2_vegetativo",
+              "days": 40
+            },
+            {
+              "id": "F3_floracao_enchimento",
+              "days": 40
+            },
+            {
+              "id": "F4_maturacao",
+              "days": 20
+            }
+          ],
+          "evidence": "Anexo 1.12 — duração de referência calculada pela soma das fases publicadas."
+        },
+        {
+          "code": "22",
+          "representativeDays": 140,
+          "cycleRange": {
+            "min": 130,
+            "max": null,
+            "minInclusive": false,
+            "maxInclusive": true
+          },
+          "cycleStart": "sowing",
+          "emergenceDaysRange": null,
+          "phases": [
+            {
+              "id": "F1_estabelecimento",
+              "days": 20
+            },
+            {
+              "id": "F2_vegetativo",
+              "days": 50
+            },
+            {
+              "id": "F3_floracao_enchimento",
+              "days": 50
+            },
+            {
+              "id": "F4_maturacao",
+              "days": 20
+            }
+          ],
+          "evidence": "Anexo 1.12 — duração de referência calculada pela soma das fases publicadas."
+        }
+      ],
+      "thermalCriteria": [
+        {
+          "id": "frost-F1_estabelecimento",
+          "label": "Temperatura mínima abaixo de 2 °C",
+          "metric": "T2M_MIN",
+          "operator": "lt",
+          "thresholdC": 2,
+          "scope": {
+            "phaseId": "F1_estabelecimento"
+          },
+          "sourceSection": "Anexo 1.14 c",
+          "evidence": "Critério publicado para as fases 1, 2 e 3."
+        },
+        {
+          "id": "frost-F2_vegetativo",
+          "label": "Temperatura mínima abaixo de 2 °C",
+          "metric": "T2M_MIN",
+          "operator": "lt",
+          "thresholdC": 2,
+          "scope": {
+            "phaseId": "F2_vegetativo"
+          },
+          "sourceSection": "Anexo 1.14 c",
+          "evidence": "Critério publicado para as fases 1, 2 e 3."
+        },
+        {
+          "id": "frost-F3_floracao_enchimento",
+          "label": "Temperatura mínima abaixo de 2 °C",
+          "metric": "T2M_MIN",
+          "operator": "lt",
+          "thresholdC": 2,
+          "scope": {
+            "phaseId": "F3_floracao_enchimento"
+          },
+          "sourceSection": "Anexo 1.14 c",
+          "evidence": "Critério publicado para as fases 1, 2 e 3."
+        },
+        {
+          "id": "cool-f3",
+          "label": "Temperatura média abaixo de 18 °C na fase 3",
+          "metric": "T2M",
+          "operator": "lt",
+          "thresholdC": 18,
+          "scope": {
+            "phaseId": "F3_floracao_enchimento"
+          },
+          "sourceSection": "Anexo 1.14 b",
+          "evidence": "Exige temperatura média; não substituir por média de Tmax e Tmin."
+        }
+      ],
+      "limitations": [
+        "Parâmetros extraídos e conferidos contra portaria oficial; isto não reproduz o modelo completo do ZARC.",
+        "ISNA e balanço hídrico não são substituídos por limiares de chuva ou umidade NASA."
       ]
     },
     {

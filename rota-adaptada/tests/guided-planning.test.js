@@ -381,3 +381,24 @@ test('saved substitutions cannot inherit the official identity of the original c
  assert.equal(plan.guidedOrigin.sourcePlanning.successionStages[1].zarcCropName,'Milho 2ª Safra');
  assert.deepEqual(input,before);
 });
+
+test('simulation separates commercial and cover permissions and protects selected stages',()=>{
+ const input={...draft(),allowCycleChange:false,allowCropChange:false,allowCoverCropChange:true,lockedStages:[1]};
+ const result=simulateGuidedPlanning(input,property);
+ assert.ok(result.allStrategies.length>1);
+ for(const alternative of result.allStrategies.slice(1)){
+  assert.equal(alternative.stages[1].cropId,input.stages[1].cropId);
+  assert.equal(alternative.stages[1].groupKey,input.stages[1].groupKey);
+  const crop=rulesPackage.crops_catalog[alternative.stages[0].cropId];
+  assert.ok(crop.role_in_prototype?.startsWith('COVER_CROP')||crop.custom_role==='COBERTURA_SOLO');
+ }
+ const protectedResult=simulateGuidedPlanning({...input,lockedStages:[0,1]},property);
+ assert.equal(protectedResult.allStrategies.length,1);
+ const locked=simulateGuidedPlanning({...input,allowCycleChange:true,allowCropChange:true,lockedStages:[0,1]},property);
+ assert.equal(locked.allStrategies.length,1);
+ const recovered=extractGuidedPlan({planning:buildGuidedPlanning(input)});
+ assert.equal(recovered.allowCropChange,false);
+ assert.equal(recovered.allowCoverCropChange,true);
+ assert.equal(buildGuidedPlanning(recovered).preservedDecisions.keepFirstCropSoy,false);
+ assert.deepEqual(recovered.lockedStages,[1]);
+});
