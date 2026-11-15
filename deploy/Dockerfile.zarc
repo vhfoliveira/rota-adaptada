@@ -1,0 +1,5 @@
+FROM python:3.12-alpine
+WORKDIR /app
+COPY rota-adaptada/scripts/import-zarc-risk.py rota-adaptada/scripts/zarc-service.py ./
+ENV PYTHONUNBUFFERED=1 ZARC_OUTPUT=/data/zarc
+CMD ["python", "zarc-service.py"]

@@ -10,7 +10,7 @@ Em **Planejamento → Incluir novo planejamento**, escolha culturas e ciclos.
 A seção opcional **Datas e ajustes desta etapa** permite definir uma data mínima,
 um intervalo específico e se a cultura ou o ciclo podem mudar. O intervalo vazio
 herda o geral. O primeiro plantio usa a data inicial; as etapas seguintes respeitam
-a colheita anterior, o intervalo e a data mínima informada. O exemplo usa uma
+o fim do ciclo anterior, o intervalo e a data mínima informada. O exemplo usa uma
 âncora anual para o segundo verão: mudar o ano inicial reposiciona essa âncora.
 Datas explícitas de planos do usuário permanecem explícitas.
 
@@ -19,6 +19,10 @@ cadastrada, respeitando as permissões locais e globais. A tela mostra o plano a
 e até três alternativas. O gerador de sugestões usa a mesma sequência e as mesmas
 restrições; quando o formulário ainda está incompleto, usa a sequência ativa.
 Não realiza otimização global de múltiplas alterações, lucro ou produtividade.
+
+A criação guiada usa outro gerador, `guided-suggestions.js`, que monta sequências
+por horizonte e janelas municipais. Ele não usa o ranking climático do motor.
+Veja [sugestões de planejamento](GUIA_AUTOGUIADO.md#sugestões-de-planejamento).
 
 ## Contrato de integração
 
@@ -56,7 +60,8 @@ outra propriedade não muda os dados usados pelo cenário anterior. Consultas
 concluídas depois da troca de propriedade não redesenham a propriedade errada.
 
 A API `fetchLiveNasaPower(lat, lon, {startDate, endDate})` permite escolher o período.
-Na interface, o período padrão vem dos metadados do exemplo. O conjunto retornado
+O início padrão é 2013-01-01; o painel consulta até a data corrente e o guia até
+o fim do ano anterior, para trabalhar com anos encerrados. O conjunto retornado
 precisa ter as coordenadas da solicitação; o cenário determina os anos a partir
 da série diária, sem exigir 2013–2024.
 
@@ -87,10 +92,6 @@ da série diária, sem exigir 2013–2024.
 clima, regras regionais, dados incompletos, falha de APIs, ciclos personalizados,
 cobertura e relatório. `npm run build` valida a aplicação Vite.
 
-O teste opcional de navegador usa o protocolo CDP do Chromium, sem dependências
-adicionais. Inicie Vite e um Chromium de teste com
-`--headless --remote-debugging-port=9223 --user-data-dir=/tmp/rota-browser-test`,
-então execute `node tests/browser-smoke.mjs`. Use um perfil descartável: o teste
-reescreve o estado IndexedDB desse perfil. `ROTA_APP_URL` e `ROTA_CDP_URL` permitem
-outros endereços. Verifica as cinco telas, edição de sequência, sugestões,
-relatório, cenário sem dados, cultura personalizada persistida e largura móvel.
+O roteiro de navegador está em [Validação dos fluxos](VALIDACAO_FLUXOS.md).
+Ele cobre as três jornadas guiadas, o painel avançado, persistência e mudanças
+durante consultas.

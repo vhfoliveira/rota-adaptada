@@ -49,3 +49,26 @@ Para cada regra validada, registrar:
 - fonte documental, quando existir;
 - nome e data da validação técnica;
 - limites e exceções.
+
+## Lacunas e desenho da continuidade
+
+Usar a [matriz de maturidade e continuidade](ESCOPO_RONDONIA.md#maturidade-agronômica-e-continuidade-do-projeto)
+como hipótese de trabalho, permitindo que o profissional corrija e priorize os itens.
+
+23. Quais dados ausentes hoje mudariam uma decisão concreta de plantio ou sucessão?
+24. Quais indicadores de solo exigem laudo, qual amostragem representa a área e como
+    registrar método, unidades, profundidade e data sem misturar resultados incompatíveis?
+25. Quais informações do lote são necessárias: germinação, vigor, pureza, sanidade,
+    umidade, tratamento e armazenamento? Em que circunstâncias verificar novamente?
+26. Como distinguir resistência da cultivar, qualidade do lote e emergência em campo?
+27. Quais restrições sanitárias, operacionais e econômicas impediriam uma alternativa
+    que parece adequada apenas pelo calendário e pelo clima?
+28. Qual cultura, local e decisão devem formar o primeiro piloto? Que dados o produtor
+    já possui, quais faltam e quanto custaria coletá-los e mantê-los atualizados?
+29. Quais resultados observados, métricas e tolerâncias demonstrariam utilidade?
+    Como reservar casos independentes para avaliar o modelo e registrar falhas?
+30. Quando o aplicativo deve suspender uma conclusão e indicar que faltam evidências?
+
+Para cada prioridade, registrar a decisão atendida, responsável pela coleta,
+custo estimado, critério de aceitação e limitações. O roteiro não pressupõe que
+qualquer entrevista ou disponibilidade de dados já valide uma recomendação.

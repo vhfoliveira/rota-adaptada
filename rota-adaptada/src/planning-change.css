@@ -1,0 +1,21 @@
+.guide-pill.change-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  margin: 6px 0;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+.change-indicator::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.guide-pill.change-indicator[data-change="Nenhuma"] { color: #475569; background: #f1f5f9; }
+.guide-pill.change-indicator[data-change="Baixa"] { color: #1e40af; background: #eff6ff; }
+.guide-pill.change-indicator[data-change="Moderada"] { color: #92400e; background: #fffbeb; }
+.guide-pill.change-indicator[data-change="Alta"] { color: #6b21a8; background: #faf5ff; }
+.comparison-overview th .change-indicator { display: flex; width: fit-content; }
