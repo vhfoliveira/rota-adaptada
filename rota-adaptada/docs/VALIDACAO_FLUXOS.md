@@ -203,6 +203,36 @@ com três pessoas pouco digitais e duas avançadas, o ensaio com o apresentador 
 os testes em aparelhos físicos. Não foram atribuídos resultados a participantes
 que não testaram o aplicativo.
 
+## Correção do catálogo avançado — 15/11/2026
+
+A grade avançada renderizava 402 perfis nacionais, incluindo 109 registros de
+sorgo, sob uma identificação de Vilhena. Agora cartões e seletores usam as
+culturas e os grupos retornados para o **município da propriedade escolhida**.
+O catálogo completo e os dados salvos permanecem intactos; não há remoção ou
+migração de registros. Os nomes municipais preservam diferenças de safra.
+
+- Em Vilhena foram conferidas quatro opções oficiais distintas: Sorgo
+  Forrageiro, Sorgo Forrageiro 2ª Safra, Sorgo Granífero e Sorgo Granífero
+  2ª Safra. Não aparecem perfis oficiais de outras UFs nessa lista.
+- Cadastros próprios, modelos do protótipo e escolhas anteriores preservadas
+  são identificados separadamente. Uma escolha antiga incompatível com a nova
+  área não é substituída automaticamente; o formulário pede revisão.
+- Trocar a propriedade do novo planejamento atualiza o município consultado,
+  preservando nome, data, seleção anterior e foco, inclusive quando a resposta
+  chega enquanto o usuário preenche o formulário.
+- Testes unitários cobrem dois municípios da **mesma UF** com catálogos
+  diferentes, erros de consulta, repetição explícita e preservação das
+  identidades e do catálogo global.
+- `tests/browser-crop-catalog.mjs` passou em 1280 px e 390 px: quatro sorgos
+  oficiais, nomes completos, troca Vilhena → Sinop, resposta municipal atrasada,
+  foco preservado e plano original intacto. Sem erros JavaScript ou rolagem
+  horizontal. Foram usados perfis temporários e APIs externas bloqueadas.
+
+Execute o teste opcional com as mesmas variáveis `ROTA_*` descritas para o smoke
+acima, substituindo o comando por `node tests/browser-crop-catalog.mjs`.
+Relatório e capturas: `output/catalogo-municipal/`, na raiz. A rodada humana
+permanece pendente por decisão do usuário.
+
 ## Histórico da revisão — 14/11/2026, antes da nova criação
 
 - Removidos 30 arquivos de código desconectados das entradas atuais, 17 testes

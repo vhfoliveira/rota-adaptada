@@ -3,10 +3,11 @@ import { periodLabel, days, annualDate } from './scenario.js';
 import './style.css';
 import './space.css';
 import './context-help.css';
-import {helpButton, mountAdvancedHelp} from './context-help.js';
+import {helpButton, mountAdvancedHelp, annotateAdvancedHelp} from './context-help.js';
 import {missionBanner} from './space-brand.js';
 import {buildOfficialCropCatalog} from './official-crop-registry.js';
 import {loadGuidedCropCatalog} from './guided-crops.js';
+import {buildAdvancedCropCatalog, createMunicipalCatalogStore, municipalCatalogKey} from './advanced-crop-catalog.js';
 import {officialStageDetails} from './official-crop-ui.js';
 import {
   rulesPackage,
@@ -157,43 +158,76 @@ document.addEventListener('click', event => {
   if (event.target.closest?.('[data-nplan-preset],[data-nplan-move-up],[data-nplan-move-down],[data-nplan-remove-stage],#btn-nplan-add-stage')) dirtyEditors.add('planning');
 }, true);
 // Municipal source responses belong to this session, never to persisted plans.
-const officialZarcCache = new Map();
 let officialZarcState = {key:'',status:'idle'};
-let officialZarcRequest = 0;
-const officialZarcKey = property => JSON.stringify([
-  String(property?.state||'').trim().toUpperCase(),
-  String(property?.municipalityCode||''),
-  String(property?.municipality||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase()
-]);
+const officialZarcKey = municipalCatalogKey;
 const needsOfficialZarc = () => Boolean(appState.planningConfig.id) && getPlanningStagesList(appState.planningConfig).some(isOfficialStage);
+const planningProperty = () => availableProperties().find(property => property.id === newPlanningFormState.propertyId) || {};
+const editorCatalogProperty = () => appState.activeTab === 2 && newPlanningFormState.open ? planningProperty() : appState.propertyProfile;
+const municipalCatalogs = createMunicipalCatalogStore(loadGuidedCropCatalog, key => {
+  const active = key === officialZarcKey(appState.propertyProfile);
+  const visible = [1,2].includes(appState.activeTab) && key === officialZarcKey(editorCatalogProperty());
+  if (active && needsOfficialZarc()) recomputeSimulation();
+  if (visible || (active && needsOfficialZarc())) refreshCatalogView();
+});
 
 function ensureOfficialZarc(force=false) {
-  if(!needsOfficialZarc()){
-    if(officialZarcState.status!=='idle'){officialZarcRequest++;officialZarcState={key:'',status:'idle'};}
-    return null;
+  if (!needsOfficialZarc()) { officialZarcState={key:'',status:'idle'}; return null; }
+  const property=appState.propertyProfile, entry=municipalCatalogs.ensure(property,force);
+  officialZarcState={key:officialZarcKey(property),...entry};
+  return entry.status==='ready' ? entry.value.queryContext : null;
+}
+
+// A municipal response may arrive while the user is typing. Keep the live draft,
+// cursor and scroll position while updating the choices; do not reset the editor.
+function refreshCatalogView() {
+  const activeSelect=document.activeElement?.tagName==='SELECT'?document.activeElement:null;
+  const selectFocus=activeSelect?{id:activeSelect.id,crop:activeSelect.dataset.nplanStageCrop,group:activeSelect.dataset.nplanStageGroup}:null;
+  const inputs = [...document.querySelectorAll('#screen-container input, #screen-container textarea')].map(element => ({
+    id:element.id, field:element.dataset.stageField, index:element.dataset.stageIndex,
+    value:element.value, checked:element.checked, focused:element===document.activeElement,
+    start:element.selectionStart, end:element.selectionEnd
+  }));
+  const draftFields = {
+    'nplan-name':[newPlanningFormState,'planningName'], 'nplan-base-date':[newPlanningFormState,'baseSowingDate'],
+    'nplan-interval':[newPlanningFormState,'operationalIntervalDays'],
+    'nc-start':[newCropFormState,'windowStartDate'], 'nc-end':[newCropFormState,'windowEndDate']
+  };
+  for (const input of inputs) {
+    const target=draftFields[input.id];
+    if(target)target[0][target[1]]=input.value;
+    if(input.field && newPlanningFormState.stages[input.index]) {
+      newPlanningFormState.stages[input.index][input.field]=input.field.startsWith('allow')?input.checked:input.value||null;
+    }
   }
-  const property=appState.propertyProfile,key=officialZarcKey(property);
-  if(force)officialZarcCache.delete(key);
-  else {
-    const cached=officialZarcCache.get(key);
-    if(cached){officialZarcState={key,status:'ready',value:cached};return cached;}
-    if(officialZarcState.key===key&&['loading','error'].includes(officialZarcState.status))return null;
+  const scroll={x:window.scrollX,y:window.scrollY};
+  renderActiveScreen();
+  // Help wrappers move labels in the DOM; finish them before restoring keyboard focus.
+  annotateAdvancedHelp(document.getElementById('screen-container'));
+  for (const input of inputs) {
+    const element=input.id?document.getElementById(input.id):document.querySelector(`[data-stage-field="${input.field}"][data-stage-index="${input.index}"]`);
+    if(!element)continue;
+    element.value=input.value; element.checked=input.checked;
+    if(input.focused){element.focus({preventScroll:true});if(input.start!==null)element.setSelectionRange(input.start,input.end);}
   }
-  const request=++officialZarcRequest;
-  officialZarcState={key,status:'loading'};
-  loadGuidedCropCatalog(structuredClone(property)).then(value=>{
-    if(request!==officialZarcRequest||key!==officialZarcKey(appState.propertyProfile)||!needsOfficialZarc())return;
-    officialZarcCache.set(key,value.queryContext);
-    officialZarcState={key,status:'ready',value:value.queryContext};
-    recomputeSimulation();
-    renderActiveScreen();
-  },error=>{
-    if(request!==officialZarcRequest||key!==officialZarcKey(appState.propertyProfile)||!needsOfficialZarc())return;
-    officialZarcState={key,status:'error',message:error.message||'Não foi possível acessar a base municipal.'};
-    recomputeSimulation();
-    renderActiveScreen();
-  });
-  return null;
+  if(selectFocus){
+    const select=selectFocus.id?document.getElementById(selectFocus.id)
+      :selectFocus.crop!==undefined?document.querySelector(`[data-nplan-stage-crop="${selectFocus.crop}"]`)
+      :selectFocus.group!==undefined?document.querySelector(`[data-nplan-stage-group="${selectFocus.group}"]`):null;
+    // Only restore focus: the new municipal options own the selected value.
+    select?.focus({preventScroll:true});
+  }
+  window.scrollTo(scroll.x,scroll.y);
+}
+
+function municipalCatalogNotice(property) {
+  const entry=municipalCatalogs.ensure(property);
+  const area=entry.value?.city?`${entry.value.city.name} / ${entry.value.city.uf}`:`${property.municipality||'Município não informado'}${property.state?` / ${property.state}`:''}`;
+  const message=entry.status==='ready'
+    ? `Catálogo de ${area} · safra ${entry.value.season}. A presença na lista não indica plantio para qualquer data; confira as condições do ZARC.`
+    : entry.status==='loading' ? `Consultando as culturas de ${area}… Suas escolhas anteriores serão preservadas.`
+    : entry.status==='error' ? `Não foi possível consultar as culturas de ${area}. Suas escolhas anteriores foram preservadas; nenhuma lista de outra região foi usada.`
+    : 'Informe o município e a UF da propriedade para consultar as culturas disponíveis.';
+  return `<div class="notice" role="status" data-catalog-status="${entry.status}" data-catalog-city="${esc(entry.value?.city?.code||property.municipalityCode||'')}"><p>${esc(message)}</p>${entry.status==='error'?'<button type="button" data-retry-crop-catalog>Tentar consultar novamente</button>':''}</div>`;
 }
 
 function officialZarcNotice(){
@@ -237,7 +271,7 @@ function syncLegacyPlanningFields(planCfg) {
 }
 
 function recomputeSimulation() {
-  if (!appState.propertyProfile.id || !appState.planningConfig.id) { simResult = null; officialZarcRequest++; officialZarcState={key:'',status:'idle'}; return; }
+  if (!appState.propertyProfile.id || !appState.planningConfig.id) { simResult = null; officialZarcState={key:'',status:'idle'}; return; }
   syncLegacyPlanningFields(appState.planningConfig);
   const officialZarc=ensureOfficialZarc();
   if (appState.planningConfig?.id && Array.isArray(appState.customPlannings)) {
@@ -480,66 +514,33 @@ const CROP_FRIENDLY = {
   }
 };
 
-function getAvailableCropsList() {
+function getAvailableCropsList(property=editorCatalogProperty(), selectedIds=[]) {
   registerCustomCropsInCatalog(appState.customCrops || [], appState.customCycles || []);
-  const preIds = Object.keys(rulesPackage.crops_catalog).filter(id => {const crop=rulesPackage.crops_catalog[id];return !crop.is_custom&&(!crop.officialProfile||crop.officialProfile.uf===appState.propertyProfile.state);});
-  const list = [];
-  for (const id of preIds) {
-    const c = rulesPackage.crops_catalog[id];
-    if (!c) continue;
-    const f = CROP_FRIENDLY[id];
-    list.push({
-      cropId: id,
-      commonName: c.common_name,
-      shortName:
-        id === 'SOJA'
-          ? 'Soja (1ª Safra)'
-          : id === 'MILHO_2_SAFRA'
-            ? 'Milho 2ª Safra'
-            : id === 'MILHO_1_SAFRA'
-              ? 'Milho 1ª Safra (Rotação)'
-              : id === 'SORGO_GRANIFERO'
-                ? 'Sorgo Granífero'
-                : id==='MILHETO'?'Milheto (Cobertura)':c.common_name,
-      purposeBadge: f?.shortPurpose || 'Cultura Pré-Cadastrada',
-      isCustom: false,
-      groups: Object.entries(c.cultivar_groups || {}).map(([gKey, gObj]) => {
-        const cLabel = getCycleGroupLabel(gKey, gObj);
-        return {
-          groupKey: gKey,
-          cycleDays: gObj.cycle_days_default,
-          isCustomCycle: Boolean(gObj.is_custom_cycle),
-          cultivarName: cLabel,
-          label: cLabel
-        };
-      })
-    });
-  }
+  const entry=municipalCatalogs.ensure(property);
+  return buildAdvancedCropCatalog({engineCatalog:rulesPackage.crops_catalog,
+    municipalCatalog:entry.status==='ready'?entry.value:null,property,customCrops:appState.customCrops||[],selectedIds})
+    .map(option=>({...option,shortName:option.commonName,
+      purposeBadge:option.kind==='official'?'ZARC · '+option.managementLabel:option.kind==='legacy'?'Modelo do protótipo · referência Vilhena/RO':option.kind==='preserved'?'Escolha anterior · conferir área':getCustomCropRoleMeta(option.crop.custom_role).shortBadge,
+      groups:option.groups.map(([groupKey,group])=>({groupKey,cycleDays:group.cycle_days_default,isCustomCycle:Boolean(group.is_custom_cycle),cultivarName:getCycleGroupLabel(groupKey,group),label:getCycleGroupLabel(groupKey,group)}))}));
+}
 
-  for (const cc of appState.customCrops || []) {
-    const c = rulesPackage.crops_catalog[cc.crop_id];
-    if (!c) continue;
-    const roleMeta = getCustomCropRoleMeta(cc.role);
-    list.push({
-      cropId: cc.crop_id,
-      commonName: cc.common_name,
-      shortName: `${cc.common_name} (Cadastrada)`,
-      purposeBadge: roleMeta.shortBadge,
-      isCustom: true,
-      groups: Object.entries(c.cultivar_groups || {}).map(([gKey, gObj]) => {
-        const cLabel = getCycleGroupLabel(gKey, gObj);
-        return {
-          groupKey: gKey,
-          cycleDays: gObj.cycle_days_default,
-          isCustomCycle: Boolean(gObj.is_custom_cycle),
-          cultivarName: cLabel,
-          label: cLabel
-        };
-      })
-    });
-  }
-
-  return list;
+const CATALOG_SECTION_LABELS={official:'Perfis oficiais do município',legacy:'Modelos do protótipo · referência Vilhena/RO',custom:'Culturas cadastradas por você',preserved:'Escolhas anteriores preservadas · conferir município'};
+function cropSelectOptions(options,selectedId) {
+  return Object.entries(CATALOG_SECTION_LABELS).map(([kind,label])=>{
+    const items=options.filter(option=>option.kind===kind);
+    return items.length?`<optgroup label="${esc(label)}">${items.map(option=>`<option value="${esc(option.cropId)}" data-catalog-kind="${kind}" ${option.cropId===selectedId?'selected':''} ${kind==='preserved'&&option.cropId!==selectedId?'disabled':''}>${esc(option.shortName)}${kind==='official'?` — ${esc(option.managementLabel)}`:''}</option>`).join('')}</optgroup>`:'';
+  }).join('');
+}
+function preservedCropWarning(option) {
+  return option?.unavailable?'<p class="notice" role="status">Esta escolha anterior não está confirmada no catálogo deste município. Ela foi preservada; escolha uma opção local antes de salvar um novo planejamento.</p>':'';
+}
+function validatePlanningCatalog() {
+  const options=getAvailableCropsList(planningProperty());
+  const invalid=newPlanningFormState.stages.findIndex(stage=>stage.cropId && stage.groupKey && !options.some(option=>option.cropId===stage.cropId && option.groups.some(group=>group.groupKey===stage.groupKey)));
+  if(invalid<0)return true;
+  toast(`Confira a cultura e o ciclo da ${invalid+1}ª etapa no catálogo do município selecionado. Sua escolha anterior foi preservada.`);
+  document.querySelector(`[data-nplan-stage-crop="${invalid}"]`)?.focus();
+  return false;
 }
 
 function getCropShortDisplay(cropId) {
@@ -938,15 +939,10 @@ function renderNewCycleFormPanel(availableCrops) {
         <label>
           Cultura Vinculada ao Ciclo *
           <select id="ncycle-crop">
-            ${availableCrops
-              .map(
-                c => `
-              <option value="${esc(c.cropId)}" ${c.cropId === newCycleFormState.cropId ? 'selected' : ''}>
-                ${c.isCustom ? '★ ' : ''}${esc(c.shortName)} — [${esc(c.purposeBadge)}]
-              </option>`
-              )
-              .join('')}
+            <option value="" ${!newCycleFormState.cropId?'selected':''}>Escolha a cultura</option>
+            ${cropSelectOptions(availableCrops,newCycleFormState.cropId)}
           </select>
+          ${preservedCropWarning(availableCrops.find(c=>c.cropId===newCycleFormState.cropId))}
         </label>
         <label>
           Nome / Tipo do Ciclo *
@@ -1225,9 +1221,8 @@ function renderSystemSuggestedPlansPanel(allProps) {
  * PASSO 2: Catálogo de Culturas e Ciclos (Somente parâmetros utilizados pelo motor de simulação e NASA POWER)
  */
 function renderScreen2Crops() {
-  const availableCrops = getAvailableCropsList();
-  const defaultCrops = Object.values(rulesPackage.crops_catalog).filter(c => !c.is_custom);
-  const customCrops = appState.customCrops || [];
+  const selectedIds=[...(appState.planningConfig.successionStages||[]).map(stage=>stage.cropId),...(newCycleFormState.open?[newCycleFormState.cropId]:[])];
+  const availableCrops = getAvailableCropsList(appState.propertyProfile,selectedIds);
 
   return `
     <div class="screen-header">
@@ -1250,6 +1245,7 @@ function renderScreen2Crops() {
     </div>
 
     <section class="panel-card section-block" id="zarc-region-catalog"></section>
+    ${municipalCatalogNotice(appState.propertyProfile)}
     ${renderNewCycleFormPanel(availableCrops)}
 
     ${
@@ -1332,93 +1328,27 @@ function renderScreen2Crops() {
         : ''
     }
 
-    <section class="panel-card section-block">
-      <div class="card-head">
-        <div>
-          <span class="eyebrow">CULTURAS E CICLOS CADASTRADOS</span>
-          <h2>Culturas Pré-Cadastradas (Vilhena/RO) ${customCrops.length ? `+ ${customCrops.length} Cultura(s) Cadastrada(s)` : ''}</h2>
-        </div>
-      </div>
-
-      <div class="catalog-grid-4">
-        ${defaultCrops
-          .map(c => {
-            const cropId = c.crop_id || c.id;
-            const f = CROP_FRIENDLY[cropId] || CROP_FRIENDLY.SOJA;
-            const cropMeta = availableCrops.find(ac => ac.cropId === cropId);
-            const groups = cropMeta?.groups || [];
-            return `
-            <article class="catalog-crop-card">
-              <div class="row">
-                <span class="tag">${esc(f.badge)}</span>
-                <button type="button" class="tiny-refresh-btn" data-add-cycle-for-crop="${esc(cropId)}" title="Cadastrar novo ciclo para ${esc(c.common_name)}">+ Ciclo</button>
-              </div>
-              <h3>${esc(c.common_name)}</h3>
-              <div class="crop-essential-meta">
-                <div>
-                  <small>Ciclos cadastrados</small>
-                  <strong>${groups.map(g => `${esc(g.label)}`).join(' · ')}</strong>
-                </div>
-                <div>
-                  <small>Janela do exemplo de Vilhena</small>
-                  <strong>${esc(c.zarc_windows_vilhena?.synthesized_low_risk_20pct_dates || 'Não informada')}</strong>
-                </div>
-              </div>
-              ${
-                groups.some(g => g.isCustomCycle)
-                  ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
-                      ${groups
-                        .filter(g => g.isCustomCycle)
-                        .map(
-                          g =>
-                            `<span class="tag custom-tag" style="display:inline-flex;align-items:center;gap:6px">★ ${esc(
-                              g.label
-                            )} <button type="button" class="tiny-refresh-btn" style="padding:1px 5px" data-remove-custom-cycle="${esc(
-                              cropId
-                            )}::${esc(g.groupKey)}" title="Remover ciclo cadastrado">✕</button></span>`
-                        )
-                        .join('')}
-                    </div>`
-                  : ''
-              }
-              <p class="muted">${esc(f.summary)}</p>
-            </article>`;
-          })
-          .join('')}
-
-        ${customCrops
-          .map(cc => {
-            const roleMeta = getCustomCropRoleMeta(cc.role);
-            const cropMeta = availableCrops.find(ac => ac.cropId === cc.crop_id);
-            const groups = cropMeta?.groups || [];
-            return `
-          <article class="catalog-crop-card custom-crop-card">
-            <div class="row">
-              <span class="tag custom-tag">★ ${esc(roleMeta.shortBadge)}</span>
-              <div class="row" style="gap:6px">
-                <button type="button" class="tiny-refresh-btn" data-add-cycle-for-crop="${esc(cc.crop_id)}" title="Cadastrar novo ciclo para ${esc(cc.common_name)}">+ Ciclo</button>
-                <button type="button" class="tiny-refresh-btn" data-remove-crop="${esc(cc.crop_id)}" title="Remover cultura">✕</button>
-              </div>
-            </div>
-            <h3>${esc(cc.common_name)}</h3>
-            <div class="crop-essential-meta">
-              <div>
-                <small>Ciclos cadastrados</small>
-                <strong>${groups.map(g => `${esc(g.label)}`).join(' · ')}</strong>
-              </div>
-              <div>
-                <small>Janela informada (não é ZARC)</small>
-                <strong>${formatBRDate(cc.windowStartDate).slice(0, 5)} a ${formatBRDate(cc.windowEndDate).slice(0, 5)}</strong>
-              </div>
-            </div>
-            <p class="muted">
-              ${esc(roleMeta.cardDescription)} · Tolerância à seca: <strong>${esc(cc.droughtTolerance || 'MODERADA')}</strong>.
-            </p>
+    ${Object.entries(CATALOG_SECTION_LABELS).map(([kind,label])=>{
+      const options=availableCrops.filter(option=>option.kind===kind);
+      if(!options.length)return '';
+      return `<section class="panel-card section-block" data-catalog-section="${kind}"><h2>${esc(label)}</h2>
+        ${kind==='legacy'?'<p class="muted">Estes parâmetros são modelos do protótipo. Consulte as condições oficiais acima; o modelo não confirma indicação de plantio.</p>':''}
+        <div class="catalog-grid-4">${options.map(option=>{
+          const crop=option.crop, custom=(appState.customCrops||[]).find(item=>item.crop_id===option.cropId);
+          const title=kind==='official'?`${crop.officialProfile.uf} · safra ${crop.officialProfile.season} · ${option.managementLabel}`:option.purposeBadge;
+          return `<article class="catalog-crop-card ${kind==='custom'?'custom-crop-card':''}" data-crop-id="${esc(option.cropId)}" data-catalog-kind="${kind}">
+            <div class="row"><span class="tag">${esc(title)}</span><div class="row">
+            ${!option.unavailable?`<button type="button" class="tiny-refresh-btn" data-add-cycle-for-crop="${esc(option.cropId)}" title="Cadastrar novo ciclo para ${esc(option.commonName)}">+ Ciclo</button>`:''}
+            ${custom?`<button type="button" class="tiny-refresh-btn" data-remove-crop="${esc(option.cropId)}" title="Remover cultura">✕</button>`:''}</div></div>
+            <h3>${esc(option.commonName)}</h3>
+            <div class="crop-essential-meta"><div><small>Ciclos cadastrados</small><strong>${option.groups.map(group=>esc(group.label)).join(' · ')}</strong></div></div>
+            ${preservedCropWarning(option)}
+            ${kind==='official'?`<p class="muted">Portaria ${esc(option.source?.ordinance)} · consulte data, solo, ciclo e manejo nas condições municipais acima.</p>`:kind==='legacy'?'<p class="muted">Referência demonstrativa de Vilhena/RO. Não equivale a um perfil oficial.</p>':custom?`<p class="muted">Janela informada (não é ZARC): ${formatBRDate(custom.windowStartDate).slice(0,5)} a ${formatBRDate(custom.windowEndDate).slice(0,5)}.</p><p class="muted">${esc(getCustomCropRoleMeta(custom.role).cardDescription)} · Tolerância à seca: <strong>${esc(custom.droughtTolerance || 'MODERADA')}</strong>.</p>`:''}
+            ${option.groups.filter(group=>group.isCustomCycle).map(group=>`<span class="tag custom-tag">★ ${esc(group.label)} <button type="button" class="tiny-refresh-btn" data-remove-custom-cycle="${esc(option.cropId)}::${esc(group.groupKey)}" title="Remover ciclo cadastrado">✕</button></span>`).join('')}
           </article>`;
-          })
-          .join('')}
-      </div>
-    </section>
+        }).join('')}</div></section>`;
+    }).join('')}
+
   `;
 }
 
@@ -1429,13 +1359,12 @@ function renderScreen3Planning() {
   const cfg = appState.planningConfig;
   const planoAtual = simResult?.allStrategies[0];
   const allProps = availableProperties();
-  const availableCrops = getAvailableCropsList();
-  const preCrops = availableCrops.filter(c => !c.isCustom);
-  const usrCrops = availableCrops.filter(c => c.isCustom);
+  const catalogProperty=editorCatalogProperty();
+  const availableCrops = getAvailableCropsList(catalogProperty,[...(newPlanningFormState.open?newPlanningFormState.stages.map(stage=>stage.cropId):[]),...(newCycleFormState.open?[newCycleFormState.cropId]:[])]);
   const allPlannings = availablePlannings();
 
   // Preview resolved dates for the New Planning form (supports blank stages)
-  const draftComplete = !!newPlanningFormState.baseSowingDate && newPlanningFormState.stages.every(st => st.cropId && st.groupKey);
+  const draftComplete = /^\d{4}-\d{2}-\d{2}$/.test(newPlanningFormState.baseSowingDate) && Number.isFinite(Date.parse(newPlanningFormState.baseSowingDate)) && newPlanningFormState.operationalIntervalDays!=='' && Number(newPlanningFormState.operationalIntervalDays)>=0 && newPlanningFormState.stages.every(st => rulesPackage.crops_catalog[st.cropId]?.cultivar_groups?.[st.groupKey]);
   const resolvedDraft = draftComplete ? resolveSuccessionSchedule(newPlanningFormState.stages, newPlanningFormState.baseSowingDate, Number(newPlanningFormState.operationalIntervalDays)) : [];
   const previewDraftStages = newPlanningFormState.stages.map((st,idx)=>({...st,...(resolvedDraft[idx]||{}),isComplete:draftComplete}));
 
@@ -1463,6 +1392,7 @@ function renderScreen3Planning() {
       </div>
     </div>
 
+    ${!newPlanningFormState.open?municipalCatalogNotice(catalogProperty):''}
     ${renderNewCycleFormPanel(availableCrops)}
 
     ${
@@ -1486,6 +1416,7 @@ function renderScreen3Planning() {
           </button>
         </div>
 
+        ${municipalCatalogNotice(catalogProperty)}
         ${renderSystemSuggestedPlansPanel(allProps)}
 
         <div class="new-prop-form-grid">
@@ -1576,31 +1507,9 @@ function renderScreen3Planning() {
                       Cultura (${idx === 0 ? 'Safra Inicial' : `${idx}ª Sucessão`})
                       <select data-nplan-stage-crop="${idx}">
                         <option value="" ${!st.cropId ? 'selected' : ''}></option>
-                        <optgroup label="Culturas Pré-Cadastradas (Ref. Vilhena/RO)">
-                          ${preCrops
-                            .map(
-                              c => `
-                            <option value="${esc(c.cropId)}" ${c.cropId === st.cropId ? 'selected' : ''}>
-                              ${esc(c.shortName)} — [${esc(c.purposeBadge)}]
-                            </option>`
-                            )
-                            .join('')}
-                        </optgroup>
-                        ${
-                          usrCrops.length > 0
-                            ? `<optgroup label="Culturas Cadastradas pelo Usuário">
-                                ${usrCrops
-                                  .map(
-                                    c => `
-                                  <option value="${esc(c.cropId)}" ${c.cropId === st.cropId ? 'selected' : ''}>
-                                    ★ ${esc(c.shortName)} — [${esc(c.purposeBadge)}]
-                                  </option>`
-                                  )
-                                  .join('')}
-                              </optgroup>`
-                            : ''
-                        }
+                        ${cropSelectOptions(availableCrops,st.cropId)}
                       </select>
+                      ${preservedCropWarning(selectedCropMeta)}
                     </label>
 
                     <label>
@@ -1616,6 +1525,7 @@ function renderScreen3Planning() {
                       </span>
                       <select data-nplan-stage-group="${idx}">
                         <option value="" ${!st.groupKey ? 'selected' : ''}></option>
+                        ${st.groupKey&&!selectedCropMeta?.groups.some(group=>group.groupKey===st.groupKey)?`<option value="${esc(st.groupKey)}" selected>${esc(st.cultivarName||'Ciclo anterior')} · conferir disponibilidade</option>`:''}
                         ${
                           selectedCropMeta
                             ? selectedCropMeta.groups
@@ -2573,6 +2483,8 @@ function bindShellEvents() {
 }
 
 function bindScreenEvents() {
+  const retryCatalog=$('[data-retry-crop-catalog]');
+  if(retryCatalog)retryCatalog.onclick=()=>{municipalCatalogs.ensure(editorCatalogProperty(),true);refreshCatalogView();};
   const retryOfficialZarc=$('[data-retry-official-zarc]');
   if(retryOfficialZarc)retryOfficialZarc.onclick=()=>{
     ensureOfficialZarc(true);
@@ -2817,7 +2729,9 @@ function bindScreenEvents() {
       if (invalid) { invalid.reportValidity(); toast('Confira os campos de data e duração.'); return; }
       const cycleName = (newCycleFormState.cycleName || '').trim() || 'Ciclo Cadastrado';
       const cycleDays = days(newCycleFormState.cycleDays, 'Ciclo', 4);
-      const cropId = newCycleFormState.cropId || 'SOJA';
+      const cropId = newCycleFormState.cropId;
+      const cropOption=getAvailableCropsList(editorCatalogProperty(),[cropId]).find(option=>option.cropId===cropId);
+      if(!cropOption||cropOption.unavailable){toast('Escolha uma cultura disponível para este município antes de cadastrar o ciclo.');return;}
       const groupKey = `CUSTOM_CYCLE_${Date.now().toString().slice(-5)}`;
       const createdCycle = {
         id: groupKey,
@@ -2947,6 +2861,7 @@ function bindScreenEvents() {
 
   // Step 3: Planning & New Planning Builder bindings
   const runSystemSuggestionConsultation = async () => {
+    if (!validatePlanningCatalog()) return;
     if (!newPlanningFormState.baseSowingDate || !newPlanningFormState.stages.every(st => st.cropId && st.groupKey)) {
       toast('Informe a data de plantio, as culturas e os ciclos antes de solicitar sugestões.');
       return;
@@ -3146,11 +3061,11 @@ function bindScreenEvents() {
     nplanProp.onchange = e => {
       if (e.target.checkValidity && !e.target.checkValidity()) { e.target.reportValidity(); return; }
       newPlanningFormState.propertyId = e.target.value;
-      if (newPlanningFormState.showSuggestions) {
-        runSystemSuggestionConsultation();
-      } else {
-        renderActiveScreen();
-      }
+      suggestionRequest++;
+      newPlanningFormState.showSuggestions=false;
+      newPlanningFormState.loadingSuggestions=false;
+      newPlanningFormState.suggestionsResult=null;
+      refreshCatalogView();
     };
   }
   const nplanBaseDate = $('#nplan-base-date');
@@ -3254,9 +3169,10 @@ function bindScreenEvents() {
         renderActiveScreen();
         return;
       }
-      const avail = getAvailableCropsList();
-      const foundCrop = avail.find(c => c.cropId === currentStage.cropId) || avail[0];
-      const foundGroup = foundCrop.groups.find(g => g.groupKey === newGroupKey) || foundCrop.groups[0];
+      const avail = getAvailableCropsList(planningProperty(),[currentStage.cropId]);
+      const foundCrop = avail.find(c => c.cropId === currentStage.cropId);
+      const foundGroup = foundCrop?.groups.find(g => g.groupKey === newGroupKey);
+      if(!foundGroup){toast('Confira a cultura e o ciclo desta etapa para o município selecionado.');return;}
       newPlanningFormState.stages[idx] = {
         ...currentStage,
         groupKey: foundGroup.groupKey,
@@ -3307,6 +3223,7 @@ function bindScreenEvents() {
   const btnSaveNewPlanning = $('#btn-save-new-planning');
   if (btnSaveNewPlanning) {
     btnSaveNewPlanning.onclick = async () => {
+      if(!validatePlanningCatalog())return;
       const invalid = $$('#nplan-base-date, #nplan-interval').find(e=>!e.value || !e.checkValidity());
       if (invalid) { invalid.reportValidity(); toast('Confira os campos de data e duração.'); return; }
       const incompleteIdx = newPlanningFormState.stages.findIndex(st => !st.cropId || !st.groupKey);
