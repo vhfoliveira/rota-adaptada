@@ -1,3 +1,4 @@
+@layer base {
 :root {
   --bg: #f5f4ee;
   --paper: #fffdf9;
@@ -99,7 +100,7 @@ select {
   min-height: 42px;
   border: 1px solid #b8c6be;
   border-radius: 8px;
-  background: #fff;
+  background: var(--paper);
   padding: 8px 12px;
   margin-top: 5px;
 }
@@ -120,7 +121,7 @@ label {
 code {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 0.84em;
-  background: #e6ede8;
+  background: var(--paper-soft);
   padding: 2px 6px;
   border-radius: 5px;
 }
@@ -294,7 +295,7 @@ code {
   text-align: left;
   padding: 14px 16px;
   border-radius: var(--radius);
-  background: #eaeee8;
+  background: var(--paper-soft);
   border: 1px solid var(--line);
   display: flex;
   flex-direction: column;
@@ -458,7 +459,7 @@ code {
 
 .status-badge.info,
 .status-badge.neutral {
-  background: #e9f0ec;
+  background: var(--paper-soft);
   color: var(--forest);
   border: 1px solid var(--line);
 }
@@ -481,7 +482,7 @@ code {
 }
 
 .soil-choice-card.selected {
-  background: #eef8f2;
+  background: var(--ok-bg);
   border: 2px solid var(--leaf);
 }
 
@@ -523,7 +524,7 @@ code {
   font-size: 0.72rem;
   padding: 3px 9px;
   border-radius: 999px;
-  background: #dce8e0;
+  background: var(--paper-soft);
   color: var(--forest);
   font-weight: 800;
 }
@@ -568,7 +569,7 @@ code {
   font-weight: 700;
   font-size: 0.88rem;
   color: var(--forest);
-  background: #edf2ee;
+  background: var(--paper-soft);
 }
 
 .optional-drawer summary::-webkit-details-marker {
@@ -622,7 +623,7 @@ code {
 .sanitary-locks-banner {
   padding: 12px 14px;
   border-radius: 8px;
-  background: #fff4ef;
+  background: var(--danger-bg);
   border: 1px solid var(--danger-border);
   color: var(--danger-ink);
   font-size: 0.85rem;
@@ -967,7 +968,7 @@ code {
   font-size: 0.85rem;
   line-height: 1.48;
   color: var(--ink);
-  background: #f5f7f4;
+  background: var(--paper-soft);
   padding: 10px 12px;
   border-radius: 8px;
   border-left: 3px solid var(--gold);
@@ -996,7 +997,7 @@ code {
 .timeline-2y-track {
   position: relative;
   height: 28px;
-  background: #dfe6e0;
+  background: var(--paper-soft);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -1162,12 +1163,12 @@ code {
 
 .phase-card.tone-danger {
   border-top: 4px solid var(--terra);
-  background: #fff9f7;
+  background: var(--danger-bg);
 }
 
 .phase-card.tone-warning {
   border-top: 4px solid var(--gold);
-  background: #fffdf6;
+  background: var(--warn-bg);
 }
 
 .phase-card.tone-success {
@@ -1266,7 +1267,7 @@ code {
 }
 
 .print-cta-banner {
-  background: #e7efe9;
+  background: var(--paper-soft);
   border: 1px solid var(--ok-border);
   border-radius: var(--radius);
   padding: 18px 22px;
@@ -1329,7 +1330,7 @@ code {
   align-items: center;
   gap: 12px;
   padding: 14px 24px;
-  background: #e5ebe6;
+  background: var(--paper);
   border-top: 1px solid var(--line);
   font-size: 0.82rem;
   color: var(--muted);
@@ -1502,7 +1503,7 @@ code {
 }
 
 .highlight-soil-suggestion {
-  background: #eff8f2;
+  background: var(--ok-bg);
   border: 1px solid var(--ok-border);
 }
 
@@ -1541,7 +1542,7 @@ code {
 
 .custom-crop-card {
   border-top: 3px solid var(--gold);
-  background: #fffdf8;
+  background: var(--paper-soft);
 }
 
 .custom-tag {
@@ -1569,7 +1570,7 @@ code {
 }
 
 .planning-registered-card.active-planning-card {
-  background: #f2faf5;
+  background: var(--ok-bg);
   border: 2px solid var(--leaf);
   box-shadow: 0 6px 18px rgba(31, 92, 63, 0.1);
 }
@@ -1626,7 +1627,7 @@ code {
   letter-spacing: 0.04em;
   padding: 2px 6px;
   border-radius: 4px;
-  background: #e1efe7;
+  background: var(--paper-soft);
   color: var(--forest);
   margin-bottom: 2px;
 }
@@ -1742,7 +1743,7 @@ code {
   justify-content: center;
   text-align: center;
   padding: 40px 24px;
-  background: linear-gradient(145deg, #f4fbf7 0%, #e8f5ee 100%);
+  background: linear-gradient(145deg, #122338, #152d30);
   border: 2px dashed var(--green, #1f7a4c);
   border-radius: 18px;
   gap: 14px;
@@ -1772,7 +1773,7 @@ code {
 }
 
 .suggestion-loading-pill {
-  background: #ffffff;
+  background: var(--paper);
   border: 1px solid var(--border, #d5e2d9);
   border-radius: 999px;
   padding: 6px 14px;
@@ -1792,13 +1793,13 @@ code {
 
 .playing-card {
   position: relative;
-  background: linear-gradient(180deg, #ffffff 0%, #f9fcfa 100%);
+  background: linear-gradient(180deg, #142438, #0d1928);
   border: 2px solid #c5ddd0;
   border-radius: 22px;
   padding: 22px 20px 20px;
   box-shadow:
     0 14px 32px rgba(17, 46, 31, 0.12),
-    inset 0 0 0 5px #ffffff,
+    inset 0 0 0 5px #122338,
     inset 0 0 0 6px rgba(31, 122, 76, 0.18);
   display: flex;
   flex-direction: column;
@@ -1815,7 +1816,7 @@ code {
   border-color: var(--green, #1f7a4c);
   box-shadow:
     0 20px 40px rgba(17, 46, 31, 0.18),
-    inset 0 0 0 5px #ffffff,
+    inset 0 0 0 5px #122338,
     inset 0 0 0 7px rgba(31, 122, 76, 0.32);
 }
 
@@ -1828,7 +1829,7 @@ code {
   border-color: var(--green, #1f7a4c);
   box-shadow:
     0 24px 48px rgba(17, 46, 31, 0.22),
-    inset 0 0 0 5px #ffffff,
+    inset 0 0 0 5px #122338,
     inset 0 0 0 7px rgba(31, 122, 76, 0.45);
   z-index: 3;
 }
@@ -1851,7 +1852,7 @@ code {
   font-size: 0.92rem;
   letter-spacing: 0.04em;
   color: var(--forest, #143625);
-  background: #eaf5ef;
+  background: var(--paper-soft);
   border: 1px solid #bddac9;
   padding: 4px 11px;
   border-radius: 10px;
@@ -1926,3 +1927,6 @@ code {
     flex-direction: column;
   }
 }
+
+}
+.zarc-controls{max-width:620px}.zarc-controls label{display:block;margin:12px 0}.zarc-controls input,.zarc-controls select{display:block;width:100%;padding:10px}.zarc-options{display:grid;gap:12px}.zarc-crop{border:1px solid #cdd9d2;border-radius:12px;padding:16px}.zarc-options details ul{max-height:260px;overflow:auto;padding-left:20px}.zarc-options li{margin-bottom:8px;overflow-wrap:anywhere}#zarc-region-catalog details{margin:12px 0}#zarc-region-catalog summary{cursor:pointer;font-weight:600}

@@ -1,6 +1,12 @@
+import {resolveLocation} from './location.js';
 import { validDate, days, locationKey, matchesLocation, historicalYears, periodLabel, annualDate, coverageMetrics } from './scenario.js';
 import rulesPackage from './data/vilhena_rules-v2.json' with { type: 'json' };
 import defaultNasaDataset from './data/nasa-vilhena-2013-2024.json' with { type: 'json' };
+import {buildOfficialCropCatalog} from './official-crop-registry.js';
+import {evaluateOfficialCropClimate} from './official-crop-climate.js';
+import {evaluateOfficialWindow} from './official-crop-window.js';
+
+Object.assign(rulesPackage.crops_catalog,buildOfficialCropCatalog());
 
 let nasaDataset = structuredClone(defaultNasaDataset);
 const climateByLocation = new Map([[locationKey(defaultNasaDataset.metadata.location), defaultNasaDataset]]);
@@ -160,6 +166,7 @@ export async function fetchLiveNasaPower(lat, lon, { startDate = defaultNasaData
  */
 export async function fetchSoilGridsAndSuggestClass(lat, lon, nasaSummary = null) {
   if (!locationKey({latitude:lat,longitude:lon})) throw new Error('Coordenadas inválidas.');
+  const locationPromise = resolveLocation(lat,lon);
   const cleanLat = Number(Number(lat).toFixed(4));
   const cleanLon = Number(Number(lon).toFixed(4));
   const soilGridsUrl = `https://rest.isric.org/soilgrids/v2.0/properties/query?lat=${cleanLat}&lon=${cleanLon}&property=clay&property=sand&depth=0-5cm&depth=5-15cm&depth=15-30cm&depth=30-60cm&value=mean`;
@@ -168,17 +175,22 @@ export async function fetchSoilGridsAndSuggestClass(lat, lon, nasaSummary = null
   let sandPct = null;
   let apiSource = 'ISRIC SoilGrids v2.0 API (CC-BY 4.0)';
   let isLiveSoilGrids = false;
+  let errorCode = null;
+  let errorMessage = null;
+  let httpStatus = null;
 
   const weights = { '0-5cm': 5 / 60, '5-15cm': 10 / 60, '15-30cm': 15 / 60, '30-60cm': 30 / 60 };
 
   let soilTimeout;
+  const controller = new AbortController();
+  let requestPhase = 'request';
   try {
-    const controller = new AbortController();
     soilTimeout = setTimeout(() => controller.abort(), 9000);
     const res = await fetch(soilGridsUrl, { signal: controller.signal });
-    clearTimeout(soilTimeout);
+    httpStatus = res.status || null;
 
     if (res.ok) {
+      requestPhase = 'response';
       const data = await res.json();
       const layers = data?.properties?.layers || [];
       const extractWeighted = propName => {
@@ -202,19 +214,38 @@ export async function fetchSoilGridsAndSuggestClass(lat, lon, nasaSummary = null
       sandPct = extractWeighted('sand');
       if (clayPct !== null && sandPct !== null) {
         isLiveSoilGrids = true;
+      } else {
+        errorCode = 'no_data';
+        errorMessage = 'O SoilGrids respondeu, mas não forneceu argila e areia utilizáveis para este ponto.';
       }
+    } else if (httpStatus === 429) {
+      errorCode = 'rate_limited';
+      errorMessage = 'O SoilGrids limitou as consultas. Aguarde antes de tentar novamente.';
+    } else {
+      errorCode = httpStatus >= 500 ? 'service_unavailable' : 'http_error';
+      errorMessage = `O serviço SoilGrids está indisponível${httpStatus ? ` (HTTP ${httpStatus})` : ''}.`;
     }
-  } catch {
-    // Missing observations remain unknown.
+  } catch (error) {
+    if (controller.signal.aborted || error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+      errorCode = 'timeout';
+      errorMessage = 'O SoilGrids não respondeu dentro de 9 segundos.';
+    } else if (requestPhase === 'response') {
+      errorCode = 'invalid_response';
+      errorMessage = 'O SoilGrids retornou uma resposta que não pôde ser lida.';
+    } else {
+      errorCode = 'network_error';
+      errorMessage = 'Não foi possível conectar ao SoilGrids. O serviço ou a conexão pode estar indisponível.';
+    }
   } finally {
     clearTimeout(soilTimeout);
   }
 
   if (clayPct === null || sandPct === null) {
     return { isLiveSoilGrids: false, apiSource: 'Solo não consultado', soilGridsUrl,
+      errorCode, errorMessage, httpStatus,
       clayPercent: null, sandPercent: null, suggestedSoilProfileId: null,
       suggestedSoilProfile: null, suggestionReason: 'Sem dados de solo. Selecione uma classe conhecida ou mantenha não informado.',
-      detectedMunicipality: null, detectedState: null };
+      ...await locationPromise };
   }
 
   // Suggest Soil Water Retention Class (AD3, AD4, AD5) based on clay % in 0-60 cm
@@ -231,25 +262,11 @@ export async function fetchSoilGridsAndSuggestClass(lat, lon, nasaSummary = null
     suggestionReason = `Teor de argila de ${clayPct}% (> 55%) na camada 0–60 cm indica Solo Muito Argiloso (Reserva ~66 mm).`;
   }
 
-  // Optional reverse geocoding for municipality/state via OpenStreetMap Nominatim
-  let detectedMunicipality = null;
-  let detectedState = null;
-  try {
-    const geoRes = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${cleanLat}&lon=${cleanLon}&zoom=10`
-    );
-    if (geoRes.ok) {
-      const geo = await geoRes.json();
-      const addr = geo?.address || {};
-      detectedMunicipality = addr.city || addr.town || addr.municipality || addr.village || null;
-      detectedState = addr.ISO3166_2_lvl4 ? addr.ISO3166_2_lvl4.split('-')[1] : addr.state || null;
-    }
-  } catch {
-    // Ignore reverse geocoding failure
-  }
+  const {detectedMunicipality,detectedState} = await locationPromise;
 
   return {
     isLiveSoilGrids,
+    errorCode, errorMessage, httpStatus,
     apiSource,
     soilGridsUrl,
     clayPercent: clayPct,
@@ -412,10 +429,11 @@ export function defaultPlanningConfig() {
 /**
  * Evaluates planting window suitability for a given crop, soil profile, and sowing date.
  */
-export function evaluateZarcWindow(cropId, soilProfileId, sowDateStr, context = createScenarioContext(defaultPropertyProfile())) {
+export function evaluateZarcWindow(cropId, soilProfileId, sowDateStr, context = createScenarioContext(defaultPropertyProfile()),groupKey=null) {
   validDate(sowDateStr);
   const pending = detail => ({status:'PENDENTE',riskPct:null,badgeLabel:'Não avaliado',tone:'warning',detail});
   const candidate = rulesPackage.crops_catalog[cropId];
+  if(candidate?.officialProfile){const group=candidate.cultivar_groups[groupKey];return group?evaluateOfficialWindow(candidate,group,sowDateStr,context):pending('Escolha um grupo oficial de ciclo.');}
   if (candidate?.is_custom) {
     const window = candidate.informedWindow;
     if (!window) return pending('Sem janela informada para esta cultura.');
@@ -579,6 +597,7 @@ export function runHistoricalStressTest(cropId, groupKey, sowDateStr, soilProfil
   const crop = rulesPackage.crops_catalog[cropId];
   const group = crop?.cultivar_groups?.[groupKey];
   if (!group) throw new Error(`Cultura ou ciclo não cadastrado: ${cropId}/${groupKey}`);
+  if(crop.officialProfile)return evaluateOfficialCropClimate({cropId,cropName:crop.common_name,groupKey,sowDate:sowDateStr,soilProfileId,profile:crop.officialProfile,group:group.officialGroup,dataset});
   const soil = context.soilProfile;
   const triggers = crop?.climate_thresholds_nasa?.alert_triggers || {};
 
@@ -890,7 +909,7 @@ function buildStrategyEvaluation({
     const cycleDays = group.cycle_days_default;
     const harvestDate = addDaysUTC(st.sowDate, cycleDays - 1);
 
-    const zarc = evaluateZarcWindow(st.cropId, soilProfileId, st.sowDate, context);
+    const zarc = evaluateZarcWindow(st.cropId, soilProfileId, st.sowDate, {...context,management:st.managementCode||context.management},st.groupKey);
     const cacheKey = `${st.cropId}|${st.groupKey}|${st.sowDate.slice(5)}|${soilProfileId}`;
     if (!context.climateCache.has(cacheKey)) context.climateCache.set(cacheKey, runHistoricalStressTest(st.cropId, st.groupKey, st.sowDate, soilProfileId, context));
     const stressTest = {...context.climateCache.get(cacheKey), sowDate:st.sowDate, harvestDate};
@@ -907,6 +926,7 @@ function buildStrategyEvaluation({
       stageLabel: st.stageLabel,
       seasonType: st.seasonType,
       cropId: st.cropId,
+      managementCode:st.managementCode||(crop.officialProfile?.managementCodes.length===1?crop.officialProfile.managementCodes[0]:null),
       cropName: crop.common_name,
       shortCropName:
         st.cropId === 'SOJA'
@@ -931,6 +951,10 @@ function buildStrategyEvaluation({
       cropChanged,
       groupChanged,
       zarc,
+      baselineZarc:baseStage?evaluateZarcWindow(baseStage.cropId,soilProfileId,baseStage.sowDate,{...context,management:baseStage.managementCode||context.management},baseStage.groupKey):null,
+      calendarBasis:group.calendarBasis||null,
+      calendarExplanation:group.calendarExplanation||null,
+      officialSource:crop.officialProfile?.source||null,
       stressTest
     });
   }
@@ -1085,6 +1109,7 @@ export function buildCycleGroupObject(groupKey, cycleName, daysInput, isCustomCy
 }
 
 export function getCycleGroupLabel(groupKey, groupObj) {
+  if(groupObj?.officialGroup)return groupObj.cycle_name;
   const cycleDays = groupObj?.cycle_days_default;
   if (!Number.isFinite(cycleDays)) throw new Error('Ciclo sem duração.');
   if (groupObj?.cycle_label) return groupObj.cycle_label;
@@ -1195,6 +1220,7 @@ export function getPlanningStagesList(planningConfig = defaultPlanningConfig()) 
       stageLabel: st.stageLabel || defaultLabel,
       seasonType: st.seasonType || 'sucessao',
       cropId: crop.crop_id,
+      managementCode:st.managementCode||null,
       groupKey: resolvedGroupKey,
       cultivarName: cycleLabel,
       plannedSowDate: st.seasonalAnchor ? annualDate(planningConfig.baseSowingDate, st.seasonalAnchor.monthDay, st.seasonalAnchor.yearOffset) : st.plannedSowDate || null,
@@ -1246,6 +1272,7 @@ export function resolveSuccessionSchedule(stageDefs, initialSowDate, opInterval 
       stageLabel: st.stageLabel || (i === 0 ? '1ª Etapa · Safra Inicial' : `${i + 1}ª Etapa · ${i}ª Sucessão`),
       seasonType: st.seasonType || 'sucessao',
       cropId: crop.crop_id,
+      managementCode:st.managementCode||null,
       cropName: crop.common_name,
       groupKey,
       cultivarName: cycleLabel,
@@ -1270,6 +1297,7 @@ export function simulateAdaptation(
   planningConfig = defaultPlanningConfig(),
   customCrops = [], customCycles = [], suppliedContext = {}
 ) {
+  for(const [id,crop] of Object.entries(buildOfficialCropCatalog(planningConfig.officialProfiles||[])))if(!rulesPackage.crops_catalog[id])rulesPackage.crops_catalog[id]=crop;
   registerCustomCropsInCatalog(customCrops, customCycles);
   const context = createScenarioContext(propertyProfile, suppliedContext);
   const delayDays = days(planningConfig.delayDays ?? 0, 'Atraso');
@@ -1293,6 +1321,7 @@ export function simulateAdaptation(
       const crop = rulesPackage.crops_catalog[stage.cropId];
       if (preserved.allowCycleAdjustment !== false && stage.allowCycleChange !== false) {
         for (const [groupKey, group] of Object.entries(crop.cultivar_groups)) {
+          if(planningConfig.allowedGroupKeysByCrop?.[stage.cropId]&&!planningConfig.allowedGroupKeysByCrop[stage.cropId].includes(groupKey))continue;
           if (group.cycle_days_default >= crop.cultivar_groups[stage.groupKey].cycle_days_default) continue;
           const defs = planStages.map((s,i) => i === index ? {...s,groupKey} : {...s});
           add(defs, `Ciclo mais curto · etapa ${index+1}`, `${crop.common_name}: ciclo de ${group.cycle_days_default} dias na etapa ${index+1}.`, index, 'CICLO');
@@ -1300,11 +1329,19 @@ export function simulateAdaptation(
       }
       if (!stage.allowCropChange || (index === 0 && preserved.keepFirstCropSoy !== false)) return;
       for (const alternative of Object.values(rulesPackage.crops_catalog)) {
+        if(alternative.officialProfile&&(alternative.officialProfile.uf!==propertyProfile.state||!planningConfig.allowedCropIds?.includes(alternative.crop_id)))continue;
+        const permitted=stage.managementCode||context.management||(crop.officialProfile?.managementCodes.length===1?crop.officialProfile.managementCodes[0]:null);
+        const alternativeManagement=alternative.officialProfile?.managementCodes||planningConfig.allowedManagementCodesByCrop?.[alternative.crop_id];
+        if(permitted&&alternativeManagement?.length&&!alternativeManagement.includes(permitted))continue;
+        if(alternative.officialProfile){
+          if(!permitted||!alternative.officialProfile.managementCodes.includes(permitted))continue;
+        }
         if (alternative.crop_id === stage.cropId) continue;
         const cover = alternative.role_in_prototype?.startsWith('COVER_CROP') || alternative.custom_role === 'COBERTURA_SOLO';
         if (cover ? preserved.allowCoverCropTransition === false : preserved.allowCommercialSubstitution === false) continue;
         if (planningConfig.allowedCropIds && !planningConfig.allowedCropIds.includes(alternative.crop_id)) continue;
         for (const [groupKey, group] of Object.entries(alternative.cultivar_groups)) {
+          if(planningConfig.allowedGroupKeysByCrop?.[alternative.crop_id]&&!planningConfig.allowedGroupKeysByCrop[alternative.crop_id].includes(groupKey))continue;
           const defs = planStages.map((s,i) => i === index ? {...s,cropId:alternative.crop_id,groupKey} : {...s});
           add(defs, `${alternative.common_name} · etapa ${index+1}`, `Troca da etapa ${index+1} por ${alternative.common_name}, ciclo de ${group.cycle_days_default} dias.`, index, cover?'COBERTURA':'CULTURA');
         }

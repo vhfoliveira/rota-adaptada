@@ -56,7 +56,8 @@ outra propriedade não muda os dados usados pelo cenário anterior. Consultas
 concluídas depois da troca de propriedade não redesenham a propriedade errada.
 
 A API `fetchLiveNasaPower(lat, lon, {startDate, endDate})` permite escolher o período.
-Na interface, o período padrão vem dos metadados do exemplo. O conjunto retornado
+O início padrão é 2013-01-01; o painel consulta até a data corrente e o guia até
+o fim do ano anterior, para trabalhar com anos encerrados. O conjunto retornado
 precisa ter as coordenadas da solicitação; o cenário determina os anos a partir
 da série diária, sem exigir 2013–2024.
 
@@ -87,10 +88,7 @@ da série diária, sem exigir 2013–2024.
 clima, regras regionais, dados incompletos, falha de APIs, ciclos personalizados,
 cobertura e relatório. `npm run build` valida a aplicação Vite.
 
-O teste opcional de navegador usa o protocolo CDP do Chromium, sem dependências
-adicionais. Inicie Vite e um Chromium de teste com
-`--headless --remote-debugging-port=9223 --user-data-dir=/tmp/rota-browser-test`,
-então execute `node tests/browser-smoke.mjs`. Use um perfil descartável: o teste
-reescreve o estado IndexedDB desse perfil. `ROTA_APP_URL` e `ROTA_CDP_URL` permitem
-outros endereços. Verifica as cinco telas, edição de sequência, sugestões,
-relatório, cenário sem dados, cultura personalizada persistida e largura móvel.
+O roteiro de navegador está em [Validação dos fluxos](VALIDACAO_FLUXOS.md).
+Ele cobre as duas jornadas guiadas, o painel avançado, persistência e mudanças
+durante consultas. O teste antigo que abria a raiz esperando o painel avançado
+foi retirado: não correspondia à entrada atual e reescrevia o IndexedDB do perfil.

@@ -1,3 +1,4 @@
+import {officialStageDetails} from './official-crop-ui.js';
 import { formatBRDate, rulesPackage } from './vilhena-engine.js';
 
 const esc = v =>
@@ -12,6 +13,8 @@ export function generateVilhenaReportHTML(simResult, selectedStrategyId = null, 
     simResult.strategies[2] ||
     simResult.strategies[0];
   const critStage = selected.criticalStage;
+  const hasOfficial=selected.stages.some(stage=>stage.officialSource);
+  const historicalLabel=stage=>stage.officialSource?`${stage.stressTest.descriptiveYears} anos com histórico completo; classificação agronômica indisponível`:`${stage.stressTest.okYears} favoráveis · ${stage.stressTest.moderateYears} atenção · ${stage.stressTest.severeYears} críticos`;
   const yearDetail = critStage.stressTest.years.find(y => y.year === Number(inspectedYear)) || critStage.stressTest.years[0] || {year:'—',phases:[],status:'nao_avaliado'};
 
   return `<!doctype html>
@@ -69,7 +72,7 @@ export function generateVilhenaReportHTML(simResult, selectedStrategyId = null, 
   </header>
 
   <section>
-    <h2>1. Propriedade, Solo (ISRIC SoilGrids) e Clima (NASA POWER ${esc(simResult.climatePeriod || 'não disponível')})</h2>
+    <h2>1. Propriedade, Solo e Clima (NASA POWER ${esc(simResult.climatePeriod || 'não disponível')})</h2>
     <div class="grid-2">
       <div class="card">
         <h3>Coordenadas e Clima (NASA POWER API)</h3>
@@ -79,7 +82,7 @@ export function generateVilhenaReportHTML(simResult, selectedStrategyId = null, 
       </div>
       <div class="card">
         <h3>Retenção de Água do Solo e Atraso Simulado</h3>
-        <p><strong>Classe de Solo (ISRIC SoilGrids):</strong> ${esc(soil.name)}${p.soilEvidence?.clayPercent ? ` (Argila: ${esc(p.soilEvidence.clayPercent)}% em 0–60 cm)` : ''}</p>
+        <p><strong>Classe de solo informada ou estimada:</strong> ${esc(soil.name)}${p.soilEvidence?.clayPercent ? ` (Argila: ${esc(p.soilEvidence.clayPercent)}% em 0–60 cm)` : ''}</p>
         <p><strong>Planejamento Ativo:</strong> ${esc(cfg.planningName || 'Planejamento Padrão')}</p>
         <p><strong>Cenário de Atraso:</strong> Plantio inicial de ${formatBRDate(simResult.baselineSowingDate)} deslocado em <strong>+${esc(simResult.delayDays)} dias</strong> para ${formatBRDate(simResult.delayedSowingDate)} (Intervalo entre sucessões: ${esc(simResult.operationalIntervalDays)} dias).</p>
       </div>
@@ -107,7 +110,7 @@ export function generateVilhenaReportHTML(simResult, selectedStrategyId = null, 
           <td>${esc(s.changedDescriptions.join(' '))}</td>
           <td><strong>${esc(s.criticalStage.shortCropName)}</strong> (${esc(s.criticalStage.cycleDays)}d)<br>${formatBRDate(s.criticalStage.sowDate)} a ${formatBRDate(s.criticalStage.harvestDate)}</td>
           <td><span class="badge ${esc(s.statusTone)}">${esc(s.criticalStage.zarc.badgeLabel)}</span></td>
-          <td><strong>${esc(s.criticalStage.stressTest.noCriticalYears)}/${esc(s.criticalStage.stressTest.evaluatedYears)} anos sem falha severa</strong><br><small>${esc(s.criticalStage.stressTest.okYears)} favoráveis · ${esc(s.criticalStage.stressTest.moderateYears)} atenção · ${esc(s.criticalStage.stressTest.severeYears)} críticos</small></td>
+          <td><strong>${s.criticalStage.officialSource?'Contexto climático descritivo':`${esc(s.criticalStage.stressTest.noCriticalYears)}/${esc(s.criticalStage.stressTest.evaluatedYears)} anos sem falha severa`}</strong><br><small>${esc(historicalLabel(s.criticalStage))}</small></td>
           <td><strong>${esc(s.soilMetrics.protectedDays)} dias coberto</strong><br><small>${esc(s.soilMetrics.bareSoilDays)} dias exposto</small></td>
         </tr>`
           )
@@ -124,7 +127,7 @@ export function generateVilhenaReportHTML(simResult, selectedStrategyId = null, 
         <tr>
           <th>Ordem na Sucessão</th>
           <th>Cultura e Ciclo</th>
-          <th>Plantio → Colheita</th>
+          <th>Plantio → ${hasOfficial?'Fim do ciclo de referência':'Colheita'}</th>
           <th>Status da Janela</th>
           <th>Histórico NASA (${esc(simResult.climatePeriod || 'não disponível')})</th>
         </tr>
@@ -137,13 +140,14 @@ export function generateVilhenaReportHTML(simResult, selectedStrategyId = null, 
           <td>${esc(st.shortCropName)} (${esc(st.cycleDays)} dias)</td>
           <td>${formatBRDate(st.sowDate)} → ${formatBRDate(st.harvestDate)}</td>
           <td><span class="badge ${esc(st.zarc.tone)}">${esc(st.zarc.badgeLabel)}</span></td>
-          <td>${esc(st.stressTest.okYears)} favoráveis · ${esc(st.stressTest.moderateYears)} atenção · ${esc(st.stressTest.severeYears)} críticos</td>
+          <td>${esc(historicalLabel(st))}</td>
         </tr>`
           )
           .join('')}
       </tbody>
     </table>
 
+    ${hasOfficial?`<p class="notice">O fim do ciclo de referência pode indicar maturação fisiológica. O intervalo entre cultivos deve incluir secagem, colheita e preparo.</p>${selected.stages.filter(st=>st.officialSource).map(st=>`<h3>${esc(st.shortCropName)} — fontes e condições</h3>${officialStageDetails(st).replace('<details ', '<details open ')}`).join('')}`:''}
     <p class="notice">${esc(critStage.stressTest.headline)} ${esc(selected.soilMetrics.method)} ${esc(selected.statusLabel)}</p>
     <h3>Diagnóstico Fase por Fase com Dados da NASA (Ano ${esc(yearDetail.year)}) — ${esc(critStage.shortCropName)}</h3>
     <table>
@@ -167,10 +171,10 @@ export function generateVilhenaReportHTML(simResult, selectedStrategyId = null, 
           <td>${esc(ph.days)} dias</td>
           <td>${esc(ph.rainMm)} mm</td>
           <td>${esc(ph.maxDryDays)} dias</td>
-          <td>Média ${Math.round(ph.avgGwetTop * 100)}%</td>
-          <td>Média ${Math.round(ph.avgGwetRoot * 100)}%</td>
+          <td>Média ${ph.avgGwetTop==null?'—':Math.round(ph.avgGwetTop * 100)}%</td>
+          <td>Média ${ph.avgGwetRoot==null?'—':Math.round(ph.avgGwetRoot * 100)}%</td>
           <td>Máx ${esc(ph.maxTempC)}°C / Mín ${esc(ph.minTempC)}°C</td>
-          <td>${ph.alerts.length ? ph.alerts.map(a => `<strong>${esc(a.title)}:</strong> ${esc(a.detail)}`).join('<br>') : '✓ Clima e umidade favoráveis nesta fase'}</td>
+          <td>${ph.assessmentStatus==='descritivo'?'Contexto histórico; classificação agronômica não calculada':ph.alerts.length ? ph.alerts.map(a => `<strong>${esc(a.title)}:</strong> ${esc(a.detail)}`).join('<br>') : '✓ Clima e umidade favoráveis nesta fase'}</td>
         </tr>`
           )
           .join('')}

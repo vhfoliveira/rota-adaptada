@@ -1,42 +1,44 @@
-# Rota Adaptada — Escopo do Projeto e Regras do Motor Determinístico
+# Escopo regional — Rota Adaptada
 
-## 1. Tese do Produto
+Vilhena/RO é o exemplo explícito do aplicativo. A propriedade demonstrativa, o
+histórico NASA local de 2013–2024 e as regras regionais de referência estão em
+`rota-adaptada/src/data/`. Esses dados não são uma configuração universal para
+outras propriedades, municípios ou safras.
 
-A **Rota Adaptada** responde a uma decisão prática de planejamento agrícola:
+A interface atual permite escolher municípios presentes no manifesto ZARC e
+consultar suas culturas e condições para a safra e data cobertas. Um ponto
+confirmado permite consultar NASA POWER e SoilGrids para aquela coordenada.
+Escolher somente o município permite a descoberta municipal, sem análise de clima
+ou solo pontual. O mapa indica um ponto, não os limites da propriedade.
 
-> *Quando a primeira cultura atrasa, qual é a menor mudança justificável no restante do planejamento — ou qual o melhor plano sugerido pelo sistema — considerando os 12 anos de dados agroclimáticos da NASA POWER, a classe de retenção hídrica do solo (ISRIC SoilGrids), o catálogo de culturas/ciclos disponíveis e as preferências do produtor?*
+## O que o aplicativo avalia
 
----
+- Condições publicadas na base municipal ZARC, com solo, manejo, grupos e portaria
+  preservados. Ausência de solo confirmado produz opções condicionais.
+- Calendário de uma ou mais etapas com culturas, ciclos, intervalos e atraso.
+- Até três alternativas, cada uma alterando uma etapa, respeitando as permissões do
+  produtor e as condições de dados do motor.
+- Histórico climático efetivamente disponível para o ponto, com ciclos incompletos
+  identificados e sem reutilizar o clima de Vilhena em outra coordenada.
+- Dias de cultura viva no horizonte comparado e relatório do cenário avaliado.
 
-## 2. Fontes Ativas de Decisão (Escopo Estrito)
+## Limites de cobertura
 
-Todas as informações fora do escopo das APIs integradas foram removidas para manter a solução 100% focada e comprovável:
+Ampliar o calendário ou cadastrar uma cultura não valida novos parâmetros
+agronômicos. Sem solo, clima, parâmetros da cultura ou regras regionais suficientes,
+o aplicativo mantém o calendário e identifica a parcela não avaliada. Janelas
+informadas pelo usuário não recebem percentuais oficiais automaticamente.
 
-| Camada | Origem | Uso no Motor (`vilhena-engine.js`) |
-| --- | --- | --- |
-| **Precipitação Diária** | **NASA POWER API** (`PRECTOTCORR` / `IMERG_PRECTOT`) | Soma de chuva acumulada por fase fenológica (`F1` a `F4`) e contagem de veranicos (dias secos consecutivos) nos 12 anos (`2013–2024`). |
-| **Umidade do Solo** | **NASA POWER API / MERRA-2** (`GWETTOP` e `GWETROOT`) | Avaliação de umidade superficial na emergência (`F1`) e umidade na zona radicular no florescimento/enchimento (`F3`). |
-| **Temperatura Diária** | **NASA POWER API / MERRA-2** (`T2M_MAX` e `T2M_MIN`) | Identificação de picos de calor diurno e noites quentes durante fases reprodutivas. |
-| **Solo e Retenção Hídrica** | **ISRIC SoilGrids v2.0 API** (`clay`, `sand` `0–60 cm`) | Estimativa de textura e sugestão automática da classe de retenção de água (`AD3_MEDIA` 48 mm, `AD4_ARGILOSA` 62 mm, `AD5_MUITO_ARGILOSA` 78 mm). |
-| **Localização Municipal** | **OpenStreetMap Nominatim API** + **Web Geolocation GPS** | Identificação automática de Município e UF a partir de Latitude/Longitude. |
-| **Culturas e Ciclos** | **Catálogo Pré-Cadastrado + Cadastros do Usuário** | 4 finalidades de sucessão (`SAFRA_PRINCIPAL`, `ALTERNATIVA_COMERCIAL`, `ROTACAO_CULTURAS`, `COBERTURA_SOLO`) e ciclos em dias fatiados nas 4 fases da planta. |
+A estimativa de textura do SoilGrids não confirma uma classe oficial de solo ZARC.
+A tábua municipal atualizável e o pacote de referência do motor são fontes
+separadas. A indicação publicada não substitui a verificação completa da portaria,
+nem comprova enquadramento em seguro ou crédito. O histórico não prevê
+produtividade ou rentabilidade.
 
----
+O escopo atual não inclui observatório climático simulado, cadastro de polígonos
+de talhões, laudos laboratoriais, diário de operações ou otimização financeira.
 
-## 3. Funcionalidades Consolidados no Fluxo de 5 Passos
-
-1. **Passo 1 — Propriedade:**
-   - Propriedade pré-cadastrada de Vilhena/RO e inclusão de novas propriedades por coordenadas (`Lat`/`Lon` ou GPS) com consulta automática à **NASA POWER**, **ISRIC SoilGrids** e **Nominatim**.
-2. **Passo 2 — Culturas:**
-   - Cadastro de novas culturas sem restrição à 2ª safra (4 finalidades no planejamento) com registro duplo de **Ciclo Médio** e **Ciclo Precoce** (em dias).
-   - Cadastro de novos ciclos (`+ Cadastrar Novo Ciclo`) para qualquer cultura disponível.
-3. **Passo 3 — Planejamento:**
-   - Planejamento pré-cadastrado e inclusão de novos planejamentos (`+ Incluir Novo Planejamento`) vinculando propriedade, data inicial, intervalo operacional e ordem cronológica das sucessões.
-   - Campos de **Cultura** e **Ciclo na Etapa** iniciam **em branco** ao abrir um novo planejamento ou adicionar etapa.
-   - Botão **`✨ Sugerir Planejamento (NASA + APIs)`** (exclusivo dentro de *Incluir Novo Planejamento*), com **elemento de loading** durante a consulta e exibição de **3 opções em cartas de baralho (`♠ CARTA 01`, `♦ CARTA 02`, `♣ CARTA 03`)** + botão **Cancelar / Sair**.
-   - Cadastro rápido de novos ciclos (`+ Cadastrar Novo Ciclo` / `+ Cadastrar Ciclo`) e simulador de atraso (`0` a `+45 dias`) com cálculo do **Efeito Dominó**.
-4. **Passo 4 — Comparação:**
-   - **Preferências do Produtor** posicionadas na tela de Comparação para filtrar em tempo real as alternativas aceitas.
-   - Comparação lado a lado entre o Plano Atual (com atraso) e as Alternativas nos 12 anos da NASA POWER (`2013–2024`).
-5. **Passo 5 — Explicação e Resumo:**
-   - Diagnóstico por ano histórico (`2013–2024`) nas 4 fases da planta (`F1` a `F4`) e **Relatório Imprimível (PDF / A4)**.
+Consulte [o contrato do motor](../rota-adaptada/docs/MOTOR_CENARIOS.md),
+[a base municipal ZARC](../rota-adaptada/docs/ZARC.md),
+[as fontes utilizadas](../DADOS_CONEXAO_APIS.md) e
+[o guia de interação](../rota-adaptada/docs/GUIA_AUTOGUIADO.md).

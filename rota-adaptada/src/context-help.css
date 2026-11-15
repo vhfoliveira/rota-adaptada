@@ -1,0 +1,91 @@
+/* Shared click/touch/keyboard help; independent of surrounding button state. */
+.context-help-button {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted, #b6c7da);
+  font: 700 16px/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+.context-help-button::before {
+  content: '';
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.context-help-button:hover { color: var(--leaf, #b5ed64); background: #b5ed6410; transform: none; }
+.context-help-button:focus-visible { outline: 3px solid var(--leaf, #b5ed64); outline-offset: 2px; }
+.context-help-action { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; }
+.context-help-action > :first-child { min-width: 0; }
+.context-help-action:has(> .full) { display: flex; width: 100%; }
+.context-help-field { position: relative; min-width: 0; }
+.context-help-field > label { padding-right: 40px; }
+.context-help-field > .context-help-button { position: absolute; top: 0; right: 0; }
+.has-context-help { position: relative; padding-right: 52px; }
+.has-context-help > .context-help-button { position: absolute; top: 4px; right: 4px; }
+.help-tab-item { position: relative; min-width: 0; }
+.help-tab-item > .screen-tab { width: 100%; height: 100%; padding-right: 42px; }
+.help-tab-item > .context-help-button { position: absolute; top: 2px; right: 2px; }
+.context-help-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(80dvh, 720px);
+  padding: 0;
+  border: 1px solid var(--line, #40576e);
+  border-radius: 18px;
+  background: var(--paper, #101c2b);
+  color: var(--ink, #edf2f7);
+  box-shadow: 0 24px 80px #0009;
+  overflow: auto;
+}
+.context-help-dialog::backdrop { background: #020711ba; }
+.context-help-heading { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 20px; background: var(--paper, #101c2b); border-bottom: 1px solid var(--line, #40576e); }
+.context-help-heading h2 { margin: 0; font-size: 20px; line-height: 1.25; text-transform: none; }
+.context-help-heading h2::first-letter { text-transform: uppercase; }
+.context-help-close { min-height: 44px; flex-shrink: 0; padding: 8px 12px; border: 1px solid var(--line, #40576e); border-radius: 9px; background: var(--paper-soft, #152538); color: var(--ink, #edf2f7); cursor: pointer; }
+.context-help-content { padding: 8px 22px 24px; }
+.context-help-content h3 { font-size: 14px; margin: 20px 0 6px; color: var(--ink, #edf2f7); }
+.context-help-content p { color: var(--muted, #b6c7da); font-size: 15px; line-height: 1.6; margin: 0; }
+.context-help-content details { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--line, #40576e); }
+.context-help-content summary { min-height: 44px; cursor: pointer; color: var(--leaf, #b5ed64); font-size: 14px; font-weight: 650; }
+@media (max-width: 860px) {
+  .help-tab-item { flex: 0 0 190px; scroll-snap-align: start; }
+}
+@media (max-width: 600px) {
+  .context-help-dialog { width: 100%; max-width: 100%; max-height: 85dvh; margin: auto 0 0; border-radius: 20px 20px 0 0; border-bottom: 0; padding-bottom: env(safe-area-inset-bottom); }
+  .context-help-heading { padding: 16px; }
+  .context-help-content { padding-left: 20px; padding-right: 20px; }
+  .context-help-heading h2 { font-size: 18px; }
+}
+
+/* Available in both guided and advanced modes. Updates never cover a dialog. */
+.pwa-update {
+  position: fixed;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  left: 16px;
+  right: 16px;
+  z-index: 80;
+  max-width: 620px;
+  margin: auto;
+  padding: 16px;
+  background: var(--paper-soft, #152538);
+  border: 1px solid var(--leaf, #b5ed64);
+  border-radius: 12px;
+  color: var(--ink, #edf2f7);
+  box-shadow: 0 8px 30px #0008;
+}
+.pwa-update p { margin: 0 0 10px; line-height: 1.5; }
+.pwa-update button { min-height: 44px; margin: 4px 10px 0 0; padding: 10px 14px; }
+@media print { .context-help-button, .context-help-dialog, .pwa-update { display: none !important; } }

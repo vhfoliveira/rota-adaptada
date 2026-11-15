@@ -1,5 +1,13 @@
+import {mountZarcPanel} from './zarc-panel.js';
 import { periodLabel, days, annualDate } from './scenario.js';
 import './style.css';
+import './space.css';
+import './context-help.css';
+import {helpButton, mountAdvancedHelp} from './context-help.js';
+import {missionBanner} from './space-brand.js';
+import {buildOfficialCropCatalog} from './official-crop-registry.js';
+import {loadGuidedCropCatalog} from './guided-crops.js';
+import {officialStageDetails} from './official-crop-ui.js';
 import {
   rulesPackage,
   getActiveNasaDataset,
@@ -36,14 +44,20 @@ const UNKNOWN_SOIL = {id:'',name:'Não informado',available_water_mm:null};
 const UNKNOWN_SOIL_LABEL = {shortTitle:'Solo não informado',waterMm:'—',waterLabel:'Reserva não avaliada'};
 const climateLabel = () => periodLabel(getActiveNasaDataset(appState.propertyProfile));
 
+const blankProperty = () => ({id:'',propertyName:'',municipality:'',state:'',latitude:'',longitude:'',soilProfileId:'',soilEvidence:{}});
+const blankPlanning = () => ({id:'',propertyId:'',planningName:'',baseSowingDate:'',delayDays:0,operationalIntervalDays:7,successionStages:[]});
+const availableProperties = () => [...(appState.demoEnabled ? [DEFAULT_PROP] : []), ...(appState.customProperties || [])];
+const availablePlannings = () => [...(appState.demoEnabled ? [DEFAULT_PLAN] : []), ...(appState.customPlannings || [])];
+
 let appState = {
-  version: 7,
+  version: 8,
+  demoEnabled: false,
   activeTab: 0,
-  propertyProfile: structuredClone(DEFAULT_PROP),
+  propertyProfile: blankProperty(),
   customProperties: [],
   customCrops: [],
   customCycles: [],
-  planningConfig: structuredClone(DEFAULT_PLAN),
+  planningConfig: blankPlanning(),
   customPlannings: [],
   selectedStrategyId: 'ALTERNATIVA_COMERCIAL_SORGO',
   selectedStageIndex: 1,
@@ -55,10 +69,10 @@ let nasaLiveState = {
   isLive: false,
   lastCoords: null,
   fetchedAt: null,
-  meanAnnualRainMm: 1920,
-  meanGwetRoot: 0.64,
-  meanGwetTop: 0.61,
-  totalDays: 4383,
+  meanAnnualRainMm: null,
+  meanGwetRoot: null,
+  meanGwetTop: null,
+  totalDays: 0,
   endpoint: '',
   error: null
 };
@@ -68,11 +82,11 @@ let newPropertyFormState = {
   consulting: false,
   propertyName: '',
   municipality: '',
-  state: 'RO',
-  latitude: '-12.7405',
-  longitude: '-60.1458',
+  state: '',
+  latitude: '',
+  longitude: '',
   lookupResult: null,
-  selectedSoilProfileId: 'AD4_ARGILOSA'
+  selectedSoilProfileId: ''
 };
 
 let newCropFormState = {
@@ -95,6 +109,10 @@ let newCycleFormState = {
   cycleDays: 95
 };
 
+const isOfficialStage=stage=>Boolean(stage?.officialSource||rulesPackage.crops_catalog[stage?.cropId]?.officialProfile);
+const cycleEndLabel=stage=>isOfficialStage(stage)?'Fim do ciclo de referência':'Colheita';
+const officialIntervalNote=stages=>stages.some(isOfficialStage)?'<p class="muted">Nos perfis oficiais, o fim do ciclo de referência pode ser a maturação fisiológica, antes da colheita. Inclua no intervalo entre cultivos o tempo para secagem, colheita e preparo.</p>':'';
+
 function createBlankPlanningStages() {
   return Array.from({length:2}, (_,i) => ({cropId:'',groupKey:'',cultivarName:'',plannedSowDate:null,allowCropChange:i>0,allowCycleChange:true}));
 }
@@ -108,23 +126,66 @@ let newPlanningFormState = {
   showSuggestions: false,
   loadingSuggestions: false,
   suggestionsResult: null,
+  suggestionsKey: null,
   planningName: '',
-  propertyId: DEFAULT_PROP.id,
-  baseSowingDate: DEFAULT_PLAN.baseSowingDate,
+  propertyId: '',
+  baseSowingDate: '',
   operationalIntervalDays: 7,
   stages: createBlankPlanningStages()
 };
 
-let simResult = simulateAdaptation(
-  appState.propertyProfile,
-  appState.planningConfig,
-  appState.customCrops,
-  appState.customCycles
-);
+let simResult = null;
 let dbReady = false;
+// Municipal source responses belong to this session, never to persisted plans.
+const officialZarcCache = new Map();
+let officialZarcState = {key:'',status:'idle'};
+let officialZarcRequest = 0;
+const officialZarcKey = property => JSON.stringify([
+  String(property?.state||'').trim().toUpperCase(),
+  String(property?.municipalityCode||''),
+  String(property?.municipality||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase()
+]);
+const needsOfficialZarc = () => getPlanningStagesList(appState.planningConfig).some(isOfficialStage);
+
+function ensureOfficialZarc(force=false) {
+  if(!needsOfficialZarc()){
+    if(officialZarcState.status!=='idle'){officialZarcRequest++;officialZarcState={key:'',status:'idle'};}
+    return null;
+  }
+  const property=appState.propertyProfile,key=officialZarcKey(property);
+  if(force)officialZarcCache.delete(key);
+  else {
+    const cached=officialZarcCache.get(key);
+    if(cached){officialZarcState={key,status:'ready',value:cached};return cached;}
+    if(officialZarcState.key===key&&['loading','error'].includes(officialZarcState.status))return null;
+  }
+  const request=++officialZarcRequest;
+  officialZarcState={key,status:'loading'};
+  loadGuidedCropCatalog(structuredClone(property)).then(value=>{
+    if(request!==officialZarcRequest||key!==officialZarcKey(appState.propertyProfile)||!needsOfficialZarc())return;
+    officialZarcCache.set(key,value.queryContext);
+    officialZarcState={key,status:'ready',value:value.queryContext};
+    recomputeSimulation();
+    renderActiveScreen();
+  },error=>{
+    if(request!==officialZarcRequest||key!==officialZarcKey(appState.propertyProfile)||!needsOfficialZarc())return;
+    officialZarcState={key,status:'error',message:error.message||'Não foi possível acessar a base municipal.'};
+    recomputeSimulation();
+    renderActiveScreen();
+  });
+  return null;
+}
+
+function officialZarcNotice(){
+  if(!needsOfficialZarc()||officialZarcState.key!==officialZarcKey(appState.propertyProfile))return '';
+  if(officialZarcState.status==='loading')return '<section class="panel-card" role="status"><p>Consultando novamente o ZARC municipal para este planejamento. As condições oficiais ficam pendentes até a consulta terminar.</p></section>';
+  if(officialZarcState.status==='error')return `<section class="panel-card" role="status"><p>Consulta municipal indisponível: ${esc(officialZarcState.message)} As janelas oficiais permanecem pendentes; seu planejamento foi mantido.</p><button type="button" data-retry-official-zarc>Tentar consultar o ZARC novamente</button></section>`;
+  return '';
+}
 
 function syncLegacyPlanningFields(planCfg) {
   if (!planCfg) return planCfg;
+  for(const [id,crop] of Object.entries(buildOfficialCropCatalog(planCfg.officialProfiles||[])))if(!rulesPackage.crops_catalog[id])rulesPackage.crops_catalog[id]=crop;
   registerCustomCropsInCatalog(appState.customCrops || [], appState.customCycles || []);
   if (planCfg.isPreRegistered && planCfg.successionStages?.[2]?.plannedSowDate === DEFAULT_PLAN.year2SummerPlannedDate) {
     planCfg.successionStages[2].seasonalAnchor = {monthDay:'10-20',yearOffset:1};
@@ -156,7 +217,9 @@ function syncLegacyPlanningFields(planCfg) {
 }
 
 function recomputeSimulation() {
+  if (!appState.propertyProfile.id || !appState.planningConfig.id) { simResult = null; officialZarcRequest++; officialZarcState={key:'',status:'idle'}; return; }
   syncLegacyPlanningFields(appState.planningConfig);
+  const officialZarc=ensureOfficialZarc();
   if (appState.planningConfig?.id && Array.isArray(appState.customPlannings)) {
     const idx = appState.customPlannings.findIndex(p => p.id === appState.planningConfig.id);
     if (idx >= 0) {
@@ -164,10 +227,11 @@ function recomputeSimulation() {
     }
   }
   simResult = simulateAdaptation(
-    appState.propertyProfile,
+    officialZarc?{...appState.propertyProfile,municipalityCode:officialZarc.city.code}:appState.propertyProfile,
     appState.planningConfig,
     appState.customCrops || [],
-    appState.customCycles || []
+    appState.customCycles || [],
+    {officialZarc,soilCode:appState.planningConfig.soilCode||'',management:appState.planningConfig.management||''}
   );
   const exists = simResult.strategies.some(s => s.strategyId === appState.selectedStrategyId);
   if (!exists) {
@@ -223,9 +287,37 @@ function openModal(title, htmlContent) {
  */
 let climateRequest = 0;
 let suggestionRequest = 0;
+let propertyLookupRequest = 0;
+function invalidatePropertyLookup() {
+  propertyLookupRequest++;
+  newPropertyFormState.lookupResult = null;
+  newPropertyFormState.selectedSoilProfileId = '';
+  newPropertyFormState.consulting = false;
+  $('.lookup-result-box')?.remove();
+  const button = $('#btn-run-auto-lookup');
+  if (button) {
+    button.disabled = false;
+    button.textContent = '🔍 Consultar NASA POWER + ISRIC SoilGrids por Coordenada';
+  }
+  return propertyLookupRequest;
+}
+function suggestionInputKey() {
+  const property = availableProperties().find(p => p.id === newPlanningFormState.propertyId) || appState.propertyProfile;
+  return JSON.stringify({
+    property: [property.id, property.latitude, property.longitude, property.soilProfileId],
+    date: newPlanningFormState.baseSowingDate,
+    interval: newPlanningFormState.operationalIntervalDays,
+    stages: newPlanningFormState.stages,
+    delay: appState.planningConfig.delayDays,
+    decisions: appState.planningConfig.preservedDecisions,
+    crops: appState.customCrops,
+    cycles: appState.customCycles
+  });
+}
 async function refreshLiveNasaForActiveProperty(forceToast = false) {
   const request = ++climateRequest;
   const p = appState.propertyProfile;
+  if (!p.id) return;
   nasaLiveState.loading = true;
   nasaLiveState.error = null;
   nasaLiveState.isLive = false;
@@ -346,7 +438,7 @@ const CROP_FRIENDLY = {
 
 function getAvailableCropsList() {
   registerCustomCropsInCatalog(appState.customCrops || [], appState.customCycles || []);
-  const preIds = Object.keys(rulesPackage.crops_catalog).filter(id => !rulesPackage.crops_catalog[id].is_custom);
+  const preIds = Object.keys(rulesPackage.crops_catalog).filter(id => {const crop=rulesPackage.crops_catalog[id];return !crop.is_custom&&(!crop.officialProfile||crop.officialProfile.uf===appState.propertyProfile.state);});
   const list = [];
   for (const id of preIds) {
     const c = rulesPackage.crops_catalog[id];
@@ -364,7 +456,7 @@ function getAvailableCropsList() {
               ? 'Milho 1ª Safra (Rotação)'
               : id === 'SORGO_GRANIFERO'
                 ? 'Sorgo Granífero'
-                : 'Milheto (Cobertura)',
+                : id==='MILHETO'?'Milheto (Cobertura)':c.common_name,
       purposeBadge: f?.shortPurpose || 'Cultura Pré-Cadastrada',
       isCustom: false,
       groups: Object.entries(c.cultivar_groups || {}).map(([gKey, gObj]) => {
@@ -450,11 +542,13 @@ function renderShell() {
         </span>
         <span>
           Rota Adaptada
-          <small>ADAPTAÇÃO DE SAFRA COM DADOS DA NASA</small>
+          <small>PLANEJAMENTO AVANÇADO</small>
         </span>
       </a>
 
       <div class="header-context-strip">
+        <a class="context-chip" href="./">← Experiência guiada</a>
+        ${p.id === DEFAULT_PROP.id ? '<span class="context-chip accent">Demonstração · Vilhena/RO</span>' : ''}
         <span class="context-chip">
           📍 <strong>${esc(p.propertyName)}</strong> (${esc(p.municipality)}/${esc(p.state)} · ${esc(
     soilFriendly.shortTitle
@@ -481,10 +575,11 @@ function renderShell() {
       </div>
     </header>
 
+    ${missionBanner()}
     <nav class="screen-tabs" role="tablist" aria-label="Cinco passos do fluxo de decisão">
       ${TABS.map(
         t => `
-        <button
+        <div class="help-tab-item" role="presentation"><button
           type="button"
           role="tab"
           class="screen-tab ${appState.activeTab === t.index ? 'selected' : ''}"
@@ -494,7 +589,7 @@ function renderShell() {
           <span class="tab-step">${t.step}</span>
           <strong>${t.title}</strong>
           <small>${t.subtitle}</small>
-        </button>`
+        </button>${helpButton(['location','catalog','plan','results','phases'][t.index])}</div>`
       ).join('')}
     </nav>
 
@@ -507,7 +602,7 @@ function renderShell() {
   )}/${esc(p.state)})</span>
       </div>
       <div class="footer-right">
-        <button type="button" class="quiet-btn" id="btn-reset-demo">↺ Voltar para Propriedade Padrão (Vilhena/RO)</button>
+        <button type="button" class="quiet-btn" id="btn-reset-demo">Simular dados · Vilhena/RO</button>
         <button type="button" class="quiet-btn" id="btn-export-state">↓ Salvar Simulação (JSON)</button>
       </div>
     </footer>
@@ -533,13 +628,13 @@ function renderScreen1Property() {
   const p = appState.propertyProfile;
   const activeSoil = rulesPackage.soil_profiles[p.soilProfileId] || UNKNOWN_SOIL;
   const soilFriendly = SOIL_FRIENDLY[activeSoil.id] || UNKNOWN_SOIL_LABEL;
-  const allProperties = [DEFAULT_PROP, ...(appState.customProperties || [])];
+  const allProperties = availableProperties();
 
   return `
     <div class="screen-header">
       <div>
         <span class="eyebrow">PASSO 1 · PROPRIEDADE, CLIMA (NASA POWER) E SOLO (ISRIC SOILGRIDS)</span>
-        <h1>${esc(p.propertyName)} — ${esc(p.municipality)}/${esc(p.state)}</h1>
+        <h1>${p.id ? `${esc(p.propertyName)} — ${esc(p.municipality)}/${esc(p.state)}` : 'Cadastre sua propriedade'}</h1>
         <p>
           A propriedade ativa fornece as coordenadas geográficas para consultar ao vivo a série histórica da <strong>NASA POWER API (${esc(climateLabel())})</strong> e a retenção de água do solo via <strong>ISRIC SoilGrids</strong>.
         </p>
@@ -642,7 +737,7 @@ function renderScreen1Property() {
         : ''
     }
 
-    <section class="summary-kpis-grid" aria-label="Dados da propriedade ativa utilizados na simulação">
+    ${p.id ? `<section class="summary-kpis-grid" aria-label="Dados da propriedade ativa utilizados na simulação">
       <article class="kpi-card">
         <div class="row">
           <span class="eyebrow">${p.id === DEFAULT_PROP.id ? 'PROPRIEDADE PRÉ-CADASTRADA PADRÃO' : 'PROPRIEDADE ATIVA'}</span>
@@ -702,7 +797,7 @@ function renderScreen1Property() {
           }
         </p>
       </article>
-    </section>
+    </section>` : ''}
   `;
 }
 
@@ -871,7 +966,7 @@ function renderSystemSuggestedPlansPanel(allProps) {
         propertyProfile: targetProp,
         successionStages: suggestionStages(),
         preservedDecisions: appState.planningConfig.preservedDecisions,
-        baseSowingDate: newPlanningFormState.baseSowingDate || DEFAULT_PLAN.baseSowingDate,
+        baseSowingDate: newPlanningFormState.baseSowingDate,
         operationalIntervalDays: Number(newPlanningFormState.operationalIntervalDays),
         delayDays: appState.planningConfig.delayDays ?? 0,
         customCrops: appState.customCrops || [],
@@ -936,7 +1031,7 @@ function renderSystemSuggestedPlansPanel(allProps) {
         </label>
         <label>
           Data Base do 1º Plantio Avaliada
-          <input type="date" id="sys-sug-date" value="${esc(newPlanningFormState.baseSowingDate || DEFAULT_PLAN.baseSowingDate)}">
+          <input type="date" id="sys-sug-date" value="${esc(newPlanningFormState.baseSowingDate)}">
         </label>
         <label>
           Intervalo Operacional entre Sucessões (dias)
@@ -1030,7 +1125,7 @@ function renderSystemSuggestedPlansPanel(allProps) {
                           <div class="sp-body">
                             <strong>${esc(st.cropName)}</strong>
                             <small>${esc(st.cultivarName || `${st.cycleDays}d`)}</small>
-                            <small class="sp-dates">${formatBRDate(st.sowDate)} ➔ ${formatBRDate(
+                            <small class="sp-dates">${formatBRDate(st.sowDate)} ➔ ${isOfficialStage(st)?`${cycleEndLabel(st)}: `:''}${formatBRDate(
                           st.harvestDate
                         )} · <b>${zBadge}</b></small>
                           </div>
@@ -1106,6 +1201,7 @@ function renderScreen2Crops() {
       </div>
     </div>
 
+    <section class="panel-card section-block" id="zarc-region-catalog"></section>
     ${renderNewCycleFormPanel(availableCrops)}
 
     ${
@@ -1283,29 +1379,29 @@ function renderScreen2Crops() {
  */
 function renderScreen3Planning() {
   const cfg = appState.planningConfig;
-  const planoAtual = simResult.allStrategies[0];
-  const allProps = [DEFAULT_PROP, ...(appState.customProperties || [])];
+  const planoAtual = simResult?.allStrategies[0];
+  const allProps = availableProperties();
   const availableCrops = getAvailableCropsList();
   const preCrops = availableCrops.filter(c => !c.isCustom);
   const usrCrops = availableCrops.filter(c => c.isCustom);
-  const allPlannings = [DEFAULT_PLAN, ...(appState.customPlannings || [])];
+  const allPlannings = availablePlannings();
 
   // Preview resolved dates for the New Planning form (supports blank stages)
-  const draftComplete = newPlanningFormState.stages.every(st => st.cropId && st.groupKey);
+  const draftComplete = !!newPlanningFormState.baseSowingDate && newPlanningFormState.stages.every(st => st.cropId && st.groupKey);
   const resolvedDraft = draftComplete ? resolveSuccessionSchedule(newPlanningFormState.stages, newPlanningFormState.baseSowingDate, Number(newPlanningFormState.operationalIntervalDays)) : [];
   const previewDraftStages = newPlanningFormState.stages.map((st,idx)=>({...st,...(resolvedDraft[idx]||{}),isComplete:draftComplete}));
 
-  const firstStage = planoAtual.stages[0];
-  const secondStage = planoAtual.stages[1] || planoAtual.stages[0];
+  const firstStage = planoAtual?.stages[0];
+  const secondStage = planoAtual?.stages[1] || planoAtual?.stages[0];
 
   return `
     <div class="screen-header">
       <div>
         <span class="eyebrow">PASSO 3 · PLANEJAMENTO DE CULTURAS, CICLOS, ORDEM DAS SUCESSÕES E ATRASO</span>
-        <p class="notice">${esc(planoAtual.statusLabel)} · Histórico: ${esc(simResult.climatePeriod)}. Regras regionais ausentes não são substituídas pelas de Vilhena.</p>
+        <p class="notice">${esc(planoAtual?.statusLabel || 'Cadastre um planejamento para começar')} · Histórico: ${esc(simResult?.climatePeriod || 'não consultado')}. Regras regionais ausentes não são substituídas pelas de Vilhena.</p>
         <h1>Planejamento de Safra e Cadeia de Sucessões — ${esc(cfg.planningName || 'Planejamento Ativo')}</h1>
         <p>
-          Utilize o <strong>planejamento pré-cadastrado</strong>, clique em <strong>+ Cadastrar Novo Ciclo</strong> para incluir novos ciclos de duração (em dias) para qualquer cultura, ou clique em <strong>+ Incluir Novo Planejamento</strong> para montar uma nova sequência de sucessões ou pedir a <strong>✨ Sugestão do Sistema (NASA + APIs)</strong>.
+          Preencha seu planejamento manualmente. Clique em <strong>+ Cadastrar Novo Ciclo</strong> para incluir novos ciclos de duração (em dias) para qualquer cultura, ou clique em <strong>+ Incluir Novo Planejamento</strong> para montar uma nova sequência de sucessões ou pedir a <strong>✨ Sugestão do Sistema (NASA + APIs)</strong>.
         </p>
       </div>
       <div class="screen-header-cta">
@@ -1383,7 +1479,7 @@ function renderScreen3Planning() {
             <div>
               <span class="eyebrow">ORDEM DAS SUCESSÕES (${previewDraftStages.length} ETAPAS DEFINIDAS)</span>
               <h3 style="margin:2px 0 0">Sequência Ordenada de Culturas e Ciclos no Planejamento</h3>
-              <p class="muted">A colheita de cada etapa (calculada pelos dias do ciclo selecionado) determina automaticamente a entrada da próxima sucessão.</p>
+              <p class="muted">${previewDraftStages.some(isOfficialStage)?'O fim do ciclo de referência de cada etapa, acrescido do intervalo informado, posiciona a próxima sucessão no calendário.':'A colheita de cada etapa (calculada pelos dias do ciclo selecionado) determina automaticamente a entrada da próxima sucessão.'}</p>${officialIntervalNote(previewDraftStages)}
             </div>
             <div class="button-row" style="margin-top:0">
               <button type="button" class="quiet-btn" data-nplan-preset="padrao">Modelo: Soja ➔ Milho (4 etapas)</button>
@@ -1418,10 +1514,10 @@ function renderScreen3Planning() {
                       <small class="sb-schedule-preview">
                         ${
                           st.isComplete
-                            ? `📅 Plantio: <b>${formatBRDate(st.sowDate)}</b> ➔ Colheita: <b>${formatBRDate(
+                            ? `📅 Plantio: <b>${formatBRDate(st.sowDate)}</b> ➔ ${cycleEndLabel(st)}: <b>${formatBRDate(
                                 st.harvestDate
                               )}</b> (${esc(st.cycleDays)} dias)`
-                            : '⏳ Selecione a cultura e o ciclo desta etapa para calcular plantio e colheita'
+                            : '⏳ Selecione a cultura e o ciclo desta etapa para montar o calendário'
                         }
                       </small>
                     </div>
@@ -1542,7 +1638,7 @@ function renderScreen3Planning() {
       <div class="card-head">
         <div>
           <span class="eyebrow">PLANEJAMENTOS DISPONÍVEIS (${allPlannings.length})</span>
-          <h2>Planejamento Pré-Cadastrado e Planejamentos do Usuário</h2>
+          <h2>Planejamentos cadastrados</h2>
           <p class="muted">
             Cada planejamento informa a <strong>propriedade vinculada</strong> e a <strong>ordem exata das culturas e sucessões</strong> que pertencem a ele. Clique em qualquer planejamento para ativá-lo na simulação.
           </p>
@@ -1623,7 +1719,7 @@ function renderScreen3Planning() {
       </div>
     </section>
 
-    <div class="grid-two-cols">
+    ${planoAtual ? `<div class="grid-two-cols">
       <article class="panel-card">
         <span class="eyebrow">DETALHAMENTO DO PLANEJAMENTO ATIVO</span>
         <h2>1. Culturas e Sucessões Pertencentes ao Planejamento</h2>
@@ -1654,7 +1750,7 @@ function renderScreen3Planning() {
                   <small style="display:block;margin-top:2px">
                     Semeadura c/ atraso (+${esc(cfg.delayDays)}d): <b>${formatBRDate(
                 st.sowDate
-              )}</b> → Colheita: <b>${formatBRDate(st.harvestDate)}</b>
+              )}</b> → ${cycleEndLabel(st)}: <b>${formatBRDate(st.harvestDate)}</b>
                   </small>
                 </div>
               </div>
@@ -1664,6 +1760,7 @@ function renderScreen3Planning() {
             .join('')}
         </div>
 
+        ${officialIntervalNote(planoAtual.stages)}
         <details class="optional-drawer" style="margin-top:16px">
           <summary>
             <span>⚙ Ajuste Rápido do Planejamento Ativo (Data original e intervalo operacional)</span>
@@ -1676,7 +1773,7 @@ function renderScreen3Planning() {
                 <input type="date" id="plan-base-date" value="${esc(cfg.baseSowingDate)}">
               </label>
               <label>
-                Dias entre Colheita e Plantio da Sucessão
+                ${planoAtual.stages.some(isOfficialStage)?'Dias entre o Fim do Ciclo de Referência e o Próximo Plantio':'Dias entre Colheita e Plantio da Sucessão'}
                 <input type="number" id="plan-op-interval" value="${esc(cfg.operationalIntervalDays)}" min="0" max="36500" step="1">
               </label>
             </div>
@@ -1722,7 +1819,7 @@ function renderScreen3Planning() {
             <div class="domino-node">
               <small>1º NA ORDEM · ${esc(firstStage.shortCropName.toUpperCase())}</small>
               <strong>Plantio: ${formatBRDate(simResult.baselineSowingDate)} → ${formatBRDate(simResult.delayedSowingDate)}</strong>
-              <span>Colheita termina em <b>${formatBRDate(firstStage.harvestDate)}</b></span>
+              <span>${isOfficialStage(firstStage)?'Fim do ciclo de referência em':'Colheita termina em'} <b>${formatBRDate(firstStage.harvestDate)}</b></span>
             </div>
             ${planoAtual.stages.length > 1 ? `            <div class="domino-arrow">➔</div>
             <div class="domino-node critical">
@@ -1745,7 +1842,7 @@ function renderScreen3Planning() {
           Definir Preferências do Produtor e Comparar Alternativas →
         </button>
       </article>
-    </div>
+    </div>` : ''}
   `;
 }
 
@@ -1788,7 +1885,7 @@ function renderTwoYearTimelineBar(strategy) {
             style="left:${seg.leftPct}%;width:${seg.widthPct}%"
             title="${esc(seg.stageLabel)}: ${esc(seg.shortCropName)} (${formatBRDate(seg.sowDate)} a ${formatBRDate(
               seg.harvestDate
-            )})"
+            )} · ${cycleEndLabel(seg)})"
           >
             <span>${esc(seg.shortCropName)}</span>
           </div>`
@@ -1866,7 +1963,7 @@ function renderScreen4Comparison() {
           <input type="checkbox" id="chk-allow-cycle" ${pd.allowCycleAdjustment !== false ? 'checked' : ''}>
           <div>
             <strong>Opção A: Trocar para ciclo mais precoce (Ciclo mais curto)</strong>
-            <small>Mantém a sequência original (${esc(firstCropName)} ➔ ${esc(secondCropName)}), mas reduz a duração do ciclo para antecipar a colheita.</small>
+            <small>Mantém a sequência original (${esc(firstCropName)} ➔ ${esc(secondCropName)}), mas reduz a duração do ciclo para antecipar ${planoAtual.stages.some(isOfficialStage)?'o fim do ciclo de referência':'a colheita'}.</small>
           </div>
         </label>
 
@@ -1936,7 +2033,7 @@ function renderScreen4Comparison() {
               <p class="what-changes-line">
                 <strong>${crit.index === 1 ? '1ª Safra resultante:' : 'Sucessão resultante:'}</strong> ${esc(
             crit.shortCropName
-          )} · Plantio em <strong>${formatBRDate(crit.sowDate)}</strong> (Colheita até ${formatBRDate(
+          )} · Plantio em <strong>${formatBRDate(crit.sowDate)}</strong> (${isOfficialStage(crit)?'Fim do ciclo de referência:':'Colheita até'} ${formatBRDate(
             crit.harvestDate
           )})
               </p>
@@ -2015,7 +2112,7 @@ function renderScreen4Comparison() {
                         <span class="stage-num">${st.index}</span>
                         <div>
                           <strong>${esc(st.stageLabel)}: ${esc(st.shortCropName)}</strong>
-                          <small>${esc(st.cultivarName)} · ${formatBRDate(st.sowDate)} a ${formatBRDate(
+                          <small>${esc(st.cultivarName)} · ${formatBRDate(st.sowDate)} a ${isOfficialStage(st)?`${cycleEndLabel(st)}: `:''}${formatBRDate(
                         st.harvestDate
                       )} (${st.cycleDays} dias)</small>
                         </div>
@@ -2146,7 +2243,7 @@ function renderScreen5Explanation() {
           yearObj.status === 'severo' ? 'danger' : yearObj.status !== 'ok' ? 'warning' : 'success'
         }">
           Ano ${esc(yearObj.year)}: ${
-    yearObj.status === 'nao_avaliado' ? 'Não avaliado: dados insuficientes' : yearObj.status === 'severo'
+    yearObj.status === 'nao_avaliado' ? (isOfficialStage(inspectedStage)?'Classificação agronômica indisponível':'Não avaliado: dados insuficientes') : yearObj.status === 'severo'
       ? 'Estresse Severo Detectado'
       : yearObj.status === 'moderado'
         ? 'Atenção Moderada'
@@ -2155,15 +2252,17 @@ function renderScreen5Explanation() {
         </span>
       </div>
 
+      ${officialStageDetails(inspectedStage)}
       <p class="muted">${esc(yearObj.reason || stTest.headline)}</p>
       <div class="phases-cards-grid">
         ${yearObj.phases
           .map(ph => {
             const hasSev = ph.alerts.some(a => a.severity === 'severo');
             const hasMod = ph.alerts.some(a => a.severity === 'moderado');
-            const tone = hasSev ? 'danger' : hasMod ? 'warning' : 'success';
+            const descriptive=ph.assessmentStatus==='descritivo';
+            const tone = descriptive?'warning':hasSev ? 'danger' : hasMod ? 'warning' : 'success';
             const friendlyPhaseName = PHASE_SIMPLE_NAMES[ph.phaseKey] || ph.phaseLabel;
-            const relevantMoisture =
+            const relevantMoisture = descriptive?'Observação descritiva, sem classificação':
               ph.phaseKey === 'F1_estabelecimento'
                 ? getMoistureStatusLabel(ph.avgGwetTop)
                 : getMoistureStatusLabel(ph.avgGwetRoot);
@@ -2173,7 +2272,7 @@ function renderScreen5Explanation() {
               <div class="row">
                 <span class="phase-tag">Duração: ${esc(ph.days)} dias</span>
                 <span class="status-badge ${tone}">
-                  ${hasSev ? '⚠ Fase Crítica' : hasMod ? '! Atenção' : '✓ Favorável'}
+                  ${descriptive?'Contexto histórico':hasSev ? '⚠ Fase Crítica' : hasMod ? '! Atenção' : '✓ Favorável'}
                 </span>
               </div>
               <h3>${esc(friendlyPhaseName)}</h3>
@@ -2190,7 +2289,7 @@ function renderScreen5Explanation() {
                       </div>`
                         )
                         .join('')
-                    : `<p class="phase-ok-msg">✓ Chuva, umidade do solo e temperatura adequadas para a planta nesta fase.</p>`
+                    : `<p class="phase-ok-msg">${descriptive?'Dados históricos desta fase; adequação agronômica não classificada.':'✓ Chuva, umidade do solo e temperatura adequadas para a planta nesta fase.'}</p>`
                 }
               </div>
 
@@ -2242,19 +2341,34 @@ function renderScreen5Explanation() {
 }
 
 function renderActiveScreen() {
+  if (newPlanningFormState.showSuggestions && newPlanningFormState.suggestionsKey !== suggestionInputKey()) {
+    // A card is only valid for the exact inputs used in its consultation.
+    suggestionRequest++;
+    newPlanningFormState.showSuggestions = false;
+    newPlanningFormState.loadingSuggestions = false;
+    newPlanningFormState.suggestionsResult = null;
+    newPlanningFormState.suggestionsKey = null;
+  }
   const container = $('#screen-container');
   if (!container) return;
 
-  if (appState.activeTab === 0) container.innerHTML = renderScreen1Property();
+  if (!appState.propertyProfile.id && appState.activeTab > 1) {
+    container.innerHTML = '<section class="panel-card"><h1>Cadastre sua propriedade</h1><p>Preencha a propriedade antes de criar seu planejamento.</p><button class="primary" data-go-tab="0">Cadastrar propriedade</button></section>';
+  } else if (!simResult && appState.activeTab > 2) {
+    container.innerHTML = '<section class="panel-card"><h1>Nenhum planejamento ativo</h1><p>Preencha as culturas, ciclos e data de plantio para comparar resultados.</p><button class="primary" data-go-tab="2">Criar planejamento</button></section>';
+  } else if (appState.activeTab === 0) container.innerHTML = renderScreen1Property();
   else if (appState.activeTab === 1) container.innerHTML = renderScreen2Crops();
   else if (appState.activeTab === 2) container.innerHTML = renderScreen3Planning();
   else if (appState.activeTab === 3) container.innerHTML = renderScreen4Comparison();
   else container.innerHTML = renderScreen5Explanation();
 
+  if(appState.activeTab>=2)container.insertAdjacentHTML('afterbegin',officialZarcNotice());
   bindScreenEvents();
+  mountZarcPanel(document.getElementById('zarc-region-catalog'), appState.propertyProfile, {date: appState.planningConfig.baseSowingDate});
 }
 
 function showReportModal() {
+  if (!simResult) { toast('Cadastre uma propriedade e um planejamento para gerar o resumo.'); return; }
   const html = generateVilhenaReportHTML(simResult, appState.selectedStrategyId, appState.inspectedYear);
   openModal(
     'Resumo Técnico Imprimível (A4 / PDF)',
@@ -2381,22 +2495,20 @@ function bindShellEvents() {
   $('#btn-open-report').onclick = showReportModal;
 
   $('#btn-reset-demo').onclick = () => {
+    appState.demoEnabled = true;
+    appState.activeTab = 0;
     appState.propertyProfile = structuredClone(DEFAULT_PROP);
-    appState.customProperties = [];
-    appState.customCrops = [];
-    appState.customCycles = [];
-    appState.customPlannings = [];
     appState.planningConfig = defaultPlanningConfig();
     appState.selectedStrategyId = 'ALTERNATIVA_COMERCIAL_SORGO';
     appState.selectedStageIndex = 1;
     appState.inspectedYear = 2023;
     newPropertyFormState.open = false;
-    newPropertyFormState.lookupResult = null;
+    invalidatePropertyLookup();
     newCropFormState.open = false;
     newCycleFormState.open = false;
     newPlanningFormState.open = false;
-    persistState();
-    refreshLiveNasaForActiveProperty(true);
+    updateAndRender();
+    toast('Dados de demonstração de Vilhena carregados.');
   };
 
   $('#btn-export-state').onclick = () => {
@@ -2409,6 +2521,12 @@ function bindShellEvents() {
 }
 
 function bindScreenEvents() {
+  const retryOfficialZarc=$('[data-retry-official-zarc]');
+  if(retryOfficialZarc)retryOfficialZarc.onclick=()=>{
+    ensureOfficialZarc(true);
+    recomputeSimulation();
+    renderActiveScreen();
+  };
   $$('[data-go-tab]').forEach(btn => {
     btn.onclick = () => {
       appState.activeTab = Number(btn.dataset.goTab);
@@ -2435,7 +2553,7 @@ function bindScreenEvents() {
   $$('[data-switch-property]').forEach(btn => {
     btn.onclick = () => {
       const targetId = btn.dataset.switchProperty;
-      const allProps = [DEFAULT_PROP, ...(appState.customProperties || [])];
+      const allProps = availableProperties();
       const found = allProps.find(x => x.id === targetId);
       if (found) {
         appState.propertyProfile = structuredClone(found);
@@ -2449,6 +2567,7 @@ function bindScreenEvents() {
   if (btnToggleNewProp) {
     btnToggleNewProp.onclick = () => {
       newPropertyFormState.open = !newPropertyFormState.open;
+      if (!newPropertyFormState.open) invalidatePropertyLookup();
       renderActiveScreen();
     };
   }
@@ -2456,9 +2575,9 @@ function bindScreenEvents() {
   const npName = $('#np-name');
   if (npName) npName.oninput = e => (newPropertyFormState.propertyName = e.target.value);
   const npLat = $('#np-lat');
-  if (npLat) npLat.oninput = e => (newPropertyFormState.latitude = e.target.value);
+  if (npLat) npLat.oninput = e => { newPropertyFormState.latitude = e.target.value; invalidatePropertyLookup(); };
   const npLon = $('#np-lon');
-  if (npLon) npLon.oninput = e => (newPropertyFormState.longitude = e.target.value);
+  if (npLon) npLon.oninput = e => { newPropertyFormState.longitude = e.target.value; invalidatePropertyLookup(); };
   const npMun = $('#np-mun');
   if (npMun) npMun.oninput = e => (newPropertyFormState.municipality = e.target.value);
   const npUf = $('#np-uf');
@@ -2471,15 +2590,17 @@ function bindScreenEvents() {
         toast('Geolocalização não disponível neste navegador.');
         return;
       }
+      const request = invalidatePropertyLookup();
       toast('Obtendo coordenadas do GPS...');
       navigator.geolocation.getCurrentPosition(
         pos => {
+          if (request !== propertyLookupRequest || !newPropertyFormState.open) return;
           newPropertyFormState.latitude = pos.coords.latitude.toFixed(4);
           newPropertyFormState.longitude = pos.coords.longitude.toFixed(4);
           renderActiveScreen();
           toast('Coordenadas GPS preenchidas! Clique em Consultar NASA POWER + ISRIC SoilGrids.');
         },
-        () => toast('Não foi possível obter a localização GPS. Informe latitude e longitude manualmente.')
+        () => { if (request === propertyLookupRequest && newPropertyFormState.open) toast('Não foi possível obter a localização GPS. Informe latitude e longitude manualmente.'); }
       );
     };
   }
@@ -2489,19 +2610,22 @@ function bindScreenEvents() {
     btnRunAutoLookup.onclick = async () => {
       const lat = Number(newPropertyFormState.latitude);
       const lon = Number(newPropertyFormState.longitude);
-      if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lon) || lon < -180 || lon > 180) {
+      if (!newPropertyFormState.latitude.trim() || !newPropertyFormState.longitude.trim() || !Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lon) || lon < -180 || lon > 180) {
         toast('Informe uma Latitude (-90 a 90) e Longitude (-180 a 180) válidas.');
         return;
       }
 
+      const request = ++propertyLookupRequest;
       newPropertyFormState.consulting = true;
       newPropertyFormState.lookupResult = null;
       renderActiveScreen();
 
       const nasaRes = await fetchLiveNasaPower(lat, lon);
+      if (request !== propertyLookupRequest || !newPropertyFormState.open) return;
       const soilRes = await fetchSoilGridsAndSuggestClass(lat, lon, nasaRes);
+      if (request !== propertyLookupRequest || !newPropertyFormState.open) return;
 
-      if (!newPropertyFormState.municipality.trim() && soilRes.detectedMunicipality) {
+      if (soilRes.detectedMunicipality) {
         newPropertyFormState.municipality = soilRes.detectedMunicipality;
       }
       if (soilRes.detectedState && soilRes.detectedState.length === 2) {
@@ -2511,25 +2635,14 @@ function bindScreenEvents() {
       newPropertyFormState.consulting = false;
       newPropertyFormState.selectedSoilProfileId = soilRes.suggestedSoilProfileId;
       newPropertyFormState.lookupResult = {
+        latitude: lat,
+        longitude: lon,
         nasa: nasaRes,
         soil: soilRes
       };
 
-      nasaLiveState = {
-        loading: false,
-        isLive: nasaRes.isLive,
-        lastCoords: `${lat}, ${lon}`,
-        fetchedAt: new Date().toLocaleTimeString('pt-BR'),
-        meanAnnualRainMm: nasaRes.meanAnnualRainMm,
-        meanGwetRoot: nasaRes.meanGwetRoot,
-        meanGwetTop: nasaRes.meanGwetTop,
-        totalDays: nasaRes.totalDays,
-        endpoint: nasaRes.endpoint,
-        error: nasaRes.error || null
-      };
-
       renderActiveScreen();
-      toast(`Consulta concluída! Classe sugerida: ${SOIL_FRIENDLY[soilRes.suggestedSoilProfileId]?.shortTitle}.`);
+      toast(`Consulta concluída! Classe sugerida: ${SOIL_FRIENDLY[soilRes.suggestedSoilProfileId]?.shortTitle || 'Não informada'}.`);
     };
   }
 
@@ -2546,14 +2659,14 @@ function bindScreenEvents() {
   if (btnSaveNewProp) {
     btnSaveNewProp.onclick = () => {
       const res = newPropertyFormState.lookupResult;
-      if (!res) return;
+      if (!res || res.latitude !== Number(newPropertyFormState.latitude) || res.longitude !== Number(newPropertyFormState.longitude)) return;
 
       const lat = Number(Number(newPropertyFormState.latitude).toFixed(4));
       const lon = Number(Number(newPropertyFormState.longitude).toFixed(4));
       const mun = newPropertyFormState.municipality.trim() || 'Município Consultado';
-      const uf = (newPropertyFormState.state || 'RO').trim().toUpperCase();
+      const uf = (newPropertyFormState.state || '').trim().toUpperCase();
       const propName = newPropertyFormState.propertyName.trim() || `Propriedade ${mun} (${lat}°, ${lon}°)`;
-      const soilId = newPropertyFormState.selectedSoilProfileId || res.soil.suggestedSoilProfileId;
+      const soilId = newPropertyFormState.selectedSoilProfileId;
 
       const createdProp = {
         id: `prop-custom-${Date.now()}`,
@@ -2571,11 +2684,25 @@ function bindScreenEvents() {
 
       appState.customProperties = [...(appState.customProperties || []), createdProp];
       appState.propertyProfile = createdProp;
+      climateRequest++;
+      nasaLiveState = {
+        loading: false,
+        isLive: res.nasa.isLive,
+        lastCoords: `${lat}, ${lon}`,
+        fetchedAt: new Date().toLocaleTimeString('pt-BR'),
+        meanAnnualRainMm: res.nasa.meanAnnualRainMm,
+        meanGwetRoot: res.nasa.meanGwetRoot,
+        meanGwetTop: res.nasa.meanGwetTop,
+        totalDays: res.nasa.totalDays,
+        endpoint: res.nasa.endpoint,
+        error: res.nasa.error || null
+      };
+      newPlanningFormState.propertyId = createdProp.id;
       newPropertyFormState.open = false;
       newPropertyFormState.lookupResult = null;
 
       updateAndRender();
-      toast(`Propriedade "${createdProp.propertyName}" ativada com classe ${SOIL_FRIENDLY[soilId]?.shortTitle}!`);
+      toast(`Propriedade "${createdProp.propertyName}" ativada. Solo: ${SOIL_FRIENDLY[soilId]?.shortTitle || 'Não informado'}.`);
     };
   }
 
@@ -2765,6 +2892,10 @@ function bindScreenEvents() {
 
   // Step 3: Planning & New Planning Builder bindings
   const runSystemSuggestionConsultation = async () => {
+    if (!newPlanningFormState.baseSowingDate || !newPlanningFormState.stages.every(st => st.cropId && st.groupKey)) {
+      toast('Informe a data de plantio, as culturas e os ciclos antes de solicitar sugestões.');
+      return;
+    }
     const request = ++suggestionRequest;
     if (!newPlanningFormState.propertyId) {
       newPlanningFormState.propertyId = appState.propertyProfile.id || DEFAULT_PROP.id;
@@ -2772,9 +2903,10 @@ function bindScreenEvents() {
     newPlanningFormState.showSuggestions = true;
     newPlanningFormState.loadingSuggestions = true;
     newPlanningFormState.suggestionsResult = null;
+    newPlanningFormState.suggestionsKey = suggestionInputKey();
     renderActiveScreen();
 
-    const allProps = [DEFAULT_PROP, ...(appState.customProperties || [])];
+    const allProps = availableProperties();
     const targetProp =
       allProps.find(pr => pr.id === newPlanningFormState.propertyId) ||
       appState.propertyProfile ||
@@ -2785,7 +2917,8 @@ function bindScreenEvents() {
     if (targetProp && nasaLiveState.lastCoords !== `${targetProp.latitude}, ${targetProp.longitude}`) {
       try {
         const res = await fetchLiveNasaPower(targetProp.latitude, targetProp.longitude);
-        nasaLiveState = {
+        if (!newPlanningFormState.showSuggestions || request !== suggestionRequest) return;
+        if (targetProp.id === appState.propertyProfile.id) nasaLiveState = {
           ...nasaLiveState,
           loading: false,
           isLive: res.isLive,
@@ -2809,7 +2942,7 @@ function bindScreenEvents() {
         propertyProfile: targetProp,
         successionStages: suggestionStages(),
         preservedDecisions: appState.planningConfig.preservedDecisions,
-        baseSowingDate: newPlanningFormState.baseSowingDate || DEFAULT_PLAN.baseSowingDate,
+        baseSowingDate: newPlanningFormState.baseSowingDate,
         operationalIntervalDays: Number(newPlanningFormState.operationalIntervalDays),
         delayDays: appState.planningConfig.delayDays ?? 0,
         customCrops: appState.customCrops || [],
@@ -2832,10 +2965,6 @@ function bindScreenEvents() {
     }
   };
 
-  const btnToggleSystemSuggest = $('#btn-toggle-system-suggest');
-  if (btnToggleSystemSuggest) {
-    btnToggleSystemSuggest.onclick = toggleSystemSuggest;
-  }
   const btnInlineSystemSuggest = $('#btn-inline-system-suggest');
   if (btnInlineSystemSuggest) {
     btnInlineSystemSuggest.onclick = toggleSystemSuggest;
@@ -2894,7 +3023,7 @@ function bindScreenEvents() {
   $$('[data-save-suggested-plan]').forEach(btn => {
     btn.onclick = () => {
       const idx = Number(btn.dataset.saveSuggestedPlan);
-      const allProps = [DEFAULT_PROP, ...(appState.customProperties || [])];
+      const allProps = availableProperties();
       const targetProp =
         allProps.find(pr => pr.id === newPlanningFormState.propertyId) ||
         appState.propertyProfile ||
@@ -2909,7 +3038,7 @@ function bindScreenEvents() {
         planningName: chosen.planningName,
         propertyId: targetProp.id,
         isPreRegistered: false,
-        baseSowingDate: newPlanningFormState.baseSowingDate || DEFAULT_PLAN.baseSowingDate,
+        baseSowingDate: newPlanningFormState.baseSowingDate,
         delayDays: appState.planningConfig.delayDays ?? 20,
         operationalIntervalDays: days(newPlanningFormState.operationalIntervalDays, 'Intervalo'),
         successionStages: structuredClone(chosen.stageDefs),
@@ -3133,7 +3262,7 @@ function bindScreenEvents() {
         return;
       }
 
-      const allProps = [DEFAULT_PROP, ...(appState.customProperties || [])];
+      const allProps = availableProperties();
       const targetProp =
         allProps.find(pr => pr.id === newPlanningFormState.propertyId) || appState.propertyProfile || DEFAULT_PROP;
       const chainText = newPlanningFormState.stages
@@ -3149,7 +3278,7 @@ function bindScreenEvents() {
         planningName: planName,
         propertyId: targetProp.id,
         isPreRegistered: false,
-        baseSowingDate: newPlanningFormState.baseSowingDate || DEFAULT_PLAN.baseSowingDate,
+        baseSowingDate: newPlanningFormState.baseSowingDate,
         delayDays: appState.planningConfig.delayDays ?? 20,
         operationalIntervalDays: days(newPlanningFormState.operationalIntervalDays, 'Intervalo'),
         successionStages: structuredClone(newPlanningFormState.stages),
@@ -3178,10 +3307,10 @@ function bindScreenEvents() {
   $$('[data-switch-planning]').forEach(btn => {
     btn.onclick = () => {
       const targetPlanId = btn.dataset.switchPlanning;
-      const allPlannings = [DEFAULT_PLAN, ...(appState.customPlannings || [])];
+      const allPlannings = availablePlannings();
       const foundPlan = allPlannings.find(p => p.id === targetPlanId);
       if (foundPlan) {
-        const allProps = [DEFAULT_PROP, ...(appState.customProperties || [])];
+        const allProps = availableProperties();
         const linkedProp = allProps.find(pr => pr.id === foundPlan.propertyId) || DEFAULT_PROP;
         const propChanged = appState.propertyProfile.id !== linkedProp.id;
         const keepDelay = appState.planningConfig.delayDays ?? foundPlan.delayDays ?? 20;
@@ -3211,8 +3340,8 @@ function bindScreenEvents() {
       const targetPlanId = btn.dataset.removePlanning;
       appState.customPlannings = (appState.customPlannings || []).filter(p => p.id !== targetPlanId);
       if (appState.planningConfig.id === targetPlanId) {
-        appState.planningConfig = structuredClone(DEFAULT_PLAN);
-        appState.propertyProfile = structuredClone(DEFAULT_PROP);
+        appState.planningConfig = blankPlanning();
+        newPlanningFormState.open = true;
       }
       updateAndRender();
       toast('Planejamento removido.');
@@ -3363,25 +3492,42 @@ function bindScreenEvents() {
   }
 }
 
+// An explicit PWA update must not discard an open advanced editor.
+window.addEventListener('rota:before-update', event => {
+  if (!event.detail) return;
+  const editing = newPropertyFormState.open || newCropFormState.open || newCycleFormState.open || newPlanningFormState.open;
+  event.detail.promise = editing
+    ? Promise.resolve(false)
+    : write(appState).then(() => true, () => false);
+});
+
 (async function init() {
   try {
     const saved = await read();
-    if (saved && saved.version === 7 && saved.propertyProfile && saved.planningConfig) {
+    if (saved && [7, 8].includes(saved.version) && saved.propertyProfile && saved.planningConfig) {
       appState = {
         ...appState,
         ...saved,
-        version: 7,
+        version: 8,
+        demoEnabled: saved.version === 8 && saved.demoEnabled === true,
         customCycles: saved.customCycles || [],
         customPlannings: saved.customPlannings || [],
-        planningConfig: {...defaultPlanningConfig(), ...saved.planningConfig}
+        planningConfig: saved.planningConfig
       };
-      appState.planningConfig = syncLegacyPlanningFields(appState.planningConfig);
+      if (!appState.demoEnabled) {
+        if (appState.propertyProfile.id === DEFAULT_PROP.id) appState.propertyProfile = (appState.customProperties || [])[0] || blankProperty();
+        if (appState.planningConfig.id === DEFAULT_PLAN.id) appState.planningConfig = blankPlanning();
+      }
       recomputeSimulation();
     }
     dbReady = true;
   } catch {
     dbReady = false;
   }
+  newPropertyFormState.open = !appState.propertyProfile.id;
+  newPlanningFormState.open = !appState.planningConfig.id;
+  newPlanningFormState.propertyId = appState.propertyProfile.id;
   renderShell();
+  mountAdvancedHelp(document);
   refreshLiveNasaForActiveProperty(false);
 })();
