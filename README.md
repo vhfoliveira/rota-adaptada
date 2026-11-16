@@ -1,88 +1,82 @@
-# Rota Adaptada — Equipe Interplários
+# Rota Adaptada — Team Interplários
 
-Aplicação de apoio ao planejamento agrícola para o desafio **Field Shift: Adapting
-Farms with NASA Data**, do NASA Space Apps 2026. Ajuda a criar um planejamento
-agrícola, consultar condições oficiais e comparar mudanças diante de atrasos.
+Agricultural planning with NASA data, developed for the **NASA Space Apps 2026** challenge **Field Shift: Adapting Farms with NASA Data**.
 
-Combina dados históricos NASA POWER, indicações municipais ZARC/MAPA, estimativas
-de solo do ISRIC SoilGrids e localização por GPS, mapa ou município. A interface
-informa o período e as condições efetivamente avaliados. Vilhena/RO é uma
-demonstração explícita; dados ausentes aparecem como **não avaliados**.
+[Open the application](https://rotaadaptada.udisoft.app.br) · [Português](docs/README.pt-BR.md) · [Presentation video](<Video Apresentacao App Rota Adaptada.mp4>)
 
-## Maturidade e continuidade
+## Overview
 
-O escopo atual é apoio ao planejamento agrícola. Fertilidade medida do solo,
-qualidade dos lotes de sementes, sanidade e variabilidade dentro dos talhões
-ainda não são avaliadas de forma integrada. A evolução para decisões de
-agricultura de precisão depende de dados da propriedade e validação em campo.
-Veja as [lacunas, etapas de evolução e argumento para parcerias](docs/ESCOPO_RONDONIA.md#maturidade-agronômica-e-continuidade-do-projeto)
-e o [roteiro de validação com agrônomos](docs/ROTEIRO_AGRONOMO.md).
+Rota Adaptada helps farmers create planting calendars and compare adjustments when delays affect their plans. It combines NASA POWER historical climate records, Brazil’s official ZARC planting conditions, and ISRIC SoilGrids soil estimates for a location confirmed by the user.
 
-## Executar e validar
+Users select crops and cycle durations, define dates, and save an original calendar. They can then simulate delays and compare alternatives within the changes they permit, preserving the original plan. A separate guided workflow helps users explore municipal planting options before deciding what to grow.
+
+The application works on mobile and desktop, supports Portuguese and English, and can be installed as a Progressive Web App. Drafts and plans are stored in the browser on the same device. After an initial online visit, the interface can open offline; new data queries require internet access.
+
+## Try the demonstration
+
+1. Open the application and use **PT / EN** to choose the language.
+2. Open [the planning demonstration](https://rotaadaptada.udisoft.app.br/?demo=planejamento), set in Vilhena, Rondônia, Brazil.
+3. Review the location, crop sequence, cycle durations, and dates.
+4. Save the original calendar, then choose the delay simulation action.
+5. Review the allowed changes and compare the available alternatives.
+
+The example is explicitly labeled and does not constitute a recommendation for other farms. Climate data is queried live; unavailable information remains visible as not evaluated.
+
+## NASA data and supporting sources
+
+| Source | Role |
+| --- | --- |
+| NASA POWER | Historical daily precipitation, minimum and maximum temperature, and root-zone and surface moisture indices for the confirmed coordinates. |
+| ZARC / MAPA | Published municipal planting conditions, with season, soil, management, and crop-group constraints. |
+| ISRIC SoilGrids | Estimated soil texture to provide context, not a laboratory soil test. |
+| IBGE, OpenStreetMap / Nominatim, OpenFreeMap | Municipal boundaries, location lookup, and map context. |
+
+See [data sources and API connections](DADOS_CONEXAO_APIS.md) and [ZARC provenance and attribution](rota-adaptada/docs/ZARC.md). NASA POWER and SoilGrids queries do not require API keys.
+
+## Run locally
+
+Prerequisite: **Node.js 22** and npm.
 
 ```bash
-cd rota-adaptada
+git clone https://github.com/vhfoliveira/rota-adaptada.git
+cd rota-adaptada/rota-adaptada
 npm ci
 npm run dev
 ```
 
+Open the local URL printed by Vite (default port 5178).
+
 ```bash
 npm test
+npm run validate:crop-parameters
 npm run build
 ```
 
-O projeto usa Node.js 22. O build estático fica em `rota-adaptada/dist/`.
-O ambiente Docker inclui um serviço separado de atualização diária da base ZARC.
-Rascunhos e planejamentos ficam no navegador, em IndexedDB.
+The static build is generated in `rota-adaptada/dist/` relative to the repository root. Serve it over HTTPS for GPS and PWA installation. An optional Docker deployment includes a daily ZARC updater; see [deployment instructions](deploy/README.md).
 
-## Fluxos ativos
+## Scope and limitations
 
-A entrada é `rota-adaptada/src/bootstrap.js`. Celular e computador usam as mesmas jornadas:
+The current version supports scheduling and scenario comparison. Historical climate records are not weather or yield forecasts. ZARC percentages are not general probabilities of farming success, and a catalog entry does not establish insurance or credit eligibility. Soil estimates do not confirm an official ZARC soil class.
 
-| Entrada | Experiência |
-| --- | --- |
-| `/` | Visão geral Órbita com indicadores locais, criação, retomada de rascunhos e acesso aos planos salvos. |
-| `?visao=planos` | Biblioteca com busca por nome/município, filtros de planos reais e exemplos e acesso à simulação. |
-| `?acao=planejar` / `?acao=adaptar` | Acesso direto à criação ou à adaptação de um planejamento. |
-| `?demo=planejamento` | Exemplo explícito de criação em Vilhena, com ciclos documentados e histórico NASA 2013–2024. |
-| `?modo=campo` | Acesso direto à consulta guiada de plantio. |
-| `?modo=planejamento` | Painel avançado com propriedade, culturas/ciclos, planejamento original, simulação e comparação, e explicação. |
-| `?modo=planejamento&plano=<id>` | Abre os detalhes de um plano salvo neste navegador, respeitando suas próprias datas e permissões. |
+Missing evidence is marked **not evaluated**. The application does not yet integrate measured soil fertility, seed-lot quality, crop health, within-field variability, or financial optimization. Field validation with agronomists and producers is a proposed next step, not a completed result.
 
-A criação tem quatro etapas: localização, cultivos e datas, revisão e calendário.
-O original é salvo sem atraso; a ação **Simular atraso** abre uma adaptação
-separada. Editar um original salvo pelo guia cria uma cópia. Na adaptação, o
-usuário escolhe um plano salvo, informa atraso e mudanças aceitas, revisa e
-compara alternativas. A consulta de culturas continua acessível por **Ainda não
-sei o que plantar**.
+## Repository guide
 
-Na visão geral e em **Meus planejamentos**, o botão **Excluir** permite remover
-um plano salvo após confirmação. A exclusão remove também seus preenchimentos
-vinculados, mantém a propriedade e os outros planos e só é confirmada após a
-gravação no dispositivo. O painel avançado usa a mesma operação.
+- `rota-adaptada/src/`: interface, planning logic, and data integrations.
+- `rota-adaptada/tests/`: automated JavaScript tests.
+- `rota-adaptada/scripts/`: data maintenance, validation, and ZARC service.
+- `rota-adaptada/public/zarc/`: versioned municipal data distributed with the app.
+- `docs/`: regional scope, agronomic validation roadmap, and Portuguese overview.
+- `deploy/`: Docker and server deployment instructions.
 
-Rascunhos reais e exemplos ficam separados. O aplicativo confirma o salvamento
-somente após gravar no navegador; falhas permanecem visíveis. O calendário pode
-ser salvo enquanto a consulta climática ainda está em andamento.
+Further documentation: [application guide](rota-adaptada/README.md), [guided experience](rota-adaptada/docs/GUIA_AUTOGUIADO.md), [scenario engine](rota-adaptada/docs/MOTOR_CENARIOS.md), and [agronomic scope and roadmap](docs/ESCOPO_RONDONIA.md).
 
-O painel avançado continua ativo para cadastros, configurações detalhadas e
-relatório imprimível. Histórico climático não é previsão de produtividade;
-presença no catálogo ZARC não confirma todas as condições da propriedade.
+## Super Intelligence (SI) disclosure
 
-## Idioma e tradução (PT-BR principal / EN em camada)
+The team used OpenAI Codex, ChatGPT, Google Gemini, and Claude during project development and submission preparation. SI assistance included code/documentation work and media creation. See [SI provenance metadata](SI-PROVENANCE.json) for the confirmed scope and outstanding asset-level labeling review. External scientific datasets retain their original provider attribution; SI assistance must not be confused with their provenance.
 
-O projeto tem **PT-BR como idioma principal e fonte de verdade**. A detecção inicial lê o idioma do navegador (`navigator.languages`), usando inglês apenas quando o navegador estiver em `en*` e mantendo `pt-BR` como padrão nos demais casos; o botão **PT / EN** no cabeçalho alterna o idioma e salva a escolha no navegador (`localStorage`).
+Before submission, verify visible SI-generated labels on generated images/videos and descriptive credits plus metadata for generated audio. This repository disclosure does not replace those asset-level labels.
 
-- **Desenvolvimento de telas e fluxos:** sempre feito em **PT-BR** nos módulos JS e no HTML, envolvendo textos visíveis ao usuário com `t('Texto em PT-BR')` (ou `t('Texto {var}', { var })`) no JS e `data-i18n` no HTML. Se não houver tradução em inglês, `t()` faz **fallback automático para o PT-BR** sem quebrar nenhum fluxo.
-- **Tradução para inglês:** mantida exclusivamente no dicionário [rota-adaptada/src/i18n/en.json](rota-adaptada/src/i18n/en.json), sem alterar fluxos, lógica, CSS ou IDs. Para listar textos pendentes de tradução, execute `npm run i18n:check` em `rota-adaptada/`.
-- **Regra obrigatória para I.A.:** ao implementar novas funcionalidades, telas, correções ou refatorações, **a I.A. NÃO deve desenvolver, alterar nem preencher o arquivo `src/i18n/en.json`** (salvo se o usuário pedir explicitamente uma tarefa exclusiva de tradução). A I.A. deve desenvolver 100% em PT-BR usando `t(...)` / `data-i18n`, deixando o `en.json` intocado para o fluxo de tradução.
+## License
 
-## Documentação atual
-
-- [Execução, fontes, armazenamento e PWA](rota-adaptada/README.md)
-- [Interface Órbita](rota-adaptada/docs/EXPERIENCIA_ORBITA.md)
-- [Experiência autoguiada e roteiro de validação](rota-adaptada/docs/GUIA_AUTOGUIADO.md)
-- [Contrato e limites do motor de cenários](rota-adaptada/docs/MOTOR_CENARIOS.md)
-- [Base municipal ZARC e atualização](rota-adaptada/docs/ZARC.md)
-- [Conexões de APIs e fontes de dados](DADOS_CONEXAO_APIS.md)
-- [Implantação no ServerOS](deploy/README.md)
+The project code is available under the [MIT License](LICENSE). Third-party datasets, dependencies, and assets retain their own licenses and attribution requirements; see the source documentation and dataset manifests.

@@ -9,3 +9,7 @@ backups
 **/.env
 **/.env.*
 *.tar.gz
+
+tmp
+output
+*.mp4

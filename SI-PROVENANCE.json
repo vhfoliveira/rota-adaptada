@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "tools_reported": [
+    "OpenAI Codex",
+    "ChatGPT",
+    "Google Gemini",
+    "Claude"
+  ],
+  "confirmed_uses": [
+    "SI-assisted code and documentation preparation",
+    "SI-assisted media creation reported by the team"
+  ],
+  "code_and_documentation": {
+    "disclosure": "This repository includes SI-assisted code and documentation. Codex assisted with repository preparation; the team also reported using ChatGPT, Gemini, and Claude.",
+    "per_file_authorship": "Not audited"
+  },
+  "external_data": {
+    "providers": [
+      "NASA POWER",
+      "MAPA / ZARC",
+      "ISRIC SoilGrids"
+    ],
+    "note": "Provider attribution is documented separately. This disclosure does not identify externally sourced scientific observations as SI-generated."
+  },
+  "media": {
+    "per_asset_tool_mapping": "Not yet documented",
+    "visible_image_and_video_watermarks": "Pending verification",
+    "audio_descriptive_credit_and_metadata": "Pending verification if generated audio is included",
+    "nasa_branding_review": "Pending verification against the submission requirements supplied by the team"
+  }
+}

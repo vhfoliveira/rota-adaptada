@@ -15,3 +15,6 @@ __pycache__/
 *.pyc
 .codex-finalizer/
 .chart-data-*/
+
+# Local presentation drafts and generated previews
+/tmp/
