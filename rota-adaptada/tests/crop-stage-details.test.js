@@ -11,7 +11,7 @@ test('old plans show every stage with weather, reference and explicit prototype 
  const report=generateVilhenaReportHTML(simulation,selected.strategyId,2023);
  for(const stage of selected.stages){
   const html=stageDetails(stage);
-  assert.match(html,/Histórico NASA no período/);
+  assert.match(html,/Histórico completo deste período indisponível/);
   assert.match(html,/Fonte dos parâmetros e limites da análise/);
   assert.match(html,/modelo do protótipo/);
   assert.match(html,/não representa uma consulta oficial ZARC/);

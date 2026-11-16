@@ -196,7 +196,8 @@ test('saved official alternatives retain parameter sources, original plans and r
  assert.equal(plan.soilCode,'13');assert.equal(plan.management,'1');
  assert(plan.officialProfiles.length);assert.equal(plan.officialProfiles[0].source.sha256,selected.stages[0].officialSource.sha256);
  assert.deepEqual(plan.guidedOrigin.sourcePlanning.successionStages,input.stages.map((stage,index)=>({...stage,allowCropChange:false,allowCycleChange:true})));
- assert.deepEqual(plan.guidedOrigin.strategySnapshot,selected);
+ assert.deepEqual(plan.guidedOrigin.strategySnapshot.stages,selected.stages.map(({cropId,groupKey,sowDate,harvestDate})=>({cropId,groupKey,sowDate,harvestDate})));
+ assert.equal(plan.guidedOrigin.strategySnapshot.stages[0].stressTest,undefined);
  const replay=simulateAdaptation(state.propertyProfile,plan,[],[],context()).strategies[0];
  assert.deepEqual(replay.stages.map(stage=>[stage.cropId,stage.groupKey,stage.sowDate,stage.harvestDate]),selected.stages.map(stage=>[stage.cropId,stage.groupKey,stage.sowDate,stage.harvestDate]));
  assert.deepEqual(replay.stages[0].zarc.risks,selected.stages[0].zarc.risks);

@@ -26,11 +26,11 @@ export function queryGuidedSources(draft,onUpdate,deps={},cache=new Map()) {
   if(locationKey(snapshot.location)){
     jobs.push(run('nasa',async()=>{
       const endDate=`${new Date().getFullYear()-1}-12-31`;
-      const climate=await reuse(`nasa/${locationKey(snapshot.location)}/${endDate}`,async()=>{
+      const climate=await (async()=>{
         const value=await api.fetchLiveNasaPower(snapshot.location.latitude,snapshot.location.longitude,{endDate});
-        if(!value?.dataset)throw Error('O histórico deste ponto está indisponível. As opções oficiais continuam disponíveis.');
+        if(!value?.isLive||!value?.dataset)throw Error('O histórico deste ponto está indisponível. As opções oficiais continuam disponíveis.');
         return value;
-      });
+      })();
       return {...climate,summary:summarizePlantingMonth(climate.dataset,snapshot.date)};
     }));
     jobs.push(run('soil',async()=>{

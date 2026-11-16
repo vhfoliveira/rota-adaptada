@@ -7,6 +7,18 @@ test('municipalities match exact name and UF; selection contains no farm coordin
  assert.equal(findMunicipalityOption(options,'São José'),null);
  assert.equal(findMunicipalityOption(options,'sao jose / sc').latitude,undefined);
 });
+test('typing a complete unique municipality selects it without requiring UF',async()=>{
+ const options=municipalityOptions({municipalities:{'1':['RO','Vilhena'],'2':['MT','Cuiabá'],'3':['SP','São José'],'4':['SC','São José']}});
+ assert.equal(findMunicipalityOption(options,'  vilhena  ').code,'1');
+ assert.equal(findMunicipalityOption(options,'cuiaba').code,'2');
+ for(const query of ['','Vilhe','São José','Vilhena / MT'])assert.equal(findMunicipalityOption(options,query),null);
+ assert.equal(findMunicipalityOption(options,'sao jose / sc').code,'4');
+ const {initialLocationDraft,resolveLocationDraft}=await import('../src/guided-location-data.js');
+ const restored=resolveLocationDraft(initialLocationDraft({municipalityQuery:'Vilhena'}),options);
+ assert.equal(restored.municipalityCode,'1');
+ assert.equal(restored.municipalityQuery,'Vilhena / RO');
+ assert.equal(restored.latitude,null);
+});
 test('point entry preserves zero, accepts Brazilian decimals and rejects blanks or invalid ranges',()=>{
  assert.deepEqual(parseLocationPoint('0','0'),{latitude:0,longitude:0});
  assert.deepEqual(parseLocationPoint('-12,7405','-60,1458'),{latitude:-12.7405,longitude:-60.1458});
@@ -35,4 +47,17 @@ test('municipality loading resolves legacy names once and preserves incomplete q
  const partial=initialLocationDraft({municipalityQuery:'Vilhe',confirmed:false});
  assert.equal(resolveLocationDraft(partial,options),partial);assert.equal(partial.municipalityQuery,'Vilhe');
  assert.equal(resolveLocationDraft({...partial,confirmed:true},options).confirmed,false);
+});
+
+test('a selected point and municipality are ready without a second confirmation',async()=>{
+ const {locationReady,manualLocationDraft}=await import('../src/guided-location-data.js');
+ const city={code:'1100304'};
+ const selected={latitude:-12.7405,longitude:-60.1458,confirmed:false,source:'map'};
+ assert.equal(locationReady(selected,city),true);
+ assert.equal(locationReady(selected,null),false);
+ assert.equal(locationReady({source:'municipality'},city),false);
+ assert.equal(locationReady(manualLocationDraft(selected,'-12',''),city),false);
+ const municipal={source:'municipality',confirmed:true};
+ assert.equal(locationReady(municipal,city,true),true);
+ assert.equal(locationReady(municipal,city,false),false);
 });

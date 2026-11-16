@@ -23,7 +23,7 @@ try{
  ]);
  const failures=collections.filter(result=>result.status==='rejected');
  if(failures.length)throw new AggregateError(failures.map(result=>result.reason),'Falha na coleta; arquivos atuais preservados.');
- const counts=await validateCollections([a,b]);
+ const counts=await validateCollections([a,b,join(root,'src/data/official-crop-profiles-soy.json')]);
  const changedCollections=[];
  // A failed/partial collection must never silently replace an already validated base.
  for(const [candidate,suffix] of [[a,'a'],[b,'b']]){

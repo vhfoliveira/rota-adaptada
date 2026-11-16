@@ -60,7 +60,8 @@ test('saving a chosen alternative preserves original plans and actual sowing dat
  const replay=simulateAdaptation(state.propertyProfile,plan).strategies[0];
  assert.deepEqual(replay.stages.map(s=>[s.cropId,s.groupKey,s.sowDate,s.harvestDate]),selected.stages.map(s=>[s.cropId,s.groupKey,s.sowDate,s.harvestDate]));
  assert.equal(plan.guidedOrigin.sourcePlanId,'original');
- assert.deepEqual(plan.guidedOrigin.strategySnapshot,selected);
+ assert.deepEqual(plan.guidedOrigin.strategySnapshot.stages,selected.stages.map(({cropId,groupKey,sowDate,harvestDate})=>({cropId,groupKey,sowDate,harvestDate})));
+ assert.equal(plan.guidedOrigin.strategySnapshot.stages[0].stressTest,undefined);
  assert.ok(listPlanningChoices(state).some(p=>p.id==='new-plan'));
 });
 
@@ -72,7 +73,7 @@ test('partial data remain unassessed and a changed property never overwrites an 
  const {state,plan}=appendGuidedAlternative(legacy,draft(),point,result.strategies[0],{id:'partial',propertyId:'new-property'});
  assert.deepEqual(state.customProperties[0],property);
  assert.equal(state.propertyProfile.id,'new-property');
- assert.equal(plan.guidedOrigin.strategySnapshot.overallStatus,'NAO_AVALIADO');
+ assert.equal(plan.guidedOrigin.strategySnapshot.overallStatus,undefined);
  assert.equal(plan.guidedOrigin.propertySnapshot.soilProfileId,'');
 });
 

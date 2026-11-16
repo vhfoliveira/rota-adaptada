@@ -1,6 +1,5 @@
 import {loadGuidedCropCatalog} from './guided-crops.js';
-import {defaultNasaDataset,rulesPackage} from './vilhena-engine.js';
-import {locationKey} from './scenario.js';
+import {rulesPackage} from './vilhena-engine.js';
 
 const DEMO_POINT=Object.freeze({latitude:-12.7405,longitude:-60.1458,municipality:'Vilhena',municipalityCode:'1100304',state:'RO'});
 const DEMO_STAGES=Object.freeze([
@@ -28,24 +27,3 @@ export async function createPlanningDemoDraft({planId=newId(),loadCatalog=loadGu
     stages,delayDays:0,intervalDays:7,allowCropChange:false,allowCycleChange:false
   };
 }
-
-/** A fixed, labeled historical dataset keeps the stage demonstration reproducible. */
-export async function fetchDemoClimate(latitude,longitude) {
-  if(locationKey({latitude,longitude})!==locationKey(DEMO_POINT)){
-    throw Error('O histórico do exemplo corresponde somente ao ponto de Vilhena. Consulte os dados da nova área.');
-  }
-  return {
-    dataset:structuredClone(defaultNasaDataset),isLive:false,isDemo:true,
-    sourceLabel:'NASA POWER · histórico do exemplo de Vilhena · 2013–2024'
-  };
-}
-
-// Other dependencies keep loading ZARC from the site's own municipal dataset.
-// The example deliberately leaves soil unconfirmed instead of depending on a live estimate.
-export const DEMO_SOURCE_DEPENDENCIES=Object.freeze({
-  fetchLiveNasaPower:fetchDemoClimate,
-  fetchSoilGridsAndSuggestClass:async()=>({
-    isLiveSoilGrids:false,errorCode:'DEMO_SOIL_UNCONFIRMED',
-    errorMessage:'Solo não confirmado no exemplo. A análise permanece parcial.'
-  })
-});

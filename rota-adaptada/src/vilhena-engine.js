@@ -1,16 +1,16 @@
 import {resolveLocation} from './location.js';
 import { validDate, days, locationKey, matchesLocation, historicalYears, periodLabel, annualDate, coverageMetrics } from './scenario.js';
 import rulesPackage from './data/vilhena_rules-v2.json' with { type: 'json' };
-import defaultNasaDataset from './data/nasa-vilhena-2013-2024.json' with { type: 'json' };
 import {buildOfficialCropCatalog} from './official-crop-registry.js';
 import {evaluateOfficialCropClimate,summarizeHistoricalCycle} from './official-crop-climate.js';
 import {evaluateOfficialWindow} from './official-crop-window.js';
 
 Object.assign(rulesPackage.crops_catalog,buildOfficialCropCatalog());
 
-let nasaDataset = structuredClone(defaultNasaDataset);
-const climateByLocation = new Map([[locationKey(defaultNasaDataset.metadata.location), defaultNasaDataset]]);
-export { rulesPackage, nasaDataset, defaultNasaDataset };
+let nasaDataset = null;
+const climateByLocation = new Map();
+const climateRequests = new Map();
+export { rulesPackage, nasaDataset };
 export function setActiveNasaDataset(dataset) {
   if (!dataset?.daily || !locationKey(dataset.metadata?.location)) throw new Error('Série climática sem coordenadas.');
   climateByLocation.set(locationKey(dataset.metadata.location), dataset);
@@ -35,10 +35,15 @@ export function createScenarioContext(property, supplied = {}) {
 /**
  * Queries NASA POWER for the requested point and date range.
  */
-export async function fetchLiveNasaPower(lat, lon, { startDate = defaultNasaDataset.metadata.period.start_date, endDate = new Date().toISOString().slice(0, 10) } = {}) {
+export async function fetchLiveNasaPower(lat, lon, { startDate = `${new Date().getUTCFullYear()-12}-01-01`, endDate = new Date().toISOString().slice(0, 10) } = {}) {
   validDate(startDate); validDate(endDate);
   if (endDate < startDate) throw new Error('Período climático inválido.');
   if (!locationKey({latitude:lat,longitude:lon})) throw new Error('Coordenadas inválidas.');
+  const requestKey=locationKey({latitude:lat,longitude:lon});
+  const requestToken=Symbol();
+  climateRequests.set(requestKey,requestToken);
+  climateByLocation.delete(requestKey);
+  if(locationKey(nasaDataset?.metadata?.location)===requestKey)nasaDataset=null;
   const cleanLat = Number(Number(lat).toFixed(4));
   const cleanLon = Number(Number(lon).toFixed(4));
   const endpoint = `https://power.larc.nasa.gov/api/temporal/daily/point?parameters=PRECTOTCORR,T2M_MAX,T2M_MIN,GWETROOT,GWETTOP&community=AG&longitude=${cleanLon}&latitude=${cleanLat}&start=${startDate.replaceAll('-', '')}&end=${endDate.replaceAll('-', '')}&format=JSON`;
@@ -47,8 +52,7 @@ export async function fetchLiveNasaPower(lat, lon, { startDate = defaultNasaData
   const timeoutId = setTimeout(() => controller.abort(), 14000);
 
   try {
-    const res = await fetch(endpoint, { signal: controller.signal });
-    clearTimeout(timeoutId);
+    const res = await fetch(endpoint, { signal: controller.signal, cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const raw = await res.json();
     const p = raw?.properties?.parameter;
@@ -126,7 +130,8 @@ export async function fetchLiveNasaPower(lat, lon, { startDate = defaultNasaData
       daily
     };
 
-    setActiveNasaDataset(liveDataset);
+    if(climateRequests.get(requestKey)===requestToken)setActiveNasaDataset(liveDataset);
+    clearTimeout(timeoutId);
     return {
       ok: true,
       isLive: true,
@@ -145,7 +150,7 @@ export async function fetchLiveNasaPower(lat, lon, { startDate = defaultNasaData
     };
   } catch (err) {
     clearTimeout(timeoutId);
-    const cached = getActiveNasaDataset({ latitude: cleanLat, longitude: cleanLon });
+    const cached = null;
     return {
       ok: false, isLive: false,
       error: err?.message || 'Falha na consulta climática',

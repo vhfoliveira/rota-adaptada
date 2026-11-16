@@ -71,7 +71,7 @@ não é reaplicado ao plano salvo. A gravação lê e atualiza o estado mais rec
 na mesma transação, preservando outros planos. Falha de armazenamento aparece
 como erro; a interface só confirma sucesso após a gravação efetiva.
 
-Resultados não são restaurados como se fossem atuais. Retomar uma etapa de resultado conduz à revisão para nova consulta. Consultas independentes emitem status por fonte; ao editar ou sair, respostas tardias são descartadas. Na criação, o calendário já pode ser salvo enquanto a NASA carrega. Município sem ponto não dispara NASA/SoilGrids. Criação e adaptação requerem ponto confirmado; consulta municipal ZARC continua disponível no objetivo de descobrir culturas.
+Resultados não são restaurados como se fossem atuais. Retomar uma etapa de resultado conduz à revisão para nova consulta. Consultas independentes emitem status por fonte; ao editar ou sair, respostas tardias são descartadas. Na criação, o calendário já pode ser salvo enquanto a NASA carrega. Município sem ponto não dispara NASA/SoilGrids. Criação e adaptação requerem município e ponto selecionados; o mapa abre automaticamente e não exige um segundo botão de confirmação; consulta municipal ZARC continua disponível no objetivo de descobrir culturas.
 
 `context-help.js` fornece a ajuda das interfaces ativas. IDs estáveis relacionam assuntos e ações. A ajuda é um diálogo independente, com foco restaurado e área de toque de 44 px.
 
@@ -104,13 +104,7 @@ relação ao plano com atraso, sem comprovação de vantagem agronômica. Os cen
 permanecem parciais. O fim do ciclo de referência não garante colheita ou
 liberação da área.
 
-O exemplo usa a série real NASA POWER embarcada de Vilhena, 2013–2024, com cache
-separado das consultas reais. O feijão de 80 dias iniciado em 20/03 tem chuva
-acumulada média histórica de 236,6 mm; iniciado em 28/02, 383,6 mm, em 12 anos
-completos. Mais chuva não demonstra melhor resultado. Estes valores pertencem
-à série identificada; consultas ao vivo com outro período podem diferir. O
-catálogo ZARC ainda precisa estar acessível no próprio site: a série local não
-garante funcionamento integral da demonstração sem rede.
+O exemplo consulta a NASA POWER ao vivo ao abrir o calendário. Não há série embarcada, cache de respostas entre consultas nem fallback após falhas. Os valores apresentados dependem da resposta atual da API. Sem conexão, o calendário permanece disponível, mas o clima é indicado como indisponível.
 
 ## Roteiro de validação com pessoas leigas (pendente)
 
@@ -131,3 +125,25 @@ tempo, erros e compreensão, sem obrigá-los a percorrer o guia.
 ## Publicação
 
 Executar os testes e o build; conferir celular/computador e instalação PWA. Homologar o roteiro humano acima antes da publicação geral. A publicação no ServerOS usa `./deploy/serveros.sh`, com backup, healthcheck e rollback existentes. Não apagar rascunhos para atualizar: o aviso de nova versão exige ação explícita e checkpoint bem-sucedido. O painel avançado solicita salvar/fechar editores antes de atualizar. Caches anteriores ficam disponíveis para abas que ainda estejam concluindo o preenchimento.
+
+O exemplo de Vilhena consulta a estimativa de solo ao vivo no SoilGrids. O histórico climático também é consultado ao vivo. Falhas do serviço de solo são exibidas sem inventar dados ou confirmar automaticamente a classe ZARC.
+
+
+### Preferências e fontes das sugestões de planejamento
+
+O gerador combina município, data, duração do período, intervalo, ciclos documentados,
+janelas ZARC e solo/manejo informados. Sem manejo informado, assume sequeiro.
+NASA e SoilGrids não escolhem nem classificam as propostas. A ordem de candidatos
+prioriza a cultura desejada e o consórcio solicitado, seguida pela ordem do catálogo.
+
+As preferências são cumulativas: sucessão exige pelo menos dois cultivos; diversificação
+também impede repetir o mesmo código de cultura; primeira/segunda safra restringem o
+primeiro cultivo aos nomes oficiais com essa identificação (ambas marcadas aceitam qualquer
+uma); cobertura exige um consórcio de milho com braquiária identificado na base.
+A cultura preferida precisa aparecer na proposta. A busca é heurística e não enumera
+todas as combinações, não avalia rotação de famílias nem proteção efetiva do solo.
+Todas as escolhas continuam sujeitas às janelas e à duração disponível.
+
+As propostas aparecem em cards horizontais, com botões e rolagem por toque/teclado.
+A base mostra sua atualização e coleta (UTC); cada cultivo mostra o link da portaria,
+publicação, coleta documental e referência do ciclo. Datas ausentes são explicitadas.

@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-15",
+  "profiles": [
+    {
+      "id": "soja-ro-vilhena-2026-207-brs1075",
+      "name": "Soja · BRS 1075IPRO",
+      "zarcCropIds": [
+        "12016720000011"
+      ],
+      "uf": "RO",
+      "municipalityCodes": [
+        "1100304"
+      ],
+      "season": "2026/2027",
+      "managementCodes": [
+        "1"
+      ],
+      "source": {
+        "url": "https://www.gov.br/agricultura/pt-br/assuntos/riscos-seguro/programa-nacional-de-zoneamento-agricola-de-risco-climatico/portarias/safra-vigente/rondonia/PORTN207SOJARO.ret.pdf",
+        "title": "Portaria SPA/MAPA nº 207 — Soja — RO — 2026/2027 (retificada)",
+        "ordinance": "207",
+        "issuedAt": "2026-06-30",
+        "publishedAt": "2026-07-03",
+        "retrievedAt": "2026-11-15",
+        "sha256": "4ff5eab8c39e1b9fc1d9b8634064c150e75664d399ed40e2fb24c65e2ca799f0",
+        "sections": [
+          "1.9.2",
+          "3.1",
+          "4.1 — Macrorregião 4, Grupo I"
+        ]
+      },
+      "groups": [
+        {
+          "code": "20",
+          "cultivarName": "BRS 1075IPRO",
+          "representativeDays": null,
+          "cycleRange": {
+            "min": 93,
+            "max": 104,
+            "maxInclusive": true
+          },
+          "cycleStart": "unspecified",
+          "calendarPaddingDays": 10,
+          "calendarPaddingSourceSection": "Portaria 207, seção 3.1: intervalo de 5 a 10 dias para emergência; adição conservadora do aplicativo, pois a ficha não explicita o início da contagem.",
+          "phases": null,
+          "sowingMonthDays": {
+            "start": "10-08",
+            "end": "11-21"
+          },
+          "evidence": "BRS 1075IPRO: GMR 7,5, Grupo I na portaria. Ficha da cultivar, REC 402 (sudeste de RO), ciclo regional de 93–104 dias. Calendário conservador: 104 + 10 dias; não representa duração exata nem data de colheita. Semeadura limitada à faixa preferencial comum às altitudes da tabela (08/10 a 21/11).",
+          "cycleSource": {
+            "url": "https://www.fundacaomeridional.com.br/plataforma/files/2023/2023%20-%20CULTIVARES%20SOJA/2024/2025/BRS%201075IPRO.pdf",
+            "title": "Embrapa / Fundação Meridional — BRS 1075IPRO",
+            "section": "Ficha técnica, páginas impressas 52–53, REC 402",
+            "retrievedAt": "2026-11-15",
+            "sha256": "58a644d7230ee61093f7a83f7f63a6ff4d5383de0ee9421e8c8dc7e0bff3c1fa"
+          }
+        }
+      ],
+      "regionSource": {
+        "url": "https://www.gov.br/agricultura/pt-br/assuntos/riscos-seguro/programa-nacional-de-zoneamento-agricola-de-risco-climatico/portarias/safra-vigente/rondonia/excel/MacrorregiesSojculasINn12021RO.xlsx",
+        "sha256": "e496f504be48c1f4e79d5777db06fd7666dfd7b2740090c2a5f4d2445352caa9",
+        "retrievedAt": "2026-11-15",
+        "evidence": "Vilhena: macrorregião 4, REC 402."
+      },
+      "thermalCriteria": [],
+      "limitations": [
+        "Perfil restrito a Vilhena e à cultivar BRS 1075IPRO; não estender a toda soja ou a todo Rondônia.",
+        "A ficha não explicita o marco inicial do ciclo. O aplicativo adiciona 10 dias ao limite regional de 104 como margem conservadora, não como duração publicada de 114 dias.",
+        "Não converte GMR em dias; não inventa fases fenológicas.",
+        "Confirmar cultivar, disponibilidade de sementes, solo, manejo, calendário sanitário e intervalo para colheita.",
+        "A consulta ZARC continua condicionada à data, ao grupo I, solo e manejo; não calcula produtividade nem ISNA."
+      ]
+    }
+  ]
+}
